@@ -77,40 +77,6 @@ def quad_shape_functions(xi_q, L_elem):
     return phi_val, phi_d1, phi_d2
 
 
-# =============================================================================
-# Mesh Utilities
-# =============================================================================
-
-def make_pipe_mesh(R, n_elem):
-    """Closed circular cross-section with 3-node quadratic elements.
-
-    Returns
-    -------
-    nodes    : (2*N+1, 2) node coordinates [y2, y3]
-    cells    : (N, 3) int64 connectivity
-    k22_elem : (N,) curvature  (-1/R for CCW circle)
-    """
-    theta = np.linspace(0, 2 * np.pi, n_elem + 1)
-    y2_c = R * np.cos(theta)
-    y3_c = R * np.sin(theta)
-    corner = np.column_stack([y2_c, y3_c])
-    mid    = np.column_stack([0.5*(y2_c[:-1]+y2_c[1:]),
-                              0.5*(y3_c[:-1]+y3_c[1:])])
-
-    n_nodes = 2 * n_elem + 1
-    nodes = np.zeros((n_nodes, 2))
-    nodes[0::2] = corner
-    nodes[1::2] = mid
-
-    cells = np.column_stack([
-        np.arange(0, 2*n_elem, 2),
-        np.arange(1, 2*n_elem+1, 2),
-        np.arange(2, 2*n_elem+2, 2),
-    ]).astype(np.int64)
-
-    return nodes, cells, np.full(n_elem, -1.0 / R)
-
-
 def compute_element_geometry(nodes, cells):
     """Arc-length L and tangent (xdot2, xdot3) per element.
 

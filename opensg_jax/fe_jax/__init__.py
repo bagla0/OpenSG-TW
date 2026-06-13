@@ -40,7 +40,6 @@ from .msg_mesh import (
 from .msg_shell import (
     gauss_legendre_01,
     quad_shape_functions,
-    make_pipe_mesh,
     compute_element_geometry,
     build_periodic_dof_map,
     compress_dof_map,
