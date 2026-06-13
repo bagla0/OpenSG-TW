@@ -26,7 +26,7 @@ jax.config.update("jax_enable_x64", True)
 np.set_printoptions(precision=6, linewidth=120)
 
 # All MSG shell functions come from the fe_jax package
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "opensg_jax"))
 from fe_jax import (
     # materials / ABD
     compute_ABD_matrix,

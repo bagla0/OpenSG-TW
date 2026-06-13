@@ -2,8 +2,8 @@
 import sys
 import os
 
-# Make fe_jax importable from the repo root
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# fe_jax lives under opensg_jax/
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "opensg_jax"))
 
 import pytest
 
