@@ -4,7 +4,7 @@
 
 **OpenSG-TWJAX** is a JAX-based thin-walled beam homogenization toolkit built on the Mechanics of Structure Genome (MSG) theory. It computes the 4×4 Euler-Bernoulli and 6×6 Timoshenko stiffness matrices for composite thin-walled cross-sections (airfoils, pipes, arbitrary profiles) without requiring FEniCSx or MPI.
 
-- **GitHub:** https://github.com/bagla0/OpenSG-TWJAX
+- **GitHub:** https://github.com/bagla0/OpenSG-TW
 - **Primary branch:** `jax-msg-shell`
 - **Conda env:** `C:\conda_envs\opensg_2_0_env` (Python 3.12, JAX CPU, pypardiso)
 

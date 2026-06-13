@@ -6,7 +6,7 @@ Computes the 4×4 Euler-Bernoulli and 6×6 Timoshenko beam stiffness matrices fo
 thin-walled cross-sections (airfoils, pipes, arbitrary profiles) using the
 Mechanics of Structure Genome (MSG) theory. No FEniCSx or MPI required.
 
-- **GitHub:** https://github.com/bagla0/OpenSG-TWJAX
+- **GitHub:** https://github.com/bagla0/OpenSG-TW
 - **Branch:** `jax-msg-shell`
 - **Formulation:** See [`docs/MSG_TW_Beam_Formulation.md`](docs/MSG_TW_Beam_Formulation.md)
 
