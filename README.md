@@ -1,83 +1,146 @@
-# Nonlinear Solver
+# OpenSG-TWJAX
 
-To derive Newton's method, it is convenient to start with a Taylor series expansion of the residual function:
+**Thin-Walled Composite Beam Homogenization via MSG — JAX Implementation**
 
-$$ R(u_i) = R(u_{i-1}) + \frac{\partial \textbf{R}}{\partial \textbf{u}} \Delta \textbf{u} + O(||\Delta \textbf{u}||^2) $$
+Computes the 4×4 Euler-Bernoulli and 6×6 Timoshenko beam stiffness matrices for composite
+thin-walled cross-sections (airfoils, pipes, arbitrary profiles) using the
+Mechanics of Structure Genome (MSG) theory. No FEniCSx or MPI required.
 
-We want to solve for $ R(u_i) = 0 $, so rearrange the equations to solve for $\Delta \textbf{u}$:
+- **GitHub:** https://github.com/bagla0/OpenSG-TWJAX
+- **Branch:** `jax-msg-shell`
+- **Formulation:** See [`docs/MSG_TW_Beam_Formulation.md`](docs/MSG_TW_Beam_Formulation.md)
 
-$$ \frac{\partial \textbf{R}}{\partial \textbf{u}} \Delta \textbf{u} \approx -R(u_{i-1}) $$
+---
 
-By iterating, $u_i$ will quadratically converge given the $R(u)$ meets certain conditions.
+## Architecture
 
-To enforce Dirichlet boundary conditions (BCs), we typically use in-place elimination, which effectively eliminates the constrained degrees of freedom (DoFs) while leaving the respective rows / columns in the system of equations. Let $\textbf{U}_i$ be a vector that is the values of the Dirichlet BCs where applicable and 0 elsewhere. The Jacobian, $\frac{\partial \textbf{R}}{\partial \textbf{u}}$, can be modified to have 0's in the rows / columns and 1 on the diagonal for the constrained DoFs, but the RHS must be modified as well.
+```
+OpenSG-TWJAX/
+│
+├── opensg_jax/fe_jax/              ← installable package  (pip install -e .)
+│   │
+│   ├── msg_materials.py            ── LAYER 1: Material & Plate Stiffness
+│   │     build_stiffness_6x6()         6×6 orthotropic C from (E, G, ν)
+│   │     rotation_6x6()                OpenSG R_σ rotation (Voigt, degrees)
+│   │     rotated_stiffness_6x6()       R C Rᵀ for off-axis plies
+│   │     compute_ABD_matrix()          1D through-thickness MSG SG → 6×6 ABD
+│   │     compute_ABD_CLT()             Classical Laminate Theory (comparison)
+│   │
+│   ├── msg_mesh.py                 ── LAYER 2: YAML → FEM Mesh
+│   │     load_yaml()                   Read OpenSG Shell_1DSG YAML format
+│   │     order_mesh()                  CCW chain ordering + midside node insertion
+│   │     compute_curvature()           κ₂₂ per element (circumscribed circle)
+│   │
+│   ├── msg_shell.py                ── LAYER 3: FEM Assembly + Solvers
+│   │     gauss_legendre_01()           Gauss-Legendre quadrature on [0, 1]
+│   │     quad_shape_functions()        3-node Lagrange N, N′, N″
+│   │     compute_element_geometry()    Arc length L_e, tangent (ẋ₂, ẋ₃) per element
+│   │     build_periodic_dof_map()      Merge first/last node (closed section)
+│   │     compress_dof_map()            Full → unique DOF renumbering
+│   │     assemble_system_matrices()    JAX vmap energy autodiff → D_hh, D_he, D_ee,
+│   │                                   D_ll, D_hl, D_le
+│   │     build_lagrange_constraints()  4 rigid-body integral constraints C (4 × N)
+│   │     build_psi_matrix()            N × 4 null-space basis (3 transl. + twist)
+│   │     solve_fluctuation_field()     KKT solve → V0, D1  (pypardiso PARDISO)
+│   │     prepare_v1_rhs()              V1 RHS with Psi/Dc null-space projection
+│   │     finalize_v1_and_compute_deff()  V1 projection → 6×6 Timoshenko S
+│   │
+│   └── __init__.py                 ── re-exports all three layers;
+│                                      legacy FEniCSx imports in try/except
+│
+├── examples/
+│   └── run_airfoil_cross_section.py   Full pipeline driver  (YAML → 6×6 S)
+│
+├── tests/
+│   ├── conftest.py                    yaml_1dshell_0 … yaml_1dshell_29 fixtures
+│   ├── test_pipe_validation.py        Analytical pipe benchmark (6 assertions)
+│   ├── test_1dshell_stiffness.py      1Dshell_0 regression  (8 tests, 0.5 % tol.)
+│   └── data/  1Dshell_0.yaml … 1Dshell_29.yaml   (30 OpenSG airfoil cases)
+│
+├── docs/
+│   └── MSG_TW_Beam_Formulation.md     Full MSG shell-TW variational formulation
+│
+└── CLAUDE.md                          Auto-loaded project context for Claude agents
+```
 
-If we let $\textbf{D}_i$ be the indices of the Dirichlet DoFs, then the incremental solution for the Dirichlet BCs can be calculated
+---
 
-$$ [\Delta \textbf{U}_i]_j = 
-    \left\{\begin{array}{lr} 
-        [\textbf{U}_i]_j - [\textbf{u}_{i-1}]_j, & \text{if } j \in \textbf{D}_i] \\
-        0, & \text{otherwise}
-    \end{array}\right\} $$
+## Data Flow
 
-The adjusted system of equations that is typically solved becomes
+```
+YAML file
+   │
+   ▼  load_yaml()
+nodes_3d, elements, material_db, layup_db, elem_to_layup
+   │
+   ├──► compute_ABD_matrix()  ──► 6×6 ABD per layup   [quadratic 1D through-thickness SG]
+   │
+   ▼  order_mesh() + compute_curvature()
+nodes_2d (with midside nodes), cells (3-node), κ₂₂ per element
+   │
+   ▼  assemble_system_matrices()          [JAX vmap, energy-based autodiff]
+D_hh (N×N),  D_he (N×4),  D_ee (4×4)
+D_ll (N×N),  D_hl (N×N),  D_le (N×4)
+   │
+   ├──► build_lagrange_constraints()  →  C  (4 × N)
+   ├──► build_psi_matrix()            →  Ψ  (N × 4)
+   │
+   ▼  solve_fluctuation_field()       [pypardiso KKT:  [D_hh  Cᵀ; C  0] V = [-D_he; 0]]
+V0 (N×4),   C_eff = D_ee + V0ᵀ D_he   →  4×4 Euler-Bernoulli stiffness
+   │
+   ▼  prepare_v1_rhs() + pypardiso.spsolve()   [reuse same KKT matrix]
+V1 (N×4)
+   │
+   ▼  finalize_v1_and_compute_deff()
+6×6 Timoshenko S   [EA,  GA₁₂,  GA₁₃,  GJ,  EI₂,  EI₃]
+```
 
-$$ \frac{\partial \textbf{R}}{\partial \textbf{u}} \Delta \textbf{u} = -R(u_{i-1}) - \frac{\partial \textbf{R}}{\partial \textbf{u}} \Delta \textbf{U}_i $$
+---
 
-However, in `calculate_residual_w_dirichlet`, the residual calculated is:
+## Quick Start
 
-$$ \textbf{R} =  \frac{\partial \textbf{R}}{\partial \textbf{u}} \textbf{v} $$
+```powershell
+# Windows — prepend conda env to PATH for MKL DLLs
+$env:PATH = "C:\conda_envs\opensg_2_0_env;...;" + $env:PATH
+$env:PYTHONPATH = "path\to\OpenSG-TWJAX\opensg_jax"
 
-where $\textbf{v}$ is adjusted to include the Dirichlet BCs. Importantly, this means, that $\textbf{R}$ already incorporates the RHS term
+# Run on any Shell_1DSG YAML
+python examples/run_airfoil_cross_section.py tests/data/1Dshell_0.yaml
 
-$$ - \frac{\partial \textbf{R}}{\partial \textbf{u}} \Delta \textbf{U}_i $$
+# Run test suite
+python -m pytest tests/ -v
+```
 
+---
 
-# Resources
+## Dependencies
 
-Great crash course notes on numerical methods, Python, and HPC: https://tbetcke.github.io/hpc_lecture_notes/intro.html
+| Package | Role |
+|---------|------|
+| `jax[cpu] >= 0.4` | Energy autodiff, vmap element assembly |
+| `pypardiso >= 0.4` | Intel MKL PARDISO sparse direct solver (KKT) |
+| `numpy`, `scipy` | COO/CSR sparse matrix construction |
+| `pyyaml` | OpenSG YAML input parsing |
+| `pytest` | Test suite |
 
-JAX GPU Performance guide: https://jax.readthedocs.io/en/latest/gpu_performance_tips.html
+Full environment: [`environment_jax.yml`](environment_jax.yml)
 
-Useful guide on ahead-of-time compilation: https://jax.readthedocs.io/en/latest/aot.html
+---
 
-Useful time for distributed process structure: https://jax.readthedocs.io/en/latest/gpu_performance_tips.html#multi-process
+## Key Design Choices
 
-# Profiling Performance
+- **No FEniCSx / MPI** — pure JAX + scipy sparse + pypardiso (Intel MKL PARDISO)
+- **Quadratic Lagrange C0** along the cross-section arc — 3 DOFs/node [w₁, w₂, w₃],
+  machine-precision ABD (vs. 5.6 % error with linear elements)
+- **Energy-based autodiff** via `jax.hessian` / `jax.jacfwd` — no hand-coded stiffness matrices
+- **Two-level homogenization**: (1) through-thickness 1D SG → ABD; (2) cross-section 1D SG → 6×6 S
+- **Custom mesh generation** (e.g., pipe cross-section) lives outside `fe_jax` in user scripts
 
-JAX docs: https://jax.readthedocs.io/en/latest/profiling.html
+---
 
-Using NVidia tools to profile overall performance via sampling: https://github.com/NVIDIA/JAX-Toolbox/blob/main/docs/profiling.md
+## Reference
 
-A neat wrapper to simplying profiling for JAX: https://github.com/NVIDIA/JAX-Toolbox/blob/main/docs/nsys-jax.md
+Yu, W., Hodges, D. H., & Ho, J. C. (2012). *Variational asymptotic beam sectional analysis —
+an updated version*. International Journal of Engineering Science, 59, 40–64.
 
-Also can use NVidia Nsight Compute to see efficiency of the CUDA kernels themselves and see reccommendations to improve performance.
-
-To profile time and memory for JIT sections:
-* Use the following to collect information, `jax.profiler.start_trace("<fea-in-jax directory>/prof")`
-* Use `xprof` to visualize
-
-# Profiling GPU memory
-
-Use Google pprof to profile memory: https://jax.readthedocs.io/en/latest/device_memory_profiling.html
-
-Useful script to track GPU memory: https://github.com/ayaka14732/jax-smi
-
-# Variables Indicating Dimensions of Arrays
-Superscripts will be used to denote the rank, since within the programming implementation the shape of arrays will not include the rank index. The rank index is useful to discuss the distributed algorithm but does not affect the stored quantities.
-* $\mathcal{R}$: total # of MPI ranks
-* $\mathcal{B}^i$: # of batches of elements used for computations on the $i^\mathsf{th}$ MPI rank
-* $\mathcal{V}^i$: # of nodes used for computations on the $i^\mathsf{th}$ MPI rank
-* $\mathcal{E}^i_j$: # of elements in the $j^\mathsf{th}$ batch on the $i^\mathsf{th}$ rank
-* $\mathcal{D}$: # of dimensions in the global coordinate system, which is also # components for displacement
-* $\mathcal{I}^i_j$: # of dimensions in the isoparametric coordinate system for the $j^\mathsf{th}$ batch of elements, on the $i^\mathsf{th}$ rank. (should match $\mathcal{D}$ for solid elements)
-* $\mathcal{N}^i_j$: # of nodes for each element in the $j^\mathsf{th}$ batch of elements on the $i^\mathsf{th}$ rank.
-* $\mathcal{Q}^i_j$: # of quadrature points in each element for the $j^\mathsf{th}$ batch of elements on the $i^\mathsf{th}$ rank.
-* $\mathcal{M}^i_j$: # of material parameters in the constitutive model for the $j^\mathsf{th}$ batch of elements on the $i^\mathsf{th}$ rank.
-* $\mathcal{S}$: # of strain components (generally determined by $\mathcal{D}$ and/or $\mathcal{U}$)
-* $\mathcal{U}$: # of components of the solution per basis function
-* $\mathcal{F}^i$: total # of degrees of freedom on the $i^\mathsf{th}$ rank. 
-* $\mathcal{P}^i$: # patches on MPI rank $i$
-* $\mathcal{K}^i_{j}$: # of vertices on patch $j$ on MPI rank $i$
-* $\mathcal{L}^i_{j}$: # of elements on patch $j$ on MPI rank $i$
-* $\mathcal{G}^i_{j}$: # of degrees of freedom on patch $j$ on MPI rank $i$
+Wenbin Yu, *Mechanics of Structure Genome*, Purdue University.
