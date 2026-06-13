@@ -1,0 +1,220 @@
+"""
+MSG Shell — Material Stiffness and ABD Plate Homogenization
+
+Provides:
+  - 6x6 orthotropic stiffness (Voigt ordering: [s11,s22,s33,s23,s13,s12])
+  - Fiber-angle rotation matching OpenSG R_sig convention
+  - MSG 1D through-thickness SG ABD (quadratic Lagrange, exact for uniform layers)
+  - Classical Lamination Theory ABD (for comparison)
+"""
+
+import numpy as np
+
+
+def build_stiffness_6x6(E, G, nu):
+    """6x6 stiffness C = S^{-1} from orthotropic elastic constants.
+
+    Parameters
+    ----------
+    E  : [E1, E2, E3]  Young's moduli
+    G  : [G12, G13, G23]  shear moduli
+    nu : [nu12, nu13, nu23]  Poisson ratios
+
+    Voigt ordering: [sigma11, sigma22, sigma33, sigma23, sigma13, sigma12]
+    """
+    E1, E2, E3 = E[0], E[1], E[2]
+    G12, G13, G23 = G[0], G[1], G[2]
+    v12, v13, v23 = nu[0], nu[1], nu[2]
+
+    S = np.zeros((6, 6))
+    S[0, 0] = 1.0 / E1
+    S[1, 1] = 1.0 / E2
+    S[2, 2] = 1.0 / E3
+    S[0, 1] = S[1, 0] = -v12 / E1
+    S[0, 2] = S[2, 0] = -v13 / E1
+    S[1, 2] = S[2, 1] = -v23 / E2
+    S[3, 3] = 1.0 / G23
+    S[4, 4] = 1.0 / G13
+    S[5, 5] = 1.0 / G12
+    return np.linalg.inv(S)
+
+
+def rotation_6x6(theta_deg):
+    """6x6 rotation matrix for fiber angle (degrees), matching OpenSG R_sig."""
+    th = np.deg2rad(theta_deg)
+    c, s = np.cos(th), np.sin(th)
+    cs = c * s
+    return np.array([
+        [c**2,   s**2,  0,  0,  0, -2*cs       ],
+        [s**2,   c**2,  0,  0,  0,  2*cs       ],
+        [0,      0,     1,  0,  0,  0           ],
+        [0,      0,     0,  c,  s,  0           ],
+        [0,      0,     0, -s,  c,  0           ],
+        [cs,    -cs,    0,  0,  0,  c**2-s**2  ],
+    ])
+
+
+def rotated_stiffness_6x6(E, G, nu, theta_deg):
+    """Rotated 6x6 stiffness for a ply at fiber angle theta_deg."""
+    C = build_stiffness_6x6(E, G, nu)
+    R = rotation_6x6(theta_deg)
+    return R @ C @ R.T
+
+
+def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1):
+    """6x6 ABD plate stiffness via MSG 1D through-thickness SG.
+
+    Uses quadratic Lagrange elements (3-node, 3-pt Gauss). With n_per_layer=1
+    the result is exact to machine precision for uniform layers.
+
+    Reference surface at the bottom face (x=0, outer layer).
+
+    Variational principle:
+      gamma_h(v) = [0, 0, dv3/dx, dv2/dx, dv1/dx, 0]
+      gamma_e    = [[1,0,0,x,0,0],[0,1,0,0,x,0],[0,0,0,0,0,0],
+                    [0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,1,0,0,x]]
+      D_eff = D_ee + V0^T @ F  (V0 = K^{-1}(-F), so D1 < 0, reduces stiffness)
+
+    Parameters
+    ----------
+    thick      : list[float] — layer thicknesses, bottom to top
+    angles_deg : list[float] — fiber angles in degrees per layer
+    mat_names  : list[str]   — material name per layer (keys in material_db)
+    material_db: dict        — {name: {E:[3], G:[3], nu:[3], rho:float}}
+    n_per_layer: int         — quadratic sub-elements per layer (default 1)
+
+    Returns
+    -------
+    D_eff : (6,6) ndarray — MSG ABD stiffness
+    mass  : [mu, mu*xm3, i22] — mass per unit area, first/second moment
+    """
+    nlay = len(thick)
+    layer_bot = np.zeros(nlay + 1)
+    for k in range(nlay):
+        layer_bot[k + 1] = layer_bot[k] + thick[k]
+
+    C_layers = [rotated_stiffness_6x6(
+        material_db[mat_names[k]]['E'],
+        material_db[mat_names[k]]['G'],
+        material_db[mat_names[k]]['nu'],
+        angles_deg[k]) for k in range(nlay)]
+    rho_layers = [material_db[mat_names[k]].get('rho',
+                  material_db[mat_names[k]].get('density', 0.0))
+                  for k in range(nlay)]
+
+    n_elem = nlay * n_per_layer
+    n_node = 2 * n_elem + 1
+    ndofs = 3 * n_node
+
+    node_x = np.empty(n_node)
+    elem_layer = np.empty(n_elem, dtype=int)
+    idx = 0
+    for k in range(nlay):
+        for s in range(n_per_layer):
+            xl = layer_bot[k] + thick[k] * s / n_per_layer
+            xr = layer_bot[k] + thick[k] * (s + 1) / n_per_layer
+            node_x[2 * idx] = xl
+            node_x[2 * idx + 1] = 0.5 * (xl + xr)
+            elem_layer[idx] = k
+            idx += 1
+    node_x[2 * idx] = layer_bot[-1]
+
+    xi_g, w_g = np.polynomial.legendre.leggauss(3)
+
+    K = np.zeros((ndofs, ndofs))
+    F_load = np.zeros((ndofs, 6))
+    D_ee = np.zeros((6, 6))
+    mu, mu_x, i22_m = 0.0, 0.0, 0.0
+
+    for e in range(n_elem):
+        xl = node_x[2 * e]
+        xr = node_x[2 * e + 2]
+        he = xr - xl
+        k = elem_layer[e]
+        Ck = C_layers[k]
+        dofs = np.arange(6 * e, 6 * e + 9)
+
+        for q in range(len(xi_g)):
+            xi = xi_g[q]
+            x_q = 0.5 * (xl + xr) + 0.5 * he * xi
+            dw = 0.5 * he * w_g[q]
+
+            dN = np.array([xi - 0.5, -2.0 * xi, xi + 0.5]) * (2.0 / he)
+
+            B = np.zeros((6, 9))
+            for n_idx in range(3):
+                B[2, n_idx * 3 + 2] = dN[n_idx]
+                B[3, n_idx * 3 + 1] = dN[n_idx]
+                B[4, n_idx * 3 + 0] = dN[n_idx]
+
+            Ge = np.zeros((6, 6))
+            Ge[0, 0] = 1.0;  Ge[0, 3] = x_q
+            Ge[1, 1] = 1.0;  Ge[1, 4] = x_q
+            Ge[5, 2] = 1.0;  Ge[5, 5] = x_q
+
+            K[np.ix_(dofs, dofs)] += B.T @ Ck @ B * dw
+            F_load[dofs, :] += B.T @ Ck @ Ge * dw
+            D_ee += Ge.T @ Ck @ Ge * dw
+
+            mu += rho_layers[k] * dw
+            mu_x += rho_layers[k] * x_q * dw
+            i22_m += rho_layers[k] * x_q**2 * dw
+
+    # Nullspace: 3 rigid-body translations (v1, v2, v3 = const)
+    null = np.zeros((ndofs, 3))
+    null[0::3, 0] = 1.0
+    null[1::3, 1] = 1.0
+    null[2::3, 2] = 1.0
+    Q, _ = np.linalg.qr(null)
+
+    alpha = np.max(np.abs(np.diag(K))) * 1e8
+    K_reg = K + alpha * Q @ Q.T
+
+    V0 = np.linalg.solve(K_reg, -F_load)
+    V0 -= Q @ (Q.T @ V0)
+
+    D_eff = D_ee + V0.T @ F_load
+
+    xm3 = mu_x / mu if mu > 0 else 0.0
+    return D_eff, [mu, mu * xm3, i22_m]
+
+
+def compute_ABD_CLT(thick, angles_deg, mat_names, material_db):
+    """Classical Lamination Theory 6x6 ABD with reference at bottom face.
+
+    Returns [[A, B], [B, D]] (3x3 blocks) stacked into 6x6.
+    """
+    A = np.zeros((3, 3))
+    B = np.zeros((3, 3))
+    D = np.zeros((3, 3))
+    z = 0.0
+
+    for k in range(len(thick)):
+        mat = material_db[mat_names[k]]
+        E1, E2 = mat['E'][0], mat['E'][1]
+        G12 = mat['G'][0]
+        v12 = mat['nu'][0]
+
+        denom = 1.0 - v12**2 * E2 / E1
+        Q = np.array([
+            [E1 / denom,        v12 * E2 / denom, 0.0],
+            [v12 * E2 / denom,  E2 / denom,       0.0],
+            [0.0,               0.0,               G12],
+        ])
+
+        th = np.deg2rad(angles_deg[k])
+        c, s = np.cos(th), np.sin(th)
+        R3 = np.array([
+            [c**2,  s**2,  -2*c*s       ],
+            [s**2,  c**2,   2*c*s       ],
+            [c*s,  -c*s,    c**2-s**2  ],
+        ])
+        Qr = R3 @ Q @ R3.T
+
+        zt = z + thick[k]
+        A += Qr * (zt - z)
+        B += 0.5 * Qr * (zt**2 - z**2)
+        D += (1.0 / 3.0) * Qr * (zt**3 - z**3)
+        z = zt
+
+    return np.block([[A, B], [B, D]])

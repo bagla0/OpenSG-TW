@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# JAX / XLA cache
+.jax_cache/
+jax_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Large files / binary data
+*.pdf
+*.msh
+*.vtk
+*.xdmf
+*.h5
+*.hdf5
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
