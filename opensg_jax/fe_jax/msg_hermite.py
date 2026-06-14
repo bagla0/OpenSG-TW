@@ -224,3 +224,56 @@ def build_constraints_hermite(corners, hcells, reduced_cells, L_elems,
         Psi[nd*6 + 2, 3] = -y3; Psi[nd*6 + 4, 3] = y2
         Psi[nd*6 + 3, 3] = -tang[nd, 1]; Psi[nd*6 + 5, 3] = tang[nd, 0]
     return jnp.array(C), jnp.array(Psi)
+
+
+# =============================================================================
+# Full Hermite C1 MSG-TW solve from a YAML cross-section (the only TW path)
+# =============================================================================
+
+def timoshenko_from_yaml(yaml_path):
+    """Hermite C1 MSG-shell Timoshenko solve for an OpenSG YAML cross-section.
+
+    Returns
+    -------
+    EB   : (4,4) Euler-Bernoulli stiffness  [EA, GJ, EI2, EI3]
+    Timo : (6,6) sorted Timoshenko stiffness [EA, GA12, GA13, GJ, EI2, EI3]
+    complete : bool  False if order_mesh dropped elements (e.g. a shear web)
+    """
+    import numpy as _np
+    import jax.numpy as _jnp
+    import pypardiso
+    from .msg_mesh import load_yaml, order_mesh, mesh_curvature
+    from .msg_materials import compute_ABD_matrix
+    from .msg_solver import (gauss_legendre_01, compute_element_geometry,
+        solve_fluctuation_field, prepare_v1_rhs, finalize_v1_and_compute_deff)
+
+    nodes_3d, elements, material_db, layup_db, elem_to_layup = load_yaml(yaml_path)
+    ABD_dict = {ln: compute_ABD_matrix(i['thick'], i['angles'], i['mat_names'], material_db)[0]
+                for ln, i in layup_db.items()}
+    nodes_2d, cells, layup_per_elem, is_closed = order_mesh(nodes_3d, elements, elem_to_layup)
+    complete = cells.shape[0] == len(elements)
+    k22 = _jnp.array(mesh_curvature(nodes_2d, cells, elements, is_closed))
+    ABD_elems = _jnp.stack([_jnp.array(ABD_dict[ln], dtype=_jnp.float64) for ln in layup_per_elem])
+
+    corners, hcells = make_hermite_mesh(nodes_2d, cells)
+    dof_map, n_unique = build_hermite_dof_map(len(corners), is_closed)
+    red_cells, n_primal = compress_hermite_dofs(dof_map, hcells)
+    L_e, xd2, xd3 = compute_element_geometry(corners, hcells)
+    xi_q, W_q = gauss_legendre_01(4)
+
+    Dhh, Dhe, Dee, Dll, Dhl, Dle = assemble_system_matrices_hermite(
+        corners, hcells, red_cells, ABD_elems, k22, L_e, xd2, xd3, xi_q, W_q, n_primal)
+    C, Psi = build_constraints_hermite(
+        corners, hcells, red_cells, L_e, xd2, xd3, xi_q, W_q, n_primal, n_unique)
+    Dc = C.T
+
+    V0, D1, A_aug = solve_fluctuation_field(Dhh, -_np.array(Dhe.todense()), C)
+    Ceff = Dee + D1
+    bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
+        V0, Dhl, Dll, _jnp.array(Dle.todense()), Psi, Dc)
+    R_v1 = _np.concatenate([_np.array(bb), _np.zeros((4, bb.shape[1]))], axis=0)
+    V_aug = pypardiso.spsolve(A_aug, R_v1)
+    C6, *_ = finalize_v1_and_compute_deff(
+        _jnp.array(V_aug[:n_primal, :]), V0, Ceff, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)
+    C6.block_until_ready()
+    return _np.array(Ceff), _np.array(C6), complete

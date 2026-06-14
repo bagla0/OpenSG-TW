@@ -13,17 +13,9 @@ Run with ``pytest -s`` to print the comparison table.
 """
 import os
 import numpy as np
-import jax.numpy as jnp
 import pytest
-import pypardiso
 
-from fe_jax import (
-    compute_ABD_matrix, load_yaml, order_mesh, mesh_curvature,
-    gauss_legendre_01, compute_element_geometry, build_periodic_dof_map,
-    compress_dof_map, assemble_system_matrices, build_lagrange_constraints,
-    build_psi_matrix, solve_fluctuation_field, prepare_v1_rhs,
-    finalize_v1_and_compute_deff,
-)
+from fe_jax import timoshenko_from_yaml
 
 KEYS = ["EA", "GA12", "GA13", "GJ", "EI2", "EI3"]
 
@@ -39,33 +31,8 @@ _DATA = os.path.join(os.path.dirname(__file__), "data", "1Dshell_0.yaml")
 def jax_6x6():
     if not os.path.exists(_DATA):
         pytest.skip(f"Test data not found: {_DATA}")
-    nodes_3d, elements, material_db, layup_db, elem_to_layup = load_yaml(_DATA)
-    ABD_dict = {ln: compute_ABD_matrix(i['thick'], i['angles'], i['mat_names'], material_db)[0]
-                for ln, i in layup_db.items()}
-    nodes_2d, cells, layup_per_elem, is_closed = order_mesh(nodes_3d, elements, elem_to_layup)
-    L_e, xd2, xd3 = compute_element_geometry(nodes_2d, cells)
-    k22 = jnp.array(mesh_curvature(nodes_2d, cells, elements, is_closed))
-    ABD_elems = jnp.stack([jnp.array(ABD_dict[ln], dtype=jnp.float64) for ln in layup_per_elem])
-    dof_map, n_unique = build_periodic_dof_map(len(nodes_2d), cells, is_closed)
-    red_cells, _, n_primal = compress_dof_map(dof_map, cells)
-    xi_q, W_q = gauss_legendre_01(4)
-    Dhh, Dhe, Dee, Dll, Dhl, Dle = assemble_system_matrices(
-        jnp.array(nodes_2d, dtype=jnp.float64), cells, red_cells, ABD_elems, k22,
-        L_e, xd2, xd3, xi_q, W_q, n_primal)
-    C_mat = build_lagrange_constraints(jnp.array(nodes_2d, dtype=jnp.float64),
-                                       cells, red_cells, L_e, xi_q, W_q, n_primal)
-    Psi = build_psi_matrix(jnp.array(nodes_2d[:n_unique], dtype=jnp.float64), n_unique, n_primal)
-    Dc = C_mat.T
-    V0, D1, A_aug = solve_fluctuation_field(Dhh, -np.array(Dhe.todense()), C_mat)
-    Ceff = Dee + D1
-    bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
-        V0, Dhl, Dll, jnp.array(Dle.todense()), Psi, Dc)
-    R_v1 = np.concatenate([np.array(bb), np.zeros((4, bb.shape[1]))], axis=0)
-    V_aug = pypardiso.spsolve(A_aug, R_v1)
-    C6, *_ = finalize_v1_and_compute_deff(
-        jnp.array(V_aug[:n_primal, :]), V0, Ceff, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)
-    C6.block_until_ready()
-    return np.diag(np.array(C6))
+    _, Tim, _ = timoshenko_from_yaml(_DATA)
+    return np.diag(Tim)
 
 
 def test_benchmark_table(jax_6x6):

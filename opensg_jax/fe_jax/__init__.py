@@ -38,20 +38,16 @@ from .msg_mesh import (
     compute_curvature,
     mesh_curvature,
 )
-from .msg_shell import (
+# Shared FEM infrastructure (quadrature, element geometry, KKT solver,
+# Timoshenko assembly) — used by the Hermite C1 TW pipeline.
+from .msg_solver import (
     gauss_legendre_01,
-    quad_shape_functions,
     compute_element_geometry,
-    build_periodic_dof_map,
-    compress_dof_map,
-    assemble_system_matrices,
-    build_lagrange_constraints,
-    build_interior_penalty,
-    build_psi_matrix,
     solve_fluctuation_field,
     prepare_v1_rhs,
     finalize_v1_and_compute_deff,
 )
+# Hermite C1 cubic — the MSG thin-walled (TW) Timoshenko method.
 from .msg_hermite import (
     hermite_shape_functions,
     make_hermite_mesh,
@@ -59,5 +55,6 @@ from .msg_hermite import (
     compress_hermite_dofs,
     assemble_system_matrices_hermite,
     build_constraints_hermite,
+    timoshenko_from_yaml,
 )
 
