@@ -88,23 +88,35 @@ def order_mesh(nodes_3d, elements_1b, elem_to_layup):
 
     Walks the adjacency graph from the first element's start node.
     If the resulting polygon has CW orientation (area < 0), the order is
-    reversed.  Midside nodes are inserted at chord midpoints to form
-    3-node quadratic elements.
+    reversed.
+
+    Two input element types are accepted:
+      * 2-node ``[n1, n2]``  -> FLAT segment; the midside node is inserted at
+        the chord midpoint, so the element carries zero curvature (k22 = 0).
+      * 3-node ``[n1, nmid, n2]`` -> CURVED segment; the supplied (off-chord)
+        midside node is kept, so ``compute_curvature`` recovers its real k22.
 
     Parameters
     ----------
-    nodes_3d     : (N, 3) array — 3D node coordinates (x=y2, y=y3 used)
-    elements_1b  : list of [n1, n2] — 1-based connectivity
+    nodes_3d     : (N, 3) array — YAML coords (col0=y1, col1=y2 cross-section,
+                   col2=z beam axis); only the cross-section (col0,col1) used
+    elements_1b  : list of [n1, n2] (flat) or [n1, nmid, n2] (curved), 1-based
     elem_to_layup: dict {elem_id_1based: layup_name}
 
     Returns
     -------
-    nodes_2d      : (2*M+1, 2) — ordered [y2, y3] coords with midside nodes
+    nodes_2d      : (2*M+1, 2) — ordered [y1, y2] coords with midside nodes
     cells         : (M, 3) int64 — element connectivity (0-based, 3-node)
     layup_per_elem: list[str] — layup name for each element (traversal order)
     is_closed     : bool
     """
-    elems = [(e[0] - 1, e[1] - 1) for e in elements_1b]
+    three_node = len(elements_1b[0]) >= 3
+    if three_node:
+        elems = [(e[0] - 1, e[2] - 1) for e in elements_1b]   # corner endpoints
+        mids_given = [e[1] - 1 for e in elements_1b]          # supplied midside
+    else:
+        elems = [(e[0] - 1, e[1] - 1) for e in elements_1b]
+        mids_given = None
     n_elems = len(elems)
 
     adj = {}
@@ -152,7 +164,12 @@ def order_mesh(nodes_3d, elements_1b, elem_to_layup):
         corner_coords = nodes_3d[nids, :2]
 
     n_elem = len(nids) - 1
-    mid_coords = 0.5 * (corner_coords[:-1] + corner_coords[1:])
+    if three_node:
+        # keep the supplied (possibly off-chord) midside for each element
+        mid_coords = np.array([nodes_3d[mids_given[eidx], :2] for eidx in eids])
+    else:
+        # flat segments: midside at chord midpoint (collinear -> k22 = 0)
+        mid_coords = 0.5 * (corner_coords[:-1] + corner_coords[1:])
 
     nodes_2d = np.zeros((2 * n_elem + 1, 2))
     nodes_2d[0::2] = corner_coords
@@ -174,40 +191,45 @@ def order_mesh(nodes_3d, elements_1b, elem_to_layup):
 # =============================================================================
 
 def compute_curvature(nodes_2d, cells, is_closed=True):
-    """Per-element curvature k22 via 3-point circumscribed circle.
+    """Per-element curvature k22 from the element's OWN three nodes.
 
-    Uses element midside nodes (``cells[:, 1]``) as element centres.
+    The circumscribed circle through (corner0, midside, corner1):
+      * FLAT element  -> the three nodes are collinear (a 2-node segment has
+        its midside on the chord), so the cross product vanishes and k22 = 0.
+      * CURVED element -> an off-chord 3-node element gives k22 = -1/R.
 
-    Sign convention: k22 = -(signed curvature), so k22 = -1/R for a CCW
-    circle of radius R.
+    This is the geometrically honest curvature: curvature only appears when the
+    element itself is curved, never as a smoothed average across flat segments.
+
+    Sign convention: k22 = -(signed curvature) = -1/R for a CCW arc.
 
     Parameters
     ----------
     nodes_2d  : (2*N+1, 2) node coordinates including midside nodes
-    cells     : (N, 3) element connectivity
-    is_closed : bool — wrap neighbour lookup for a closed loop
+    cells     : (N, 3) element connectivity [corner0, midside, corner1]
+    is_closed : bool — unused (kept for signature compatibility)
 
     Returns
     -------
-    k22 : (N,) ndarray
+    k22 : (N,) ndarray  (zero for flat elements)
     """
+    p0 = nodes_2d[cells[:, 0]]
+    p1 = nodes_2d[cells[:, 1]]
+    p2 = nodes_2d[cells[:, 2]]
     n_elem = cells.shape[0]
-    mid = nodes_2d[cells[:, 1]]
 
     k22 = np.zeros(n_elem)
     for i in range(n_elem):
-        im = (i - 1) % n_elem if is_closed else max(i - 1, 0)
-        ip = (i + 1) % n_elem if is_closed else min(i + 1, n_elem - 1)
+        d01 = p1[i] - p0[i]
+        d12 = p2[i] - p1[i]
 
-        d12 = mid[i]  - mid[im]
-        d23 = mid[ip] - mid[i]
-
-        cross = d12[0] * d23[1] - d12[1] * d23[0]
+        cross = d01[0] * d12[1] - d01[1] * d12[0]
+        l01   = np.linalg.norm(d01)
         l12   = np.linalg.norm(d12)
-        l23   = np.linalg.norm(d23)
-        l31   = np.linalg.norm(mid[ip] - mid[im])
-        denom = l12 * l23 * l31
+        l02   = np.linalg.norm(p2[i] - p0[i])
+        denom = l01 * l12 * l02
 
+        # collinear (flat) -> cross ~ 0 -> k22 = 0
         k22[i] = -2.0 * cross / denom if denom > 1e-30 else 0.0
 
     return k22
