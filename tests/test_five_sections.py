@@ -7,6 +7,9 @@ JAX (TW) code and compared element-by-element against OpenSG's FEniCS shell
 percent-difference table.
 """
 import os
+import sys
+# allow `python tests/test_five_sections.py` (conftest only runs under pytest)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "opensg_jax"))
 import numpy as np
 import jax.numpy as jnp
 import pytest
@@ -122,3 +125,29 @@ def test_diag_positive(jax_five, sec):
     """6x6 diagonal must be positive for every cross-section."""
     diag, _ = jax_five[sec]
     assert np.all(diag > 0), f"section {sec}: {diag}"
+
+
+# --------------------------------------------------------------- run directly
+# `python tests/test_five_sections.py` actually solves and prints the table
+# (the pytest test functions above only execute under pytest).
+if __name__ == "__main__":
+    print("JAX-TW vs FEniCS-TW  |  percent difference (100*(JAX-FE)/FE)")
+    print("sec " + " ".join(f"{k:>8s}" for k in KEYS) + "   topology")
+    print("-" * 74)
+    for i in range(5):
+        path = os.path.join(DATA_DIR, f"1Dshell_{i}.yaml")
+        if not os.path.exists(path):
+            print(f"{i:<3d}  (missing {path})")
+            continue
+        diag, complete = _solve_jax(path)
+        fe = FENICS_TW[i]
+        diffs = [(diag[j] - fe[j]) / fe[j] * 100 for j in range(6)]
+        tag = "single-loop" if complete else "WEB (incomplete)"
+        print(f"{i:<3d} " + " ".join(f"{d:>7.2f}%" for d in diffs) + f"   {tag}")
+    print("-" * 74)
+    print("JAX absolute diagonals [EA, GA12, GA13, GJ, EI2, EI3]:")
+    for i in range(5):
+        path = os.path.join(DATA_DIR, f"1Dshell_{i}.yaml")
+        if os.path.exists(path):
+            diag, _ = _solve_jax(path)
+            print(f"  sec {i}: " + " ".join(f"{v:.4e}" for v in diag))

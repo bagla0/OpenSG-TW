@@ -1,0 +1,226 @@
+"""
+MSG Shell Timoshenko — Hermite C1 cubic elements (the mandatory JAX-TW method).
+
+Displacement interpolation along the cross-section arc is **Hermite C1 cubic**:
+each corner node carries value + arc-slope DOFs for all three displacement
+components  ->  6 DOF/node, 12 DOF/element.  Because the slope is continuous
+across elements (C1), no interior penalty is needed for the V1 (shear-warping)
+solve.
+
+Geometry is the quadratic line cross-section: the corner nodes give the chord
+tangent / arc length, and the curvature ``k22`` comes from the 3-node geometry
+via :func:`mesh_curvature` (flat 2-node -> 0, curved 3-node -> -1/R).  The
+strain operators ``gamma_h`` / ``gamma_l`` / ``gamma_e`` are identical to the
+quadratic module; only the shape functions and DOF layout differ.
+
+Frame: VABS plane cross-section (e1 = [1,0,0] beam axis, e2 = geometric tangent,
+e3 = e1 x e2).
+
+The KKT solve (:func:`solve_fluctuation_field`), V1 RHS
+(:func:`prepare_v1_rhs`) and Timoshenko assembly
+(:func:`finalize_v1_and_compute_deff`) are reused unchanged from ``msg_shell``.
+"""
+import jax
+import jax.numpy as jnp
+import jax.experimental.sparse as jsparse
+import numpy as np
+
+jax.config.update("jax_enable_x64", True)
+
+# component DOF indices within the 12-DOF element [n0: w1,w1',w2,w2',w3,w3'; n1: ...]
+_I1 = jnp.array([0, 1, 6, 7])    # w1 value+slope at the two corners
+_I2 = jnp.array([2, 3, 8, 9])    # w2
+_I3 = jnp.array([4, 5, 10, 11])  # w3
+
+
+# =============================================================================
+# Hermite C1 cubic shape functions
+# =============================================================================
+
+def hermite_shape_functions(xi_q, L):
+    """Cubic Hermite N, N', N'' on xi in [0, 1] for DOFs [v0, s0, v1, s1].
+
+    psi1 = 1-3z^2+2z^3, psi2 = z-2z^2+z^3, psi3 = 3z^2-2z^3, psi4 = -z^2+z^3;
+    slope shape functions are scaled by the element length L so the slope DOF
+    is the physical arc derivative dw/ds.
+
+    Returns phi_val, phi_d1 (d/ds), phi_d2 (d^2/ds^2), each (Q, 4).
+    """
+    t = xi_q; t2 = t * t; t3 = t2 * t
+    phi_val = jnp.stack([1 - 3*t2 + 2*t3, L*(t - 2*t2 + t3),
+                         3*t2 - 2*t3,     L*(-t2 + t3)], axis=1)
+    phi_d1 = jnp.stack([(-6*t + 6*t2)/L, 1 - 4*t + 3*t2,
+                        (6*t - 6*t2)/L,  -2*t + 3*t2], axis=1)
+    phi_d2 = jnp.stack([(-6 + 12*t)/L**2, (-4 + 6*t)/L,
+                        (6 - 12*t)/L**2,  (-2 + 6*t)/L], axis=1)
+    return phi_val, phi_d1, phi_d2
+
+
+# =============================================================================
+# Hermite mesh + DOF map (corner nodes only; 6 DOF/node)
+# =============================================================================
+
+def make_hermite_mesh(nodes_2d, cells):
+    """Corner nodes + 2-node connectivity from the quadratic (3-node) mesh.
+
+    The displacement lives on the corner nodes (even rows of ``nodes_2d``); the
+    midside node is used only for geometry/curvature.
+
+    Returns
+    -------
+    corners : (n_elem+1, 2)  corner coordinates (last == first if closed)
+    hcells  : (n_elem, 2)    corner connectivity [corner_i, corner_{i+1}]
+    """
+    n_elem = cells.shape[0]
+    corners = np.asarray(nodes_2d)[0::2]
+    hcells = np.column_stack([np.arange(n_elem), np.arange(1, n_elem + 1)]).astype(np.int64)
+    return corners, hcells
+
+
+def build_hermite_dof_map(n_corner, is_closed=True):
+    """Periodic DOF map for Hermite corners (6 DOF/node, value+slope x3)."""
+    dof_map = np.arange(n_corner * 6, dtype=np.int64)
+    if is_closed:
+        last = n_corner - 1
+        for k in range(6):
+            dof_map[last * 6 + k] = k       # merge last corner -> first (value & slope)
+        n_unique = n_corner - 1
+    else:
+        n_unique = n_corner
+    return dof_map, n_unique
+
+
+def compress_hermite_dofs(dof_map, hcells):
+    """Renumber Hermite corner DOFs to unique ids; returns reduced cells & n_primal."""
+    master = dof_map[::6] // 6
+    unique = np.unique(master)
+    f2r = np.full(len(master), -1, dtype=np.int64)
+    for i, m in enumerate(unique):
+        f2r[m] = i
+    reduced_cells = f2r[master[hcells]]
+    return reduced_cells, len(unique) * 6
+
+
+# =============================================================================
+# System matrix assembly (energy autodiff, vmap over Hermite elements)
+# =============================================================================
+
+def assemble_system_matrices_hermite(
+    corners, hcells, reduced_cells, ABD_elems, k22_elems,
+    L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal
+):
+    """Assemble Dhh, Dhe, Dee, Dll, Dhl, Dle with Hermite C1 elements."""
+    E_elem = hcells.shape[0]
+    Q_pts = xi_q.shape[0]
+
+    def get_elem(data):
+        n0, n1, ABD, k22, L, xd2, xd3 = data
+        phi_val, phi_d1, phi_d2 = hermite_shape_functions(xi_q, L)
+        dV_q = L * W_q
+        x2_q = (1.0 - xi_q) * n0[0] + xi_q * n1[0]
+        x3_q = (1.0 - xi_q) * n0[1] + xi_q * n1[1]
+        ABD_q = jnp.repeat(ABD[None], Q_pts, axis=0)
+        Rn = x2_q * xd3 - x3_q * xd2
+
+        Ge = jnp.zeros((Q_pts, 6, 4))
+        Ge = Ge.at[:, 0, 0].set(1.0)
+        Ge = Ge.at[:, 0, 2].set(x3_q)
+        Ge = Ge.at[:, 0, 3].set(-x2_q)
+        Ge = Ge.at[:, 2, 1].set(Rn)
+        Ge = Ge.at[:, 3, 2].set(xd2)
+        Ge = Ge.at[:, 3, 3].set(xd3)
+        Ge = Ge.at[:, 5, 1].set(-2.0 - k22 / 2.0 * Rn)
+
+        def eps_h(u):
+            dw1 = phi_d1 @ u[_I1]; dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
+            d2w2 = phi_d2 @ u[_I2]; d2w3 = phi_d2 @ u[_I3]
+            return jnp.stack([
+                jnp.zeros(Q_pts), xd2*dw2 + xd3*dw3, dw1, jnp.zeros(Q_pts),
+                -k22*xd2*dw2 + xd3*d2w2 - k22*xd3*dw3 - xd2*d2w3,
+                (k22/2.0)*dw1], axis=1)
+
+        def eps_l(u):
+            w1 = phi_val @ u[_I1]; w2 = phi_val @ u[_I2]; w3 = phi_val @ u[_I3]
+            dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
+            return jnp.stack([
+                w1, jnp.zeros(Q_pts), xd2*w2 + xd3*w3, jnp.zeros(Q_pts),
+                jnp.zeros(Q_pts),
+                2.0*xd3*dw2 - 2.0*xd2*dw3 - (k22/2.0)*(xd2*w2 + xd3*w3)], axis=1)
+
+        def eps_e(ue):
+            return jnp.einsum("qip,p->qi", Ge, ue)
+
+        z_u = jnp.zeros(12); z_e = jnp.zeros(4)
+        q = lambda e, f: 0.5 * jnp.einsum("qi,qij,qj,q->", f(e), ABD_q, f(e), dV_q)
+        b = lambda ea, fa, eb, fb: jnp.einsum("qi,qij,qj,q->", fa(ea), ABD_q, fb(eb), dV_q)
+        D_hh = jax.hessian(lambda u: q(u, eps_h))(z_u)
+        D_he = jax.jacfwd(jax.grad(lambda u, ue: b(u, eps_h, ue, eps_e), 0), 1)(z_u, z_e)
+        D_ee = jax.hessian(lambda ue: q(ue, eps_e))(z_e)
+        D_ll = jax.hessian(lambda u: q(u, eps_l))(z_u)
+        D_hl = jax.jacfwd(jax.grad(lambda u, ul: b(u, eps_h, ul, eps_l), 0), 1)(z_u, z_u)
+        D_le = jax.jacfwd(jax.grad(lambda u, ue: b(u, eps_l, ue, eps_e), 0), 1)(z_u, z_e)
+        return D_hh, D_he, D_ee, D_ll, D_hl, D_le
+
+    out = jax.vmap(get_elem)((
+        jnp.array(corners[hcells[:, 0]]), jnp.array(corners[hcells[:, 1]]),
+        ABD_elems, k22_elems, L_elems, xd2_elems, xd3_elems))
+    D_hh_b, D_he_b, D_ee_b, D_ll_b, D_hl_b, D_le_b = out
+
+    rc = jnp.array(reduced_cells)
+    dof = (rc.reshape(E_elem, 2, 1) * 6 + jnp.arange(6)).reshape(E_elem, 12)
+    rs = jnp.repeat(dof, 12, axis=1).ravel(); cs = jnp.tile(dof, (1, 12)).ravel()
+    rr = jnp.repeat(dof, 4, axis=1).ravel(); cr = jnp.tile(jnp.arange(4), (E_elem, 12)).ravel()
+
+    sq = lambda d: jsparse.COO((d.ravel(), rs, cs), shape=(n_primal, n_primal))._sort_indices()
+    rect = lambda d: jsparse.COO((d.ravel(), rr, cr), shape=(n_primal, 4))._sort_indices()
+    return (sq(D_hh_b), rect(D_he_b), jnp.sum(D_ee_b, axis=0),
+            sq(D_ll_b), sq(D_hl_b), rect(D_le_b))
+
+
+# =============================================================================
+# Constraints (derivative twist) + rigid-body kernel Psi
+# =============================================================================
+
+def build_constraints_hermite(corners, hcells, reduced_cells, L_elems,
+                              xd2_elems, xd3_elems, xi_q, W_q, n_primal, n_unique):
+    """4 x N constraint matrix C and N x 4 rigid kernel Psi (Hermite layout).
+
+    Constraints: <w1>=<w2>=<w3>=0 and the DERIVATIVE twist
+    INT(dw2/ds*xd3 - dw3/ds*xd2) ds = 0 (matches the quadratic path, keeps the
+    V1 RHS orthogonal to Psi so no penalty is needed).  Psi: 3 translations
+    (value DOFs) + twist (value w2=-y3,w3=y2 and slope = nodal-average tangent).
+    """
+    E_elem = hcells.shape[0]
+    rc = np.asarray(reduced_cells)
+    xd2n = np.asarray(xd2_elems); xd3n = np.asarray(xd3_elems); Ln = np.asarray(L_elems)
+
+    C = np.zeros((4, n_primal))
+    for e in range(E_elem):
+        val, d1, _ = hermite_shape_functions(xi_q, Ln[e])
+        dV = Ln[e] * np.asarray(W_q)
+        iv = np.asarray(jnp.einsum("qn,q->n", val, jnp.array(dV)))    # int phi
+        idp = np.asarray(jnp.einsum("qn,q->n", d1, jnp.array(dV)))    # int dphi/ds
+        for loc, cn in enumerate(rc[e]):
+            base = cn * 6
+            C[0, base + 0] += iv[2*loc];     C[0, base + 1] += iv[2*loc + 1]
+            C[1, base + 2] += iv[2*loc];     C[1, base + 3] += iv[2*loc + 1]
+            C[2, base + 4] += iv[2*loc];     C[2, base + 5] += iv[2*loc + 1]
+            C[3, base + 2] += xd3n[e]*idp[2*loc];  C[3, base + 3] += xd3n[e]*idp[2*loc + 1]
+            C[3, base + 4] += -xd2n[e]*idp[2*loc]; C[3, base + 5] += -xd2n[e]*idp[2*loc + 1]
+
+    tang = np.zeros((n_unique, 2))
+    for e in range(E_elem):
+        for cn in rc[e]:
+            tang[cn] += [xd2n[e], xd3n[e]]
+    tang /= np.linalg.norm(tang, axis=1, keepdims=True) + 1e-30
+
+    Psi = np.zeros((n_primal, 4))
+    cc = np.asarray(corners[:n_unique])
+    for nd in range(n_unique):
+        Psi[nd*6 + 0, 0] = 1.0
+        Psi[nd*6 + 2, 1] = 1.0
+        Psi[nd*6 + 4, 2] = 1.0
+        y2, y3 = cc[nd]
+        Psi[nd*6 + 2, 3] = -y3; Psi[nd*6 + 4, 3] = y2
+        Psi[nd*6 + 3, 3] = -tang[nd, 1]; Psi[nd*6 + 5, 3] = tang[nd, 0]
+    return jnp.array(C), jnp.array(Psi)

@@ -52,4 +52,12 @@ from .msg_shell import (
     prepare_v1_rhs,
     finalize_v1_and_compute_deff,
 )
+from .msg_hermite import (
+    hermite_shape_functions,
+    make_hermite_mesh,
+    build_hermite_dof_map,
+    compress_hermite_dofs,
+    assemble_system_matrices_hermite,
+    build_constraints_hermite,
+)
 

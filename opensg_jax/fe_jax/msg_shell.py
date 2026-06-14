@@ -80,9 +80,10 @@ def quad_shape_functions(xi_q, L_elem):
 def compute_element_geometry(nodes, cells):
     """Arc-length L and tangent (xdot2, xdot3) per element.
 
-    Uses the two end-corner nodes (columns 0 and 2) to compute geometry.
+    Uses the two end-corner nodes (first and last columns), so it works for
+    both 3-node quadratic cells and 2-node Hermite cells.
     """
-    n1, n2 = cells[:, 0], cells[:, 2]
+    n1, n2 = cells[:, 0], cells[:, -1]
     dy2 = nodes[n2, 0] - nodes[n1, 0]
     dy3 = nodes[n2, 1] - nodes[n1, 1]
     L_e = np.sqrt(dy2**2 + dy3**2)

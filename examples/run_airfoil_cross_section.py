@@ -2,8 +2,12 @@
 General Cross-Section MSG Shell Beam Homogenization
 
 Reads an OpenSG-format YAML cross-section file and computes Timoshenko
-beam stiffness using the MSG Kirchhoff shell model with quadratic Lagrange
-elements along the cross-section arc.
+beam stiffness using the MSG Kirchhoff shell model with Hermite C1 cubic
+shape functions for the displacement along the cross-section arc (value +
+arc-slope DOFs at the corner nodes).  The line cross-section geometry uses
+the quadratic 3-node element, so curvature k22 is captured (flat 2-node
+elements give k22=0).  Frame: VABS plane cross-section (e1=[1,0,0]).  No
+interior penalty is needed -- C1 continuity removes the spurious C0 modes.
 
 Usage
 -----
@@ -35,14 +39,14 @@ from fe_jax import (
     load_yaml,
     order_mesh,
     mesh_curvature,
-    # FEM assembly
+    # FEM assembly (Hermite C1)
     gauss_legendre_01,
     compute_element_geometry,
-    build_periodic_dof_map,
-    compress_dof_map,
-    assemble_system_matrices,
-    build_lagrange_constraints,
-    build_psi_matrix,
+    make_hermite_mesh,
+    build_hermite_dof_map,
+    compress_hermite_dofs,
+    assemble_system_matrices_hermite,
+    build_constraints_hermite,
     # solvers
     solve_fluctuation_field,
     prepare_v1_rhs,
@@ -53,7 +57,7 @@ from fe_jax import (
 def run_cross_section(yaml_path):
     t0 = time.time()
     print("=" * 64)
-    print("MSG Shell Beam Homogenization  |  Quadratic Lagrange Elements")
+    print("MSG Shell Beam Homogenization  |  Hermite C1 Cubic Elements")
     print("=" * 64)
     print(f"YAML: {yaml_path}\n")
 
@@ -100,33 +104,32 @@ def run_cross_section(yaml_path):
     ABD_elems = jnp.stack([
         jnp.array(ABD_dict[ln], dtype=jnp.float64) for ln in layup_per_elem])
 
-    # ----------------------------------------------------------- DOF setup
-    dof_map, n_unique = build_periodic_dof_map(n_nodes, cells, is_closed)
-    red_cells, _, n_primal = compress_dof_map(dof_map, cells)
-    print(f"  Unique nodes: {n_unique},  Primal DOFs: {n_primal}")
+    # ------------------------------------------- Hermite C1 mesh + DOF setup
+    # Displacement = Hermite C1 cubic (value+slope at corner nodes, 6 DOF/node);
+    # geometry/curvature come from the quadratic 3-node line cross-section.
+    corners, hcells = make_hermite_mesh(nodes_2d, cells)
+    dof_map, n_unique = build_hermite_dof_map(len(corners), is_closed)
+    red_cells, n_primal = compress_hermite_dofs(dof_map, hcells)
+    Lh, xd2h, xd3h = compute_element_geometry(corners, hcells)
+    print(f"  Unique corner nodes: {n_unique},  Primal DOFs (Hermite): {n_primal}")
 
     xi_q, W_q = gauss_legendre_01(4)
 
     # ----------------------------------------------------------- assembly
-    print("\n--- Assembly ---")
+    print("\n--- Assembly (Hermite C1) ---")
     t1 = time.time()
-    Dhh, Dhe, Dee, Dll, Dhl, Dle = assemble_system_matrices(
-        jnp.array(nodes_2d, dtype=jnp.float64),
-        cells, red_cells, ABD_elems, k22,
-        L_e, xd2, xd3, xi_q, W_q, n_primal)
+    Dhh, Dhe, Dee, Dll, Dhl, Dle = assemble_system_matrices_hermite(
+        corners, hcells, red_cells, ABD_elems, k22,
+        Lh, xd2h, xd3h, xi_q, W_q, n_primal)
     print(f"  Time: {time.time()-t1:.2f} s")
 
-    C_mat = build_lagrange_constraints(
-        jnp.array(nodes_2d, dtype=jnp.float64),
-        cells, red_cells, L_e, xi_q, W_q, n_primal)
-    Psi = build_psi_matrix(
-        jnp.array(nodes_2d[:n_unique], dtype=jnp.float64),
-        n_unique, n_primal)
+    C_mat, Psi = build_constraints_hermite(
+        corners, hcells, red_cells, Lh, xd2h, xd3h, xi_q, W_q, n_primal, n_unique)
     Dc = C_mat.T
 
-    # No interior penalty needed: the derivative-form twist constraint
-    # (build_lagrange_constraints) makes the V1 RHS orthogonal to the rigid
-    # kernel, so the C0 warping null modes stay harmless.
+    # No interior penalty needed: Hermite C1 has continuous slope (no spurious
+    # C0 warping modes), and the derivative-form twist constraint keeps the V1
+    # RHS orthogonal to the rigid kernel.
 
     # ------------------------------------------ Euler-Bernoulli (EB) solve
     print("\n--- Euler-Bernoulli solve ---")
