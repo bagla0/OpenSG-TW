@@ -122,6 +122,10 @@ def run_cross_section(yaml_path):
         n_unique, n_primal)
     Dc = C_mat.T
 
+    # No interior penalty needed: the derivative-form twist constraint
+    # (build_lagrange_constraints) makes the V1 RHS orthogonal to the rigid
+    # kernel, so the C0 warping null modes stay harmless.
+
     # ------------------------------------------ Euler-Bernoulli (EB) solve
     print("\n--- Euler-Bernoulli solve ---")
     t2 = time.time()

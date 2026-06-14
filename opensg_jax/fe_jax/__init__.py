@@ -45,6 +45,7 @@ from .msg_shell import (
     compress_dof_map,
     assemble_system_matrices,
     build_lagrange_constraints,
+    build_interior_penalty,
     build_psi_matrix,
     solve_fluctuation_field,
     prepare_v1_rhs,

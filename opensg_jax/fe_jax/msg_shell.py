@@ -158,14 +158,17 @@ def assemble_system_matrices(
         ABD_q = jnp.repeat(ABD[None, :, :], Q_pts, axis=0)
         Rn = x2_q * xd3 - x3_q * xd2
 
+        # gamma_e (MSG-TW shell, grad(x)=I, only k22 != 0): macro strains
+        #   [axial, twist, bend2, bend3] -> shell strains [e11,e22,g12,k11,k22,k12]
+        # Bending (cols 2,3) maps to shell bending k11 (row 3), NOT shear g12 (row 2).
         Ge = jnp.zeros((Q_pts, 6, 4))
-        Ge = Ge.at[:, 0, 0].set(1.0)
-        Ge = Ge.at[:, 0, 2].set(x3_q)
-        Ge = Ge.at[:, 0, 3].set(-x2_q)
-        Ge = Ge.at[:, 2, 1].set(Rn)
-        Ge = Ge.at[:, 2, 2].set(xd2)
-        Ge = Ge.at[:, 2, 3].set(xd3)
-        Ge = Ge.at[:, 5, 1].set(-2.0 - k22 / 2.0 * Rn)
+        Ge = Ge.at[:, 0, 0].set(1.0)            # e11 from axial
+        Ge = Ge.at[:, 0, 2].set(x3_q)           # e11 from bend2
+        Ge = Ge.at[:, 0, 3].set(-x2_q)          # e11 from bend3
+        Ge = Ge.at[:, 2, 1].set(Rn)             # g12 from twist
+        Ge = Ge.at[:, 3, 2].set(xd2)            # k11 from bend2
+        Ge = Ge.at[:, 3, 3].set(xd3)            # k11 from bend3
+        Ge = Ge.at[:, 5, 1].set(-2.0 - k22 / 2.0 * Rn)   # k12 from twist
 
         i1 = jnp.array([0, 3, 6])   # w1 DOF indices within element
         i2 = jnp.array([1, 4, 7])   # w2
@@ -186,13 +189,16 @@ def assemble_system_matrices(
         def eps_l(u):
             w1p = phi_val @ u[i1]; w2p = phi_val @ u[i2]; w3p = phi_val @ u[i3]
             dw2p = phi_d1 @ u[i2]; dw3p = phi_d1 @ u[i3]
+            # gamma_l (MSG-TW shell, grad(x)=I => d_i = e_i, only k22 != 0):
+            #   L1 = w.e1, L3 = w.e2, L6 = 2*(dw/ds).e3 - (k22/2)*(w.e2); L2=L4=L5=0.
+            # The shear-warping term lives in the kappa12 slot (index 5), NOT kappa22.
             return jnp.stack([
                 w1p,
                 jnp.zeros(Q_pts),
                 xd2 * w2p + xd3 * w3p,
                 jnp.zeros(Q_pts),
-                2.0*xd3*dw2p - (k22/2.0)*xd2*w2p - 2.0*xd2*dw3p - (k22/2.0)*xd3*w3p,
                 jnp.zeros(Q_pts),
+                2.0*xd3*dw2p - 2.0*xd2*dw3p - (k22/2.0)*(xd2*w2p + xd3*w3p),
             ], axis=1)
 
         def eps_e(ue):
@@ -258,27 +264,38 @@ def assemble_system_matrices(
 def build_lagrange_constraints(
     nodes, cells, reduced_cells, L_elems, xi_q, W_q, n_primal
 ):
-    """Build 4 x N_primal integral constraint matrix."""
+    """Build 4 x N_primal integral constraint matrix.
+
+    Constraints (matching the OpenSG solid KKT, see Beam_solid.py):
+      <w1> = <w2> = <w3> = 0                        (3 translations)
+      INT( dw2/ds * xd3 - dw3/ds * xd2 ) ds = 0     (twist, DERIVATIVE form)
+
+    The twist row is the 1D-shell image (Green's theorem) of the solid
+    constraint INT(dw2/dz - dw3/dy) dA.  Using the derivative form (not the
+    value form INT(y3*w2 - y2*w3)) makes the V1 right-hand side b orthogonal
+    to the rigid-body kernel Psi, so the Timoshenko solve needs NO interior
+    penalty -- the (large but harmless) C0 warping null components do not
+    pollute C_tim.  ``dw/ds`` here is the physical arc derivative.
+    """
     E_elem = cells.shape[0]
     DPN = 3
     NDE = 9
 
     def elem_c(n1c, n2c, L_e, _):
-        phi_val, _, _ = quad_shape_functions(xi_q, L_e)
+        phi_val, phi_d1, _ = quad_shape_functions(xi_q, L_e)
         dV_q = L_e * W_q
-        x2_q = (1.0 - xi_q) * n1c[0] + xi_q * n2c[0]
-        x3_q = (1.0 - xi_q) * n1c[1] + xi_q * n2c[1]
+        xd2_e = (n2c[0] - n1c[0]) / L_e
+        xd3_e = (n2c[1] - n1c[1]) / L_e
 
-        ip = jnp.einsum("qn,q->n", phi_val, dV_q)
-        x3p = jnp.einsum("q,qn,q->n", x3_q, phi_val, dV_q)
-        x2p = jnp.einsum("q,qn,q->n", x2_q, phi_val, dV_q)
+        ip  = jnp.einsum("qn,q->n", phi_val, dV_q)   # INT phi
+        idp = jnp.einsum("qn,q->n", phi_d1, dV_q)    # INT dphi/ds
 
         c = jnp.zeros((4, NDE))
         c = c.at[0, jnp.array([0, 3, 6])].set(ip)
         c = c.at[1, jnp.array([1, 4, 7])].set(ip)
         c = c.at[2, jnp.array([2, 5, 8])].set(ip)
-        c = c.at[3, jnp.array([1, 4, 7])].set(x3p)
-        c = c.at[3, jnp.array([2, 5, 8])].add(-x2p)
+        c = c.at[3, jnp.array([1, 4, 7])].set(xd3_e * idp)   # dw2/ds * xd3
+        c = c.at[3, jnp.array([2, 5, 8])].set(-xd2_e * idp)  # -dw3/ds * xd2
         return c
 
     rc = jnp.array(reduced_cells)
@@ -295,6 +312,63 @@ def build_lagrange_constraints(
     C_global = jnp.zeros((4, n_primal))
     C_global = C_global.at[:, dof_elem].add(batches.transpose(1, 0, 2))
     return C_global
+
+
+# =============================================================================
+# C0 Interior Penalty -- OPTIONAL fallback (not used by default)
+# =============================================================================
+
+def build_interior_penalty(cells, reduced_cells, L_elems, n_primal,
+                           is_closed=True, penalty=None, abd_elems=None):
+    """OPTIONAL C0 interior penalty on jump(dw/ds) across element nodes (CSR).
+
+    Not needed in the default pipeline: the derivative-form twist constraint
+    (``build_lagrange_constraints``) already keeps the V1 right-hand side
+    orthogonal to the rigid kernel, so the C0 warping null modes stay
+    harmless.  Kept as a fallback / cross-check that replicates OpenSG's
+    ``deri_constraint`` C0-IP (Nitsche) term.  Per interior facet/component::
+
+        Kp = -outer(c, a) - outer(a, c) + alpha * outer(a, a)
+
+    with ``a = jump(dw/ds)``, ``c = avg(d2w/ds2)``,
+    ``alpha = 10 * penalty / h_avg**2``.
+
+    The ``penalty`` magnitude is made general across cross-sections/materials:
+    if not given it is derived from the input ABD (the largest membrane
+    stiffness ``A11`` over all layups), so it always tracks the stiffness
+    scale instead of a hard-coded 1e9.
+    """
+    if penalty is None:
+        if abd_elems is not None:
+            penalty = float(np.max(np.abs(np.asarray(abd_elems)[:, 0, 0])))
+        else:
+            penalty = 1e9
+    L = np.asarray(L_elems)
+    rc = np.asarray(reduced_cells)        # rc[e] = [corner0, mid, corner1]
+    n_elem = cells.shape[0]
+    n_facets = n_elem if is_closed else n_elem - 1
+
+    def d_ends(Le, tau):                  # quad-Lagrange N',N'' at element end
+        d1 = np.array([4*tau - 3, -8*tau + 4, 4*tau - 1]) / Le
+        d2 = np.array([4.0, -8.0, 4.0]) / Le**2
+        return d1, d2
+
+    rows, cols, data = [], [], []
+    for n in range(n_facets):
+        eL, eR = n, (n + 1) % n_elem
+        h_avg = 0.5 * (L[eL] + L[eR])
+        alpha = 10.0 * penalty / h_avg**2
+        d1L, d2L = d_ends(L[eL], 1.0)     # left element, right end (xi=1)
+        d1R, d2R = d_ends(L[eR], 0.0)     # right element, left end (xi=0)
+        a = np.concatenate([d1L, -d1R])           # jump(dw/ds)
+        c = np.concatenate([0.5 * d2L, 0.5 * d2R])  # avg(d2w/ds2)
+        Kp = -np.outer(c, a) - np.outer(a, c) + alpha * np.outer(a, a)
+        for k in range(3):                # each displacement component
+            gdof = np.concatenate([rc[eL] * 3 + k, rc[eR] * 3 + k])
+            for ii in range(6):
+                rows.extend(gdof); cols.extend([gdof[ii]] * 6)
+                data.extend(Kp[ii, :])
+    return csr_matrix((data, (cols, rows)), shape=(n_primal, n_primal))
 
 
 # =============================================================================
