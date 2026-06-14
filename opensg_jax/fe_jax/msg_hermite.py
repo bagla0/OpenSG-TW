@@ -102,6 +102,63 @@ def compress_hermite_dofs(dof_map, hcells):
 
 
 # =============================================================================
+# Shell strain operators (shared by assembly and dehomogenization)
+# =============================================================================
+
+def hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
+    """Per-element MSG shell strain operators at the quadrature points.
+
+    Returns three callables ``eps_h(u)``, ``eps_l(u)``, ``eps_e(ue)`` and the
+    macro-strain map ``Ge`` (Q, 6, 4).  All produce the 6-component shell strain
+    [eps11, eps22, gamma12, kappa11, kappa22, kappa12] per quad point:
+
+    * ``eps_h(u)``  — bending fluctuation from the 12-DOF Hermite warping ``u``
+    * ``eps_l(u)``  — Timoshenko shear-warping operator
+    * ``eps_e(ue)`` — Ge @ ue, the macro EB strain map (ue = [eps11,k1,k2,k3])
+
+    This is the single source of truth for the strain kinematics: both
+    :func:`assemble_system_matrices_hermite` (which builds Dhh/.../Dle by
+    autodiff of the strain energy) and the dehomogenization shell-strain
+    recovery call it, so the two never diverge.
+    """
+    Q_pts = xi_q.shape[0]
+    phi_val, phi_d1, phi_d2 = hermite_shape_functions(xi_q, L)
+    x2_q = (1.0 - xi_q) * n0[0] + xi_q * n1[0]
+    x3_q = (1.0 - xi_q) * n0[1] + xi_q * n1[1]
+    Rn = x2_q * xd3 - x3_q * xd2
+
+    Ge = jnp.zeros((Q_pts, 6, 4))
+    Ge = Ge.at[:, 0, 0].set(1.0)
+    Ge = Ge.at[:, 0, 2].set(x3_q)
+    Ge = Ge.at[:, 0, 3].set(-x2_q)
+    Ge = Ge.at[:, 2, 1].set(Rn)
+    Ge = Ge.at[:, 3, 2].set(xd2)
+    Ge = Ge.at[:, 3, 3].set(xd3)
+    Ge = Ge.at[:, 5, 1].set(-2.0 - k22 / 2.0 * Rn)
+
+    def eps_h(u):
+        dw1 = phi_d1 @ u[_I1]; dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
+        d2w2 = phi_d2 @ u[_I2]; d2w3 = phi_d2 @ u[_I3]
+        return jnp.stack([
+            jnp.zeros(Q_pts), xd2*dw2 + xd3*dw3, dw1, jnp.zeros(Q_pts),
+            -k22*xd2*dw2 + xd3*d2w2 - k22*xd3*dw3 - xd2*d2w3,
+            (k22/2.0)*dw1], axis=1)
+
+    def eps_l(u):
+        w1 = phi_val @ u[_I1]; w2 = phi_val @ u[_I2]; w3 = phi_val @ u[_I3]
+        dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
+        return jnp.stack([
+            w1, jnp.zeros(Q_pts), xd2*w2 + xd3*w3, jnp.zeros(Q_pts),
+            jnp.zeros(Q_pts),
+            2.0*xd3*dw2 - 2.0*xd2*dw3 - (k22/2.0)*(xd2*w2 + xd3*w3)], axis=1)
+
+    def eps_e(ue):
+        return jnp.einsum("qip,p->qi", Ge, ue)
+
+    return eps_h, eps_l, eps_e, Ge
+
+
+# =============================================================================
 # System matrix assembly (energy autodiff, vmap over Hermite elements)
 # =============================================================================
 
@@ -115,40 +172,10 @@ def assemble_system_matrices_hermite(
 
     def get_elem(data):
         n0, n1, ABD, k22, L, xd2, xd3 = data
-        phi_val, phi_d1, phi_d2 = hermite_shape_functions(xi_q, L)
         dV_q = L * W_q
-        x2_q = (1.0 - xi_q) * n0[0] + xi_q * n1[0]
-        x3_q = (1.0 - xi_q) * n0[1] + xi_q * n1[1]
         ABD_q = jnp.repeat(ABD[None], Q_pts, axis=0)
-        Rn = x2_q * xd3 - x3_q * xd2
-
-        Ge = jnp.zeros((Q_pts, 6, 4))
-        Ge = Ge.at[:, 0, 0].set(1.0)
-        Ge = Ge.at[:, 0, 2].set(x3_q)
-        Ge = Ge.at[:, 0, 3].set(-x2_q)
-        Ge = Ge.at[:, 2, 1].set(Rn)
-        Ge = Ge.at[:, 3, 2].set(xd2)
-        Ge = Ge.at[:, 3, 3].set(xd3)
-        Ge = Ge.at[:, 5, 1].set(-2.0 - k22 / 2.0 * Rn)
-
-        def eps_h(u):
-            dw1 = phi_d1 @ u[_I1]; dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
-            d2w2 = phi_d2 @ u[_I2]; d2w3 = phi_d2 @ u[_I3]
-            return jnp.stack([
-                jnp.zeros(Q_pts), xd2*dw2 + xd3*dw3, dw1, jnp.zeros(Q_pts),
-                -k22*xd2*dw2 + xd3*d2w2 - k22*xd3*dw3 - xd2*d2w3,
-                (k22/2.0)*dw1], axis=1)
-
-        def eps_l(u):
-            w1 = phi_val @ u[_I1]; w2 = phi_val @ u[_I2]; w3 = phi_val @ u[_I3]
-            dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
-            return jnp.stack([
-                w1, jnp.zeros(Q_pts), xd2*w2 + xd3*w3, jnp.zeros(Q_pts),
-                jnp.zeros(Q_pts),
-                2.0*xd3*dw2 - 2.0*xd2*dw3 - (k22/2.0)*(xd2*w2 + xd3*w3)], axis=1)
-
-        def eps_e(ue):
-            return jnp.einsum("qip,p->qi", Ge, ue)
+        eps_h, eps_l, eps_e, Ge = hermite_strain_operators(
+            n0, n1, k22, L, xd2, xd3, xi_q)
 
         z_u = jnp.zeros(12); z_e = jnp.zeros(4)
         q = lambda e, f: 0.5 * jnp.einsum("qi,qij,qj,q->", f(e), ABD_q, f(e), dV_q)
@@ -230,18 +257,18 @@ def build_constraints_hermite(corners, hcells, reduced_cells, L_elems,
 # Full Hermite C1 MSG-TW solve from a YAML cross-section (the only TW path)
 # =============================================================================
 
-def timoshenko_from_yaml(yaml_path):
-    """Hermite C1 MSG-shell Timoshenko solve for an OpenSG YAML cross-section.
+def solve_tw_from_yaml(yaml_path):
+    """Full Hermite C1 MSG-shell Timoshenko solve, returning every field.
 
-    The mesh is taken straight from the YAML connectivity (``read_mesh`` — no
-    chaining), so all elements are kept and shear-webbed / multi-component
-    cross-sections are handled.
+    Used by both :func:`timoshenko_from_yaml` (which keeps just the stiffness)
+    and the dehomogenization (which also needs V0, V1, the mesh/geometry and the
+    per-element layups).  Returns a plain ``dict`` bundle with keys:
 
-    Returns
-    -------
-    EB   : (4,4) Euler-Bernoulli stiffness  [EA, GJ, EI2, EI3]
-    Timo : (6,6) sorted Timoshenko stiffness [EA, GA12, GA13, GJ, EI2, EI3]
-    complete : bool  always True (every YAML element is used)
+    ``EB`` (4,4), ``Timo`` (6,6 sorted), ``V0`` (n_primal,4), ``V1`` (n_primal,4
+    finalized shear warping), ``corners`` (n_unique,2), ``red_cells`` (E,2),
+    ``k22`` (E,), ``L`` (E,), ``xd2`` (E,), ``xd3`` (E,), ``xi_q``, ``W_q``,
+    ``ABD_elems`` (E,6,6), ``layup_per_elem`` (E,), ``layup_db``,
+    ``material_db``, ``elements`` (1-based connectivity), ``n_primal``.
     """
     import numpy as _np
     import jax.numpy as _jnp
@@ -270,7 +297,6 @@ def timoshenko_from_yaml(yaml_path):
     corners = nodes[used]
     n_unique = len(used)
     n_primal = 6 * n_unique
-    complete = True
 
     L_e, xd2, xd3 = compute_element_geometry(corners, red_cells)
     xi_q, W_q = gauss_legendre_01(4)
@@ -287,7 +313,34 @@ def timoshenko_from_yaml(yaml_path):
         V0, Dhl, Dll, _jnp.array(Dle.todense()), Psi, Dc)
     R_v1 = _np.concatenate([_np.array(bb), _np.zeros((4, bb.shape[1]))], axis=0)
     V_aug = pypardiso.spsolve(A_aug, R_v1)
-    C6, *_ = finalize_v1_and_compute_deff(
+    C6, _Btim, _Ctim, V1 = finalize_v1_and_compute_deff(
         _jnp.array(V_aug[:n_primal, :]), V0, Ceff, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)
     C6.block_until_ready()
-    return _np.array(Ceff), _np.array(C6), complete
+
+    return {
+        "EB": _np.array(Ceff), "Timo": _np.array(C6),
+        "V0": _np.array(V0), "V1": _np.array(V1),
+        "corners": _np.array(corners), "red_cells": _np.array(red_cells),
+        "k22": _np.array(k22), "L": _np.array(L_e),
+        "xd2": _np.array(xd2), "xd3": _np.array(xd3),
+        "xi_q": xi_q, "W_q": W_q, "ABD_elems": _np.array(ABD_elems),
+        "layup_per_elem": list(layup_per_elem), "layup_db": layup_db,
+        "material_db": material_db, "elements": elements, "n_primal": n_primal,
+    }
+
+
+def timoshenko_from_yaml(yaml_path):
+    """Hermite C1 MSG-shell Timoshenko solve for an OpenSG YAML cross-section.
+
+    The mesh is taken straight from the YAML connectivity (``read_mesh`` — no
+    chaining), so all elements are kept and shear-webbed / multi-component
+    cross-sections are handled.
+
+    Returns
+    -------
+    EB   : (4,4) Euler-Bernoulli stiffness  [EA, GJ, EI2, EI3]
+    Timo : (6,6) sorted Timoshenko stiffness [EA, GA12, GA13, GJ, EI2, EI3]
+    complete : bool  always True (every YAML element is used)
+    """
+    out = solve_tw_from_yaml(yaml_path)
+    return out["EB"], out["Timo"], True

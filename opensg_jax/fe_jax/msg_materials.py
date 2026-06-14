@@ -61,7 +61,8 @@ def rotated_stiffness_6x6(E, G, nu, theta_deg):
     return R @ C @ R.T
 
 
-def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1):
+def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
+                       return_warping=False):
     """6x6 ABD plate stiffness via MSG 1D through-thickness SG.
 
     Uses quadratic Lagrange elements (3-node, 3-pt Gauss). With n_per_layer=1
@@ -82,11 +83,16 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1)
     mat_names  : list[str]   — material name per layer (keys in material_db)
     material_db: dict        — {name: {E:[3], G:[3], nu:[3], rho:float}}
     n_per_layer: int         — quadratic sub-elements per layer (default 1)
+    return_warping : bool     — also return the through-thickness fluctuation
+                  field for plate dehomogenization (see :func:`plate_dehom_strain`)
 
     Returns
     -------
     D_eff : (6,6) ndarray — MSG ABD stiffness
     mass  : [mu, mu*xm3, i22] — mass per unit area, first/second moment
+    warp  : dict (only if return_warping) — {V0, node_x, elem_layer, C_layers}
+            the plate warping V0 (ndofs,6) and geometry needed to recover the
+            3D through-thickness strain from the 6 plate (shell) strains.
     """
     nlay = len(thick)
     layer_bot = np.zeros(nlay + 1)
@@ -176,7 +182,68 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1)
     D_eff = D_ee + V0.T @ F_load
 
     xm3 = mu_x / mu if mu > 0 else 0.0
+    if return_warping:
+        warp = {"V0": V0, "node_x": node_x, "elem_layer": elem_layer,
+                "C_layers": C_layers}
+        return D_eff, [mu, mu * xm3, i22_m], warp
     return D_eff, [mu, mu * xm3, i22_m]
+
+
+def plate_dehom_strain(warp, shell_strain, n_eval_per_elem=3):
+    """Plate dehomogenization: 3D strain/stress across the thickness.
+
+    Given the 6 plate (shell) strains [eps11, eps22, gamma12, kappa11, kappa22,
+    kappa12] on the reference surface, recover the pointwise 3D strain through
+    the plate thickness via the MSG plate warping::
+
+        Gamma_3D(z) = (B(z) @ V0_e + Ge(z)) @ shell_strain   (strain concentration)
+        Sigma_3D(z) = C_layer @ Gamma_3D(z)
+
+    where ``B`` is the through-thickness gamma_h operator and ``Ge`` the macro
+    map (membrane + z*curvature) — the exact transposes of the operators that
+    built the ABD matrix, so ``int Gamma:Sigma dz == shell_strain^T ABD
+    shell_strain`` to machine precision.
+
+    Parameters
+    ----------
+    warp : dict — from ``compute_ABD_matrix(..., return_warping=True)``
+    shell_strain : (6,) — the recovered plate/shell strains at one arc point
+    n_eval_per_elem : int — through-thickness sample points per quadratic element
+
+    Returns
+    -------
+    z    : (npts,)   through-thickness coordinate (0 = bottom face)
+    Gam  : (npts, 6) 3D strain   [e11, e22, e33, g23, g13, g12]
+    Sig  : (npts, 6) 3D stress (material/ply Voigt order matching C_layers)
+    """
+    V0 = warp["V0"]; node_x = warp["node_x"]
+    elem_layer = warp["elem_layer"]; C_layers = warp["C_layers"]
+    ss = np.asarray(shell_strain, dtype=float)
+    n_elem = len(elem_layer)
+    xi_eval = np.linspace(-1.0, 1.0, n_eval_per_elem)
+
+    z_all, Gam_all, Sig_all = [], [], []
+    for e in range(n_elem):
+        xl = node_x[2 * e]; xr = node_x[2 * e + 2]; he = xr - xl
+        k = elem_layer[e]; Ck = C_layers[k]
+        dofs = np.arange(6 * e, 6 * e + 9)
+        V0e = V0[dofs, :]
+        for xi in xi_eval:
+            x_q = 0.5 * (xl + xr) + 0.5 * he * xi
+            dN = np.array([xi - 0.5, -2.0 * xi, xi + 0.5]) * (2.0 / he)
+            B = np.zeros((6, 9))
+            for n_idx in range(3):
+                B[2, n_idx * 3 + 2] = dN[n_idx]
+                B[3, n_idx * 3 + 1] = dN[n_idx]
+                B[4, n_idx * 3 + 0] = dN[n_idx]
+            Ge = np.zeros((6, 6))
+            Ge[0, 0] = 1.0;  Ge[0, 3] = x_q
+            Ge[1, 1] = 1.0;  Ge[1, 4] = x_q
+            Ge[5, 2] = 1.0;  Ge[5, 5] = x_q
+            SC = B @ V0e + Ge            # 6x6 strain concentration
+            Gam = SC @ ss
+            z_all.append(x_q); Gam_all.append(Gam); Sig_all.append(Ck @ Gam)
+    return np.array(z_all), np.array(Gam_all), np.array(Sig_all)
 
 
 def compute_ABD_CLT(thick, angles_deg, mat_names, material_db):

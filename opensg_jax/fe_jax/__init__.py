@@ -31,6 +31,7 @@ from .msg_materials import (
     rotated_stiffness_6x6,
     compute_ABD_matrix,
     compute_ABD_CLT,
+    plate_dehom_strain,
 )
 from .msg_mesh import (
     load_yaml,
@@ -51,11 +52,18 @@ from .msg_solver import (
 # Hermite C1 cubic — the MSG thin-walled (TW) Timoshenko method.
 from .msg_hermite import (
     hermite_shape_functions,
+    hermite_strain_operators,
     make_hermite_mesh,
     build_hermite_dof_map,
     compress_hermite_dofs,
     assemble_system_matrices_hermite,
     build_constraints_hermite,
     timoshenko_from_yaml,
+    solve_tw_from_yaml,
+)
+# Two-step dehomogenization (shell strain recovery + plate dehom)
+from .msg_dehom import (
+    recover_shell_strains,
+    dehomogenize,
 )
 
