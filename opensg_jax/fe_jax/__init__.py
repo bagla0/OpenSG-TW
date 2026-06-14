@@ -34,6 +34,7 @@ from .msg_materials import (
 )
 from .msg_mesh import (
     load_yaml,
+    read_mesh,
     order_mesh,
     compute_curvature,
     mesh_curvature,

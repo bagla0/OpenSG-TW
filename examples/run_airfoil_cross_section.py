@@ -35,16 +35,13 @@ from fe_jax import (
     # materials / ABD
     compute_ABD_matrix,
     compute_ABD_CLT,
-    # mesh
+    # mesh (direct from YAML connectivity — no chaining)
     load_yaml,
-    order_mesh,
+    read_mesh,
     mesh_curvature,
     # FEM assembly (Hermite C1)
     gauss_legendre_01,
     compute_element_geometry,
-    make_hermite_mesh,
-    build_hermite_dof_map,
-    compress_hermite_dofs,
     assemble_system_matrices_hermite,
     build_constraints_hermite,
     # solvers
@@ -86,32 +83,31 @@ def run_cross_section(yaml_path):
         print(f"    CLT  A11={ABD_clt[0,0]:.4e}  D11={ABD_clt[3,3]:.4e}")
         print(f"    diff A11={dA:.4f}%,  D11={dD:.4f}%")
 
-    # ----------------------------------------------------------- order mesh
-    print("\n--- Mesh ---")
-    nodes_2d, cells, layup_per_elem, is_closed = order_mesh(
-        nodes_3d, elements, elem_to_layup)
-    n_elem  = cells.shape[0]
-    n_nodes = len(nodes_2d)
-    print(f"  {n_elem} elements,  {n_nodes} nodes (incl. midside),  closed={is_closed}")
-
-    L_e, xd2, xd3 = compute_element_geometry(nodes_2d, cells)
-    k22 = jnp.array(mesh_curvature(nodes_2d, cells, elements, is_closed))
-    flat = len(elements[0]) < 3
-    print(f"  Arc length: {float(jnp.sum(L_e)):.6f} m")
-    print(f"  Elements  : {'flat 2-node (k22=0)' if flat else 'curved 3-node'}")
+    # ------------------------------- mesh: YAML connectivity verbatim (no chain)
+    print("\n--- Mesh (direct from YAML connectivity) ---")
+    nodes, cells, layup_per_elem = read_mesh(nodes_3d, elements, elem_to_layup)
+    n_elem = cells.shape[0]
+    flat = cells.shape[1] < 3
+    k22 = jnp.array(mesh_curvature(nodes, cells, elements, is_closed=False))
+    print(f"  {n_elem} line elements,  {len(nodes)} nodes  "
+          f"({'flat 2-node, k22=0' if flat else 'curved 3-node'})")
     print(f"  k22 range : [{float(k22.min()):.4f}, {float(k22.max()):.4f}]")
 
     ABD_elems = jnp.stack([
         jnp.array(ABD_dict[ln], dtype=jnp.float64) for ln in layup_per_elem])
 
-    # ------------------------------------------- Hermite C1 mesh + DOF setup
-    # Displacement = Hermite C1 cubic (value+slope at corner nodes, 6 DOF/node);
-    # geometry/curvature come from the quadratic 3-node line cross-section.
-    corners, hcells = make_hermite_mesh(nodes_2d, cells)
-    dof_map, n_unique = build_hermite_dof_map(len(corners), is_closed)
-    red_cells, n_primal = compress_hermite_dofs(dof_map, hcells)
-    Lh, xd2h, xd3h = compute_element_geometry(corners, hcells)
-    print(f"  Unique corner nodes: {n_unique},  Primal DOFs (Hermite): {n_primal}")
+    # ------------------------------------------- Hermite C1 DOF setup
+    # Displacement = Hermite C1 cubic (value+slope at corner nodes, 6 DOF/node).
+    hcells = cells[:, [0, -1]]
+    used = np.unique(hcells)
+    f2r = np.full(nodes.shape[0], -1, dtype=np.int64)
+    f2r[used] = np.arange(len(used))
+    red_cells = f2r[hcells]
+    corners = nodes[used]
+    n_unique = len(used)
+    n_primal = 6 * n_unique
+    Lh, xd2h, xd3h = compute_element_geometry(corners, red_cells)
+    print(f"  Nodes used: {n_unique},  Primal DOFs (Hermite C1): {n_primal}")
 
     xi_q, W_q = gauss_legendre_01(4)
 
@@ -119,12 +115,12 @@ def run_cross_section(yaml_path):
     print("\n--- Assembly (Hermite C1) ---")
     t1 = time.time()
     Dhh, Dhe, Dee, Dll, Dhl, Dle = assemble_system_matrices_hermite(
-        corners, hcells, red_cells, ABD_elems, k22,
+        corners, red_cells, red_cells, ABD_elems, k22,
         Lh, xd2h, xd3h, xi_q, W_q, n_primal)
     print(f"  Time: {time.time()-t1:.2f} s")
 
     C_mat, Psi = build_constraints_hermite(
-        corners, hcells, red_cells, Lh, xd2h, xd3h, xi_q, W_q, n_primal, n_unique)
+        corners, red_cells, red_cells, Lh, xd2h, xd3h, xi_q, W_q, n_primal, n_unique)
     Dc = C_mat.T
 
     # No interior penalty needed: Hermite C1 has continuous slope (no spurious
@@ -167,7 +163,7 @@ def run_cross_section(yaml_path):
     print("\n  Full 6x6:")
     print(np.array(Ceff_srt))
 
-    mass_per_m = sum(mass_dict[layup_per_elem[i]][0] * float(L_e[i])
+    mass_per_m = sum(mass_dict[layup_per_elem[i]][0] * float(Lh[i])
                      for i in range(n_elem))
     print(f"\n  Mass per unit beam length: {mass_per_m:.4f} kg/m")
     print(f"\n{'='*64}\nTotal time: {time.time()-t0:.2f} s")

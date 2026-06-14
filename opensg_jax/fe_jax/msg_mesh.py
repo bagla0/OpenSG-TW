@@ -80,7 +80,38 @@ def load_yaml(yaml_path):
 
 
 # =============================================================================
-# Mesh Ordering
+# Direct mesh (use the YAML connectivity verbatim, like FEniCS reads the .msh)
+# =============================================================================
+
+def read_mesh(nodes_3d, elements_1b, elem_to_layup):
+    """Build the mesh straight from the YAML connectivity — NO chaining.
+
+    This mirrors how OpenSG/FEniCS turns the YAML into a .msh: every node is a
+    mesh vertex and every ``[n1 n2]`` (or ``[n1 nmid n2]``) is a line element,
+    used exactly as given.  Because no single-loop walk is performed, ALL
+    elements are kept, so multi-component cross-sections (airfoils with shear
+    webs) are represented correctly.
+
+    Parameters
+    ----------
+    nodes_3d     : (N, 3) YAML node coords; cross-section = columns (0, 1)
+    elements_1b  : list of [n1, n2] (flat) or [n1, nmid, n2] (curved), 1-based
+    elem_to_layup: dict {elem_id_1based: layup_name}
+
+    Returns
+    -------
+    nodes : (N, 2) cross-section coordinates (y1, y2)
+    cells : (E, k) int64 0-based connectivity, k = 2 (flat) or 3 (curved)
+    layup_per_elem : list[str]  layup name per element (YAML order)
+    """
+    nodes = np.asarray(nodes_3d, dtype=float)[:, :2]
+    cells = np.array([[int(v) - 1 for v in e] for e in elements_1b], dtype=np.int64)
+    layup_per_elem = [elem_to_layup[i + 1] for i in range(len(elements_1b))]
+    return nodes, cells, layup_per_elem
+
+
+# =============================================================================
+# Mesh Ordering (legacy single-loop chain — kept only for reference)
 # =============================================================================
 
 def order_mesh(nodes_3d, elements_1b, elem_to_layup):
