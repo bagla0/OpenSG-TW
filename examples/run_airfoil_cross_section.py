@@ -34,7 +34,7 @@ from fe_jax import (
     # mesh
     load_yaml,
     order_mesh,
-    compute_curvature,
+    mesh_curvature,
     # FEM assembly
     gauss_legendre_01,
     compute_element_geometry,
@@ -91,8 +91,10 @@ def run_cross_section(yaml_path):
     print(f"  {n_elem} elements,  {n_nodes} nodes (incl. midside),  closed={is_closed}")
 
     L_e, xd2, xd3 = compute_element_geometry(nodes_2d, cells)
-    k22 = jnp.array(compute_curvature(nodes_2d, cells, is_closed))
+    k22 = jnp.array(mesh_curvature(nodes_2d, cells, elements, is_closed))
+    flat = len(elements[0]) < 3
     print(f"  Arc length: {float(jnp.sum(L_e)):.6f} m")
+    print(f"  Elements  : {'flat 2-node (k22=0)' if flat else 'curved 3-node'}")
     print(f"  k22 range : [{float(k22.min()):.4f}, {float(k22.max()):.4f}]")
 
     ABD_elems = jnp.stack([

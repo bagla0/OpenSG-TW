@@ -233,3 +233,27 @@ def compute_curvature(nodes_2d, cells, is_closed=True):
         k22[i] = -2.0 * cross / denom if denom > 1e-30 else 0.0
 
     return k22
+
+
+def mesh_curvature(nodes_2d, cells, elements_1b, is_closed=True):
+    """Per-element curvature k22, gated on the YAML element type.
+
+    If the YAML supplies **flat 2-node** line elements, every element is
+    straight, so ``k22 = 0`` is returned immediately and the circumscribed-
+    circle computation is skipped entirely.  Curvature is computed (via
+    :func:`compute_curvature`) only when **curved 3-node** elements are given.
+
+    Parameters
+    ----------
+    nodes_2d    : (2*N+1, 2) ordered node coordinates
+    cells       : (N, 3) element connectivity
+    elements_1b : the raw YAML element list (len 2 = flat, >=3 = curved)
+    is_closed   : bool
+
+    Returns
+    -------
+    k22 : (N,) ndarray  (all zeros for a flat 2-node mesh)
+    """
+    if len(elements_1b[0]) >= 3:
+        return compute_curvature(nodes_2d, cells, is_closed)
+    return np.zeros(cells.shape[0])

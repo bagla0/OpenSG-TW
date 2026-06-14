@@ -18,7 +18,7 @@ import pytest
 import pypardiso
 
 from fe_jax import (
-    compute_ABD_matrix, load_yaml, order_mesh, compute_curvature,
+    compute_ABD_matrix, load_yaml, order_mesh, mesh_curvature,
     gauss_legendre_01, compute_element_geometry, build_periodic_dof_map,
     compress_dof_map, assemble_system_matrices, build_lagrange_constraints,
     build_psi_matrix, solve_fluctuation_field, prepare_v1_rhs,
@@ -44,7 +44,7 @@ def jax_6x6():
                 for ln, i in layup_db.items()}
     nodes_2d, cells, layup_per_elem, is_closed = order_mesh(nodes_3d, elements, elem_to_layup)
     L_e, xd2, xd3 = compute_element_geometry(nodes_2d, cells)
-    k22 = jnp.array(compute_curvature(nodes_2d, cells, is_closed))
+    k22 = jnp.array(mesh_curvature(nodes_2d, cells, elements, is_closed))
     ABD_elems = jnp.stack([jnp.array(ABD_dict[ln], dtype=jnp.float64) for ln in layup_per_elem])
     dof_map, n_unique = build_periodic_dof_map(len(nodes_2d), cells, is_closed)
     red_cells, _, n_primal = compress_dof_map(dof_map, cells)

@@ -36,6 +36,7 @@ from .msg_mesh import (
     load_yaml,
     order_mesh,
     compute_curvature,
+    mesh_curvature,
 )
 from .msg_shell import (
     gauss_legendre_01,

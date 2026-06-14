@@ -7,8 +7,8 @@ rows fixed, derivative twist constraint, flat-element k22=0):
   GJ   = 4.447485e+10 N·m²
   EI2  = 7.925389e+10 N·m²
   EI3  = 7.914358e+10 N·m²
-  GA12 = 4.556837e+09 N
-  GA13 = 4.546614e+09 N
+  GA12 = 4.526741e+09 N
+  GA13 = 4.554947e+09 N
 
 Tolerance: 0.5%  (covers mesh/quadrature differences across runs)
 """
@@ -22,7 +22,7 @@ from fe_jax import (
     compute_ABD_matrix,
     load_yaml,
     order_mesh,
-    compute_curvature,
+    mesh_curvature,
     gauss_legendre_01,
     compute_element_geometry,
     build_periodic_dof_map,
@@ -43,8 +43,8 @@ REF = {
     "GJ":   4.447485e+10,
     "EI2":  7.925389e+10,
     "EI3":  7.914358e+10,
-    "GA12": 4.556837e+09,
-    "GA13": 4.546614e+09,
+    "GA12": 4.526741e+09,
+    "GA13": 4.554947e+09,
 }
 TOL = 0.005  # 0.5 %
 
@@ -69,7 +69,7 @@ def stiffness_1dshell_0():
         nodes_3d, elements, elem_to_layup)
 
     L_e, xd2, xd3 = compute_element_geometry(nodes_2d, cells)
-    k22 = jnp.array(compute_curvature(nodes_2d, cells, is_closed))
+    k22 = jnp.array(mesh_curvature(nodes_2d, cells, elements, is_closed))
     ABD_elems = jnp.stack([
         jnp.array(ABD_dict[ln], dtype=jnp.float64) for ln in layup_per_elem])
 
