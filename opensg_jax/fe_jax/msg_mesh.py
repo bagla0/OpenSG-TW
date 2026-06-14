@@ -110,6 +110,87 @@ def read_mesh(nodes_3d, elements_1b, elem_to_layup):
     return nodes, cells, layup_per_elem
 
 
+def element_e3_from_yaml(yaml_path):
+    """(E,2) cross-section components of the material e3 (through-thickness, ply
+    stacking normal) per element, from the YAML ``elementOrientations``.
+
+    Each orientation row is 9 numbers; the OpenSG convention stores e3 such that
+    its cross-section (y2, y3) components are ``(o[6], o[7])`` (o[8] ~ beam ~ 0).
+    This e3 points OML->IML (inward) — the SAME direction the MSG plate dehom
+    uses, so it is the ground-truth inward normal for the IML offset.
+    """
+    import yaml as _yaml
+    with open(yaml_path) as f:
+        d = _yaml.safe_load(f)
+
+    def _row(r):
+        if isinstance(r, str):
+            return r.strip('[]').split()
+        if isinstance(r, (list, tuple)) and len(r) == 1 and isinstance(r[0], str):
+            return r[0].strip('[]').split()
+        return [str(v) for v in r]
+    ori = np.array([[float(v) for v in _row(o)] for o in d['elementOrientations']])
+    e3 = ori[:, [6, 7]]
+    return e3 / (np.linalg.norm(e3, axis=1, keepdims=True) + 1e-30)
+
+
+def offset_oml_to_iml(nodes_2d, cells, layup_per_elem, layup_db, elem_e3=None,
+                      frac=1.0):
+    """Offset an OML reference mesh inward by ``frac`` x the laminate thickness.
+
+    ``frac`` = 1.0 reaches the IML, 0.5 the mid-surface (material centroid — the
+    most accurate reference, OML and IML bracket it), 0.0 stays at the OML.
+    Each node is moved along the inward normal by ``frac`` x the local thickness
+    (averaged over the elements that share it).  The connectivity is unchanged,
+    so it stays a single light mesh (no new nodes/elements -> no memory blow-up).
+    Pair this with :func:`msg_materials.shift_abd_reference` (z0 = frac x
+    thickness, NOT a layup reversal) so the plate reference matches with e3 kept
+    inward.
+
+    Rationale: with an OML reference the thick spar-cap / web laminates extend
+    inward and overlap at junctions; referencing the IML moves the material
+    outward and reduces that double-counted overlap region.
+
+    Parameters
+    ----------
+    nodes_2d : (N,2) OML cross-section coordinates
+    cells    : (E,k) connectivity (uses end columns)
+    layup_per_elem : list[str]  layup name per element
+    layup_db : dict {name: {thick: [...], ...}}
+    elem_e3  : (E,2) material e3 per element (from :func:`element_e3_from_yaml`).
+               When given it is the inward direction (robust for webs/concave
+               regions); otherwise a geometric centroid heuristic is used.
+
+    Returns
+    -------
+    iml_nodes : (N,2) inward-offset coordinates
+    """
+    nodes = np.asarray(nodes_2d, dtype=float)
+    n_node = nodes.shape[0]
+    cen = nodes.mean(axis=0)
+    acc_in = np.zeros((n_node, 2)); acc_t = np.zeros(n_node); cnt = np.zeros(n_node)
+    for e in range(cells.shape[0]):
+        c0, c1 = int(cells[e, 0]), int(cells[e, -1])
+        seg = nodes[c1] - nodes[c0]; L = np.hypot(seg[0], seg[1])
+        if L < 1e-30:
+            continue
+        if elem_e3 is not None:
+            inward = np.asarray(elem_e3[e], dtype=float)   # material e3 = inward
+        else:
+            t = seg / L
+            inward = np.array([-t[1], t[0]])               # geometric normal
+            mid = 0.5 * (nodes[c0] + nodes[c1])
+            if (cen - mid) @ inward < 0.0:                 # orient toward centroid
+                inward = -inward
+        h = float(sum(layup_db[layup_per_elem[e]]['thick']))
+        for c in (c0, c1):
+            acc_in[c] += inward; acc_t[c] += h; cnt[c] += 1
+    cnt = np.maximum(cnt, 1.0)
+    in_nrm = acc_in / (np.linalg.norm(acc_in, axis=1, keepdims=True) + 1e-30)
+    thick = acc_t / cnt
+    return nodes + frac * thick[:, None] * in_nrm          # frac x thickness inward
+
+
 # =============================================================================
 # Mesh Ordering (legacy single-loop chain — kept only for reference)
 # =============================================================================

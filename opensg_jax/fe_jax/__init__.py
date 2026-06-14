@@ -32,6 +32,8 @@ from .msg_materials import (
     compute_ABD_matrix,
     compute_ABD_CLT,
     plate_dehom_strain,
+    plate_stress_at_depth,
+    shift_abd_reference,
 )
 from .msg_mesh import (
     load_yaml,
@@ -39,6 +41,8 @@ from .msg_mesh import (
     order_mesh,
     compute_curvature,
     mesh_curvature,
+    offset_oml_to_iml,
+    element_e3_from_yaml,
 )
 # Shared FEM infrastructure (quadrature, element geometry, KKT solver,
 # Timoshenko assembly) — used by the Hermite C1 TW pipeline.
@@ -65,5 +69,6 @@ from .msg_hermite import (
 from .msg_dehom import (
     recover_shell_strains,
     dehomogenize,
+    stress_at_points,
 )
 

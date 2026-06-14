@@ -61,8 +61,42 @@ def rotated_stiffness_6x6(E, G, nu, theta_deg):
     return R @ C @ R.T
 
 
+def _lagrange_dN(nodes_xi, xi):
+    """d/dxi of the 1D Lagrange basis at ``xi`` for nodes at ``nodes_xi``."""
+    n = len(nodes_xi)
+    dN = np.zeros(n)
+    for i in range(n):
+        s = 0.0
+        for j in range(n):
+            if j == i:
+                continue
+            term = 1.0 / (nodes_xi[i] - nodes_xi[j])
+            for m in range(n):
+                if m == i or m == j:
+                    continue
+                term *= (xi - nodes_xi[m]) / (nodes_xi[i] - nodes_xi[m])
+            s += term
+        dN[i] = s
+    return dN
+
+
+def _plate_B(nodes_xi, xi, he):
+    """Through-thickness gamma_h operator B (6, 3*(p+1)) at ``xi``.
+
+    Rows: eps33 <- dv3/dx, gamma23 <- dv2/dx, gamma13 <- dv1/dx.
+    """
+    dN = _lagrange_dN(nodes_xi, xi) * (2.0 / he)
+    npn = len(nodes_xi)
+    B = np.zeros((6, 3 * npn))
+    for n_idx in range(npn):
+        B[2, n_idx * 3 + 2] = dN[n_idx]
+        B[3, n_idx * 3 + 1] = dN[n_idx]
+        B[4, n_idx * 3 + 0] = dN[n_idx]
+    return B
+
+
 def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
-                       return_warping=False):
+                       return_warping=False, elem_order=2):
     """6x6 ABD plate stiffness via MSG 1D through-thickness SG.
 
     Uses quadratic Lagrange elements (3-node, 3-pt Gauss). With n_per_layer=1
@@ -108,8 +142,10 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
                   material_db[mat_names[k]].get('density', 0.0))
                   for k in range(nlay)]
 
+    p = int(elem_order)                       # element polynomial order (2 or 3)
+    nodes_xi = np.linspace(-1.0, 1.0, p + 1)
     n_elem = nlay * n_per_layer
-    n_node = 2 * n_elem + 1
+    n_node = p * n_elem + 1
     ndofs = 3 * n_node
 
     node_x = np.empty(n_node)
@@ -119,13 +155,13 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
         for s in range(n_per_layer):
             xl = layer_bot[k] + thick[k] * s / n_per_layer
             xr = layer_bot[k] + thick[k] * (s + 1) / n_per_layer
-            node_x[2 * idx] = xl
-            node_x[2 * idx + 1] = 0.5 * (xl + xr)
+            for j in range(p):                # p new nodes (last is shared)
+                node_x[p * idx + j] = xl + (xr - xl) * j / p
             elem_layer[idx] = k
             idx += 1
-    node_x[2 * idx] = layer_bot[-1]
+    node_x[p * n_elem] = layer_bot[-1]
 
-    xi_g, w_g = np.polynomial.legendre.leggauss(3)
+    xi_g, w_g = np.polynomial.legendre.leggauss(max(3, p + 1))
 
     K = np.zeros((ndofs, ndofs))
     F_load = np.zeros((ndofs, 6))
@@ -133,25 +169,19 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
     mu, mu_x, i22_m = 0.0, 0.0, 0.0
 
     for e in range(n_elem):
-        xl = node_x[2 * e]
-        xr = node_x[2 * e + 2]
+        xl = node_x[p * e]
+        xr = node_x[p * e + p]
         he = xr - xl
         k = elem_layer[e]
         Ck = C_layers[k]
-        dofs = np.arange(6 * e, 6 * e + 9)
+        dofs = np.arange(3 * p * e, 3 * p * e + 3 * (p + 1))
 
         for q in range(len(xi_g)):
             xi = xi_g[q]
             x_q = 0.5 * (xl + xr) + 0.5 * he * xi
             dw = 0.5 * he * w_g[q]
 
-            dN = np.array([xi - 0.5, -2.0 * xi, xi + 0.5]) * (2.0 / he)
-
-            B = np.zeros((6, 9))
-            for n_idx in range(3):
-                B[2, n_idx * 3 + 2] = dN[n_idx]
-                B[3, n_idx * 3 + 1] = dN[n_idx]
-                B[4, n_idx * 3 + 0] = dN[n_idx]
+            B = _plate_B(nodes_xi, xi, he)
 
             Ge = np.zeros((6, 6))
             Ge[0, 0] = 1.0;  Ge[0, 3] = x_q
@@ -184,7 +214,8 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
     xm3 = mu_x / mu if mu > 0 else 0.0
     if return_warping:
         warp = {"V0": V0, "node_x": node_x, "elem_layer": elem_layer,
-                "C_layers": C_layers}
+                "C_layers": C_layers, "elem_order": p,
+                "angles": list(angles_deg)}
         return D_eff, [mu, mu * xm3, i22_m], warp
     return D_eff, [mu, mu * xm3, i22_m]
 
@@ -218,24 +249,21 @@ def plate_dehom_strain(warp, shell_strain, n_eval_per_elem=3):
     """
     V0 = warp["V0"]; node_x = warp["node_x"]
     elem_layer = warp["elem_layer"]; C_layers = warp["C_layers"]
+    p = warp.get("elem_order", 2)
+    nodes_xi = np.linspace(-1.0, 1.0, p + 1)
     ss = np.asarray(shell_strain, dtype=float)
     n_elem = len(elem_layer)
     xi_eval = np.linspace(-1.0, 1.0, n_eval_per_elem)
 
     z_all, Gam_all, Sig_all = [], [], []
     for e in range(n_elem):
-        xl = node_x[2 * e]; xr = node_x[2 * e + 2]; he = xr - xl
+        xl = node_x[p * e]; xr = node_x[p * e + p]; he = xr - xl
         k = elem_layer[e]; Ck = C_layers[k]
-        dofs = np.arange(6 * e, 6 * e + 9)
+        dofs = np.arange(3 * p * e, 3 * p * e + 3 * (p + 1))
         V0e = V0[dofs, :]
         for xi in xi_eval:
             x_q = 0.5 * (xl + xr) + 0.5 * he * xi
-            dN = np.array([xi - 0.5, -2.0 * xi, xi + 0.5]) * (2.0 / he)
-            B = np.zeros((6, 9))
-            for n_idx in range(3):
-                B[2, n_idx * 3 + 2] = dN[n_idx]
-                B[3, n_idx * 3 + 1] = dN[n_idx]
-                B[4, n_idx * 3 + 0] = dN[n_idx]
+            B = _plate_B(nodes_xi, xi, he)
             Ge = np.zeros((6, 6))
             Ge[0, 0] = 1.0;  Ge[0, 3] = x_q
             Ge[1, 1] = 1.0;  Ge[1, 4] = x_q
@@ -244,6 +272,61 @@ def plate_dehom_strain(warp, shell_strain, n_eval_per_elem=3):
             Gam = SC @ ss
             z_all.append(x_q); Gam_all.append(Gam); Sig_all.append(Ck @ Gam)
     return np.array(z_all), np.array(Gam_all), np.array(Sig_all)
+
+
+def shift_abd_reference(ABD, z0):
+    """Move the ABD reference surface by ``z0`` along the through-thickness axis
+    (parallel-axis), KEEPING the e3 (through-thickness) direction unchanged.
+
+    Voigt order [eps11,eps22,gamma12, kappa11,kappa22,kappa12].  Membrane strain
+    at the shifted reference is ``m + z0*k`` (T = [[I, z0 I],[0, I]]), so
+    ``ABD_new = T^{-T} ABD T^{-1}``.  Use this to reference the IML (z0 = laminate
+    thickness) instead of reversing the layup — reversal flips e3 and breaks the
+    agreement with the material orientation (see ``check-e3-orientation``).
+    """
+    Tinv = np.eye(6)
+    Tinv[:3, 3:] = -z0 * np.eye(3)
+    return Tinv.T @ np.asarray(ABD) @ Tinv
+
+
+def plate_stress_at_depth(warp, shell_strain, z):
+    """3D strain/stress at a SPECIFIC through-thickness depth ``z`` (0 = OML).
+
+    Same MSG plate strain concentration as :func:`plate_dehom_strain`, evaluated
+    at one depth instead of a sweep — used to recover the stress at an arbitrary
+    cross-section point (see ``msg_dehom.stress_at_points``).  ``z`` is clamped
+    to [0, total thickness].
+
+    Returns (Gam (6,), Sig (6,), angle) in the laminate Voigt order
+    [e11, e22, e33, g23, g13, g12]; ``angle`` is the fiber angle (deg) of the ply
+    at this depth, so a caller can rotate to the material/ply frame with
+    ``rotation_6x6(-angle) @ Sig``.
+    """
+    V0 = warp["V0"]; node_x = warp["node_x"]
+    elem_layer = warp["elem_layer"]; C_layers = warp["C_layers"]
+    angles = warp.get("angles")
+    p = warp.get("elem_order", 2)
+    nodes_xi = np.linspace(-1.0, 1.0, p + 1)
+    ss = np.asarray(shell_strain, dtype=float)
+    h = float(node_x[-1])
+    z = min(max(float(z), 0.0), h)
+
+    e = len(elem_layer) - 1                      # plate sub-element containing z
+    for ee in range(len(elem_layer)):
+        if z <= node_x[p * ee + p] + 1e-12:
+            e = ee; break
+    xl = node_x[p * e]; xr = node_x[p * e + p]; he = xr - xl
+    xi = np.clip(2.0 * (z - xl) / he - 1.0, -1.0, 1.0)
+    layer = elem_layer[e]; Ck = C_layers[layer]
+    V0e = V0[np.arange(3 * p * e, 3 * p * e + 3 * (p + 1)), :]
+    B = _plate_B(nodes_xi, xi, he)
+    Ge = np.zeros((6, 6))
+    Ge[0, 0] = 1.0;  Ge[0, 3] = z
+    Ge[1, 1] = 1.0;  Ge[1, 4] = z
+    Ge[5, 2] = 1.0;  Ge[5, 5] = z
+    Gam = (B @ V0e + Ge) @ ss
+    angle = 0.0 if angles is None else float(angles[layer])
+    return Gam, Ck @ Gam, angle
 
 
 def compute_ABD_CLT(thick, angles_deg, mat_names, material_db):

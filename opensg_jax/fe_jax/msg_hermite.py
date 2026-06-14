@@ -257,7 +257,7 @@ def build_constraints_hermite(corners, hcells, reduced_cells, L_elems,
 # Full Hermite C1 MSG-TW solve from a YAML cross-section (the only TW path)
 # =============================================================================
 
-def solve_tw_from_yaml(yaml_path):
+def solve_tw_from_yaml(yaml_path, reference="OML", frac=None):
     """Full Hermite C1 MSG-shell Timoshenko solve, returning every field.
 
     Used by both :func:`timoshenko_from_yaml` (which keeps just the stiffness)
@@ -269,21 +269,56 @@ def solve_tw_from_yaml(yaml_path):
     ``k22`` (E,), ``L`` (E,), ``xd2`` (E,), ``xd3`` (E,), ``xi_q``, ``W_q``,
     ``ABD_elems`` (E,6,6), ``layup_per_elem`` (E,), ``layup_db``,
     ``material_db``, ``elements`` (1-based connectivity), ``n_primal``.
+
+    ``reference`` : "OML" (default — YAML nodes are the outer mold line),
+    "CENTROID"/"MID" (offset inward by half the laminate thickness to the
+    material mid-surface — the most accurate reference; OML and IML bracket it),
+    or "IML" (offset by the full thickness to the inner mold line).  The offset
+    is along the material e3 and the plate ABD is reference-shifted by the same
+    amount (e3 kept inward), reducing the spar-cap/web overlap the OML
+    double-counts at junctions.
     """
     import numpy as _np
     import jax.numpy as _jnp
     import pypardiso
-    from .msg_mesh import load_yaml, read_mesh, mesh_curvature
-    from .msg_materials import compute_ABD_matrix
+    from .msg_mesh import (load_yaml, read_mesh, mesh_curvature,
+                           offset_oml_to_iml, element_e3_from_yaml)
+    from .msg_materials import compute_ABD_matrix, shift_abd_reference
     from .msg_solver import (gauss_legendre_01, compute_element_geometry,
         solve_fluctuation_field, prepare_v1_rhs, finalize_v1_and_compute_deff)
 
     nodes_3d, elements, material_db, layup_db, elem_to_layup = load_yaml(yaml_path)
-    ABD_dict = {ln: compute_ABD_matrix(i['thick'], i['angles'], i['mat_names'], material_db)[0]
-                for ln, i in layup_db.items()}
+    # reference-surface offset fraction of the laminate thickness (inward from
+    # the OML): 0 = OML (default), 0.5 = centroid/mid, 1 = IML.  ``frac`` (if
+    # given) overrides the named ``reference``.
+    if frac is None:
+        frac = {"OML": 0.0, "MID": 0.5, "CENTROID": 0.5, "IML": 1.0}[reference.upper()]
+    frac = float(frac)
+
+    # Compute the plate ABD ONCE per unique physical laminate.  A station can
+    # name several layups that are the same (thick, angles, materials); caching
+    # on that signature avoids redundant compute_ABD calls.  A non-OML reference
+    # adds a parallel-axis shift by frac x thickness (e3 kept inward; see the
+    # check-e3-orientation skill).
+    def _sig(i):
+        return (tuple(i['thick']), tuple(i['angles']), tuple(i['mat_names']))
+    _abd_cache = {}
+
+    def _abd(i):
+        s = _sig(i)
+        if s not in _abd_cache:
+            a = compute_ABD_matrix(i['thick'], i['angles'], i['mat_names'], material_db)[0]
+            _abd_cache[s] = shift_abd_reference(a, frac * float(sum(i['thick']))) if frac else a
+        return _abd_cache[s]
+    ABD_dict = {ln: _abd(i) for ln, i in layup_db.items()}
 
     # Mesh = YAML connectivity verbatim (every element kept; webs included).
     nodes, cells, layup_per_elem = read_mesh(nodes_3d, elements, elem_to_layup)
+    if frac:
+        # offset inward along the material e3 (true OML->IML normal per element)
+        elem_e3 = element_e3_from_yaml(yaml_path)
+        nodes = offset_oml_to_iml(nodes, cells, layup_per_elem, layup_db,
+                                  elem_e3=elem_e3, frac=frac)
     k22 = _jnp.array(mesh_curvature(nodes, cells, elements, is_closed=False))
     ABD_elems = _jnp.stack([_jnp.array(ABD_dict[ln], dtype=_jnp.float64) for ln in layup_per_elem])
 
@@ -326,15 +361,17 @@ def solve_tw_from_yaml(yaml_path):
         "xi_q": xi_q, "W_q": W_q, "ABD_elems": _np.array(ABD_elems),
         "layup_per_elem": list(layup_per_elem), "layup_db": layup_db,
         "material_db": material_db, "elements": elements, "n_primal": n_primal,
+        "frac": frac,
     }
 
 
-def timoshenko_from_yaml(yaml_path):
+def timoshenko_from_yaml(yaml_path, reference="OML", frac=None):
     """Hermite C1 MSG-shell Timoshenko solve for an OpenSG YAML cross-section.
 
     The mesh is taken straight from the YAML connectivity (``read_mesh`` — no
     chaining), so all elements are kept and shear-webbed / multi-component
-    cross-sections are handled.
+    cross-sections are handled.  ``reference`` = "OML" (default) or "IML"
+    (inward-offset reference; see :func:`solve_tw_from_yaml`).
 
     Returns
     -------
@@ -342,5 +379,5 @@ def timoshenko_from_yaml(yaml_path):
     Timo : (6,6) sorted Timoshenko stiffness [EA, GA12, GA13, GJ, EI2, EI3]
     complete : bool  always True (every YAML element is used)
     """
-    out = solve_tw_from_yaml(yaml_path)
+    out = solve_tw_from_yaml(yaml_path, reference=reference, frac=frac)
     return out["EB"], out["Timo"], True
