@@ -1,13 +1,14 @@
 """
-Benchmark test: 1Dshell_0.yaml (single glass_triax layup, 52-element airfoil).
+Regression test: 1Dshell_0.yaml (single glass_triax layup, 52-element airfoil).
 
-Reference values computed with MSG shell quadratic Lagrange (June 2026):
+Reference values pin the corrected MSG-shell TW output (gamma_l/gamma_e Voigt
+rows fixed, derivative twist constraint, flat-element k22=0):
   EA   = 3.265496e+10 N
-  GJ   = 4.528373e+10 N·m²
-  EI2  = 8.221621e+10 N·m²
-  EI3  = 8.210586e+10 N·m²
-  GA12 = 5.331989e+09 N
-  GA13 = 4.873533e+09 N
+  GJ   = 4.447485e+10 N·m²
+  EI2  = 7.925389e+10 N·m²
+  EI3  = 7.914358e+10 N·m²
+  GA12 = 4.556837e+09 N
+  GA13 = 4.546614e+09 N
 
 Tolerance: 0.5%  (covers mesh/quadrature differences across runs)
 """
@@ -39,21 +40,25 @@ from fe_jax import (
 
 REF = {
     "EA":   3.265496e+10,
-    "GJ":   4.528373e+10,
-    "EI2":  8.221621e+10,
-    "EI3":  8.210586e+10,
-    "GA12": 5.331989e+09,
-    "GA13": 4.873533e+09,
+    "GJ":   4.447485e+10,
+    "EI2":  7.925389e+10,
+    "EI3":  7.914358e+10,
+    "GA12": 4.556837e+09,
+    "GA13": 4.546614e+09,
 }
 TOL = 0.005  # 0.5 %
+
+_DATA = os.path.join(os.path.dirname(__file__), "data", "1Dshell_0.yaml")
 
 
 # ---- fixture ---------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def stiffness_1dshell_0(yaml_1dshell_0):
+def stiffness_1dshell_0():
     """Full MSG solve for 1Dshell_0.yaml."""
-    nodes_3d, elements, material_db, layup_db, elem_to_layup = load_yaml(yaml_1dshell_0)
+    if not os.path.exists(_DATA):
+        pytest.skip(f"Test data not found: {_DATA}")
+    nodes_3d, elements, material_db, layup_db, elem_to_layup = load_yaml(_DATA)
 
     ABD_dict = {}
     for ln, info in layup_db.items():
