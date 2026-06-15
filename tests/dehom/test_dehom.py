@@ -186,6 +186,34 @@ def test_dehomogenize_elem_order(bundle):
         assert np.allclose(s2, s3, rtol=1e-5, atol=1.0)
 
 
+def test_step2_n_per_layer_exact_and_covers_thickness(bundle):
+    """2 plate sub-elements per layer is exact-equivalent to 1 (uniform plies),
+    doubles the through-thickness samples, and spans the full laminate depth."""
+    info = next(iter(bundle["layup_db"].values()))
+    args = (info["thick"], info["angles"], info["mat_names"], bundle["material_db"])
+    _, _, w1 = compute_ABD_matrix(*args, n_per_layer=1, return_warping=True)
+    _, _, w2 = compute_ABD_matrix(*args, n_per_layer=2, return_warping=True)
+    ss = np.array([1e-3, -2e-4, 5e-5, 1e-2, 2e-3, 1e-3])
+    z1, _, S1 = plate_dehom_strain(w1, ss, 3)
+    z2, _, S2 = plate_dehom_strain(w2, ss, 3)
+    assert len(z2) == 2 * len(z1)                              # twice the samples
+    h = float(sum(info["thick"]))
+    assert abs(z2.min()) < 1e-12 and abs(z2.max() - h) < 1e-9  # full thickness
+    # same physical stress profile: compare at the shared bottom face
+    assert np.max(np.abs(S2[np.argmin(z2)] - S1[np.argmin(z1)])) \
+        / np.max(np.abs(S1)) < 1e-6
+
+
+def test_stress_at_points_n_per_layer_invariant(bundle):
+    """stress_at_points is invariant to n_per_layer for uniform plies."""
+    corners = np.asarray(bundle["corners"]); cen = corners.mean(axis=0)
+    nd = corners[12]; p = nd + 0.03 * (cen - nd) / np.linalg.norm(cen - nd)
+    FF = np.array([1.0e5, 5.0e4, 5.0e4, 5.0e4, 1.0e5, 1.0e5])
+    s1 = stress_at_points(bundle, [p], beam_force_vabs=FF, n_per_layer=1)["stress"]
+    s2 = stress_at_points(bundle, [p], beam_force_vabs=FF, n_per_layer=2)["stress"]
+    assert np.max(np.abs(s2 - s1)) / np.max(np.abs(s1)) < 1e-6
+
+
 # ----------------------------------------------------------------------------
 # Point evaluation: stress at arbitrary cross-section coordinates
 # ----------------------------------------------------------------------------

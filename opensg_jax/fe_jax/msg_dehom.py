@@ -168,7 +168,7 @@ def recover_shell_strains(bundle, beam_force_vabs=None, beam_strain=None,
 
 
 def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
-                 n_eval_per_elem=3, bundle=None, elem_order=2):
+                 n_eval_per_elem=3, bundle=None, elem_order=2, n_per_layer=2):
     """Full two-step dehomogenization for a YAML cross-section.
 
     Step 1 recovers the shell strains; step 2 runs the MSG plate model per
@@ -187,6 +187,11 @@ def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
     elem_order : int — plate (step-2) element order: 2 = quadratic 3-node
              (default), 3 = cubic 4-node.  Identical for uniform plies (the
              quadratic plate model is already exact); 3 refines non-uniform layers.
+    n_per_layer : int — through-thickness plate sub-elements per ply layer
+             (default 2).  The step-2 1D SG spans the whole laminate thickness;
+             2 sub-elements per layer refine the warping/stress recovery (and
+             double the through-thickness sample points) while staying exact for
+             uniform plies — i.e. it never degrades a validated result.
 
     Returns
     -------
@@ -204,7 +209,8 @@ def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
     for ln, info in bundle["layup_db"].items():
         _, _, warp = compute_ABD_matrix(
             info["thick"], info["angles"], info["mat_names"],
-            bundle["material_db"], return_warping=True, elem_order=elem_order)
+            bundle["material_db"], n_per_layer=n_per_layer,
+            return_warping=True, elem_order=elem_order)
         warp_cache[ln] = warp
 
     ss_elem = shell["shell_strain_elem"]
@@ -252,7 +258,7 @@ def _project_point(corners, rc, p):
 
 
 def stress_at_points(bundle, points_2d, beam_force_vabs=None, beam_strain=None,
-                     frame="global", elem_order=2):
+                     frame="global", elem_order=2, n_per_layer=2):
     """Recover the 3D stress at ARBITRARY cross-section coordinates.
 
     For each point ``(y2, y3)`` the point is projected onto the 1D reference
@@ -263,6 +269,11 @@ def stress_at_points(bundle, points_2d, beam_force_vabs=None, beam_strain=None,
     model report stress on ANY path/point in the cross-section (e.g. exactly at
     the FEniCS solid sample coordinates).
 
+    The step-2 plate model is a through-thickness 1D SG that spans the WHOLE
+    laminate thickness, so any depth ``z in [0, h]`` is covered.  ``n_per_layer``
+    sub-elements per ply refine that 1D SG (default 2); it stays exact for
+    uniform plies, so refining never changes a validated point value.
+
     Parameters
     ----------
     bundle : dict — from :func:`solve_tw_from_yaml`
@@ -270,6 +281,7 @@ def stress_at_points(bundle, points_2d, beam_force_vabs=None, beam_strain=None,
     beam_force_vabs / beam_strain : (6,) — exactly one (VABS order)
     frame : "global" (y1,y2,y3) or "local" (1=beam, 2=tangent, 3=normal)
     elem_order : plate (step-2) element order (2 or 3)
+    n_per_layer : through-thickness plate sub-elements per ply layer (default 2)
 
     Returns
     -------
@@ -296,7 +308,8 @@ def stress_at_points(bundle, points_2d, beam_force_vabs=None, beam_strain=None,
     layups = bundle["layup_per_elem"]
     cen = corners.mean(axis=0)
     warp = {ln: compute_ABD_matrix(i["thick"], i["angles"], i["mat_names"],
-            bundle["material_db"], return_warping=True, elem_order=elem_order)[2]
+            bundle["material_db"], n_per_layer=n_per_layer,
+            return_warping=True, elem_order=elem_order)[2]
             for ln, i in bundle["layup_db"].items()}
     # reference offset (frac x thickness inward from the OML): the plate warp is
     # OML-referenced, so the plate depth adds frac*h and the recovered membrane
