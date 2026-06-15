@@ -1,0 +1,73 @@
+% Reissner-Mindlin curvature derivations -- typeset compilation of hand-derived notes.
+% Compile with:  pdflatex RM_curvatures.tex   (or: tectonic RM_curvatures.tex)
+% Requires the rendered sheets in ./img/sheet_00.png ... sheet_14.png
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=20mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\definecolor{navy}{rgb}{0.12,0.20,0.45}
+\pagestyle{fancy}\fancyhf{}\rhead{\small RM curvature derivations}\rfoot{\small\thepage}
+\setlength{\headheight}{14pt}
+
+\title{\color{navy}\bfseries Reissner--Mindlin Curvature Derivations\\
+       \large\mdseries Typeset compilation of hand-derived notes}
+\author{}
+\date{Source: \texttt{RM derivations\_curvatures\_Handderived.pdf} (15 sheets)}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section*{Scope}
+MSG thin-walled \emph{Reissner--Mindlin} shell $\rightarrow$ beam model: closed-form
+derivation of the shell curvature strains
+$\kappa_{11},\ \kappa_{22},\ \kappa_{12}+\kappa_{21}$ and the transverse shears
+$2\gamma_{13},\ 2\gamma_{23}$ in terms of the beam strains and the
+rotation/displacement fluctuating functions, at a general reference surface.
+
+\section*{Notation}
+\begin{tabular}{@{}ll@{}}
+$x_i,\ x_{i;\alpha}$ & position and its contour derivatives ($\dot{(\ )}=\partial/\partial\zeta_2$)\\
+$k_{\alpha 1},k_{\alpha 2},k_{\alpha 3}$ & initial curvature components of the reference surface\\
+$C^{ab}_{ij}=a_i\!\cdot\! b_j$ & direction-cosine matrix (shell $\leftrightarrow$ beam frames)\\
+$\theta,\ \phi_3$ & beam rotation column and drilling rotation\\
+$\omega_\beta$ & rotation fluctuating functions (RM extra DOFs)\\
+$w_1,w_2,w_3$ & displacement fluctuating functions\\
+$R_n=x_2\,x_{3;2}-x_3\,x_{2;2}$ & warping / enclosed-area kernel\\
+$\kappa_1$ (twist),\ $\kappa_2,\kappa_3$ (bending) & beam generalized strains\\
+\end{tabular}
+
+\section*{Structure of the derivation}
+The shell rotation vector is mapped to the beam frame through $C^{ab}$ and its
+contour derivative $C^{ab}_{;\alpha}=-\tilde k^{s}_{\alpha}C^{ab}$. Eliminating the
+drilling rotation $\phi_3$ (known from $\epsilon_{12}=\epsilon_{21}$) leaves the two
+independent rotation fluctuations $\omega_\alpha$. The curvature strains follow as
+first derivatives of the (rotation/displacement) fluctuating functions; e.g. the
+transformation operator applied to the rotation gradient has the form
+\[
+\begin{bmatrix} 1 & 0 & 0\\[1pt] 0 & 1 & 0\\[1pt]
+-\dfrac{C^{ab}_{31}}{C^{ab}_{33}} & -\dfrac{C^{ab}_{32}}{C^{ab}_{33}} & 1 \end{bmatrix}
+\bigl(\theta'\,x_{1\kappa}+\varepsilon_\beta\,\omega_\beta'\,x_{1\kappa}
+      +\varepsilon_\beta\,\omega_{\beta|1\kappa}\bigr),
+\]
+which, expanded, gives the $\kappa_{11},\kappa_{12}$ rows used throughout the sheets.
+
+\medskip\noindent
+\textbf{Faithful record.} Because the intermediate steps are index-dense, the exact
+derivation is reproduced below as the original hand-derived sheets, embedded at high
+resolution. (The equations above are transcribed from sheet~1; verify index detail
+against the corresponding sheet.)
+
+\newpage
+% ---- embedded hand-derived sheets ----
+\newcommand{\sheet}[2]{%
+  \begin{center}{\color{navy}\bfseries Hand-derived sheet #1 / 15}\end{center}%
+  \begin{center}\includegraphics[width=\linewidth,height=0.9\textheight,keepaspectratio]{img/sheet_#2.png}\end{center}%
+  \clearpage}
+\sheet{1}{00}\sheet{2}{01}\sheet{3}{02}\sheet{4}{03}\sheet{5}{04}
+\sheet{6}{05}\sheet{7}{06}\sheet{8}{07}\sheet{9}{08}\sheet{10}{09}
+\sheet{11}{10}\sheet{12}{11}\sheet{13}{12}\sheet{14}{13}\sheet{15}{14}
+\end{document}
