@@ -674,6 +674,62 @@ out-of-plane components are negligible.}
 \label{fig:st15deh}
 \end{figure}
 
+\subsection{Independent solid cross-check at a neighbouring station}
+\label{sec:st13}
+The station-15 comparison used VABS as the reference. As an independent check
+with the present FEniCS 2D-solid analysis, we benchmark a neighbouring station
+for which a solid mesh is available. The supplied solid mesh, although labelled
+``12'', is located at $x_1=44.83\,\text{m}=\tfrac{13}{29}\times100\,\text{m}$,
+i.e.\ \emph{station 13}; matching it against the candidate shell sections
+confirms this---the $6\times6$ relative norm is minimized at station 13 ($5.5\%$),
+versus $13.9\%$, $19.3\%$ and $27.9\%$ for stations 12, 11 and 10 (the axial
+stiffness, being reference-independent, pins the station). Comparing the
+mislabelled station gave a spurious $\sim$30\% bending error that is, in fact, a
+one-station offset.
+
+Table~\ref{tab:st13} compares the shell $6\times6$ (centroid reference) for
+\texttt{1Dshell\_13} against the FEniCS-solid; the agreement matches the st15
+quality---principal stiffnesses within $1.5$--$8.7\%$ and a relative norm of
+$5.5\%$ for both shell models. Under a representative bending--torsion load
+$\bm{F}=[2,0,0,3,8,5]\times10^5$, the 3D stress recovered on a through-thickness
+path in the fore sandwich panel (Fig.~\ref{fig:st13deh}) matches the solid: the
+axial stress $\sigma_{11}$ (carried by the skins) to $+4.0\%$ and the torsional
+shear flow $\sigma_{12}$ to $+10.8\%$, with the foam core near stress-free. The
+small transverse shear $\sigma_{23}$ ($0.1$~MPa in the solid) is the component
+the Kirchhoff recovery sets to zero and the RM model supplies.
+
+\begin{table}[t]\centering
+\caption{Station-13 principal Timoshenko stiffnesses: present shell models vs
+the FEniCS 2D-solid. Relative norm over the non-zero $6\times6$ terms: $5.5\%$
+(both models).}
+\label{tab:st13}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+term & TW-RM & TW-Kirchhoff & solid & err (RM/Kirch)\\
+\midrule
+$C_{11}$ (EA)        & $1.4094\!\times\!10^{10}$ & $1.4095\!\times\!10^{10}$ & $1.4315\!\times\!10^{10}$ & $-1.5\%/{-}1.5\%$\\
+$C_{16}$ (ext--bend) & $-3.829\!\times\!10^{9}$  & $-3.830\!\times\!10^{9}$  & $-4.371\!\times\!10^{9}$  & $-12.4\%/{-}12.4\%$\\
+$C_{22}$ (GA$_2$)    & $5.234\!\times\!10^{8}$   & $5.272\!\times\!10^{8}$   & $5.441\!\times\!10^{8}$   & $-3.8\%/{-}3.1\%$\\
+$C_{33}$ (GA$_3$)    & $1.300\!\times\!10^{8}$   & $1.313\!\times\!10^{8}$   & $1.282\!\times\!10^{8}$   & $+1.5\%/{+}2.4\%$\\
+$C_{44}$ (GJ)        & $2.588\!\times\!10^{8}$   & $2.640\!\times\!10^{8}$   & $2.425\!\times\!10^{8}$   & $+6.7\%/{+}8.9\%$\\
+$C_{55}$ (EI$_2$)    & $2.620\!\times\!10^{9}$   & $2.621\!\times\!10^{9}$   & $2.443\!\times\!10^{9}$   & $+7.2\%/{+}7.3\%$\\
+$C_{66}$ (EI$_3$)    & $7.810\!\times\!10^{9}$   & $7.811\!\times\!10^{9}$   & $7.185\!\times\!10^{9}$   & $+8.7\%/{+}8.7\%$\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.96\textwidth]{fig_st13_dehom.png}
+\caption{Station-13 recovered 3D stress (material frame) through the fore
+sandwich panel (44~mm), shell \texttt{1Dshell\_13} vs FEniCS-solid, under a
+bending--torsion load. The axial stress $\sigma_{11}$ (skins) matches to $+4\%$
+and the torsional shear $\sigma_{12}$ to $+11\%$; the foam core is near
+stress-free. The small $\sigma_{23}$ in the solid is the transverse shear the
+Kirchhoff recovery omits.}
+\label{fig:st13deh}
+\end{figure}
+
 %==============================================================
 \section{Discussion}
 %==============================================================
@@ -723,10 +779,12 @@ $\sigma_{11}$ gradient) decays linearly with $\hR$, confirming an $O(\hR)$
 thick-shell limit;
 \item the RM model recovers the transverse-shear stresses that the Kirchhoff
 model omits by construction;
-\item on a realistic wind-turbine blade station (multi-region laminate with
-spar caps, shear webs and sandwich panels) the homogenized $6\times6$ matches a
-VABS solid-element reference to a $5.6\%$ relative norm, and the recovered stress
-in a thin sandwich panel agrees with VABS to within $1.4\%$.
+\item on realistic wind-turbine blade stations (multi-region laminates with
+spar caps, shear webs and sandwich panels) the homogenized $6\times6$ matches
+the solid references to a $5.5$--$5.6\%$ relative norm---against VABS at
+station 15 and, independently, against the present FEniCS 2D-solid at
+station 13---and the recovered stress in a thin sandwich panel agrees to within
+$1.4\%$ (st15, vs VABS) and $4$--$11\%$ (st13, vs FEniCS-solid).
 \end{itemize}
 Future work will incorporate the wall-curvature metric in the through-thickness
 recovery to extend the accuracy of the $\sigma_{11}$ gradient into the
