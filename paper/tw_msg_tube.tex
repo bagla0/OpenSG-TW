@@ -70,7 +70,9 @@ discrepancy---the through-thickness gradient of the axial stress---decays
 linearly with $\hR$, confirming it as the expected $O(\hR)$ thick-shell limit
 of the recovery rather than a modelling error. The RM model additionally
 recovers the transverse-shear stresses that the Kirchhoff model omits by
-construction.
+construction. Applied to a wind-turbine blade station, the homogenized
+$6\times6$ matches a VABS solid-element reference to a $5.6\%$ relative norm, and
+the recovered stress in a thin sandwich panel agrees to within $1.4\%$.
 \end{abstract}
 
 \begin{keyword}
@@ -263,9 +265,9 @@ $\{$extension, shear$_2$, shear$_3$, twist, bending$_2$, bending$_3\}$.
 
 \subsection{Dehomogenization (3D stress recovery)}
 \label{sec:dehom}
-Given the 1D beam response---either an applied resultant
-$\bm{F}=\{F_1,F_2,F_3,M_1,M_2,M_3\}$ or directly the beam strain
-$\bgamma=\bC_6^{-1}\bm{F}$---the macroscopic strain and its spanwise
+Given the 1D beam response (either an applied resultant
+$\bm{F}=\{F_1,\dots,M_3\}$ or, directly, the beam strain
+$\bgamma=\bC_6^{-1}\bm{F}$), the macroscopic strain and its spanwise
 derivatives are reconstructed, the warping fields $\bV_0,\bV_1$ are
 superposed, and the recovered plate strains are mapped to the 3D strain through
 the wall thickness. The in-plane components $(\sigma_{11},\sigma_{22},
@@ -309,6 +311,7 @@ $C_{14}=-0.93755\times10^{6}$ (tension--twist), $C_{44}=0.14896\times10^{6}$
 \begin{table}[t]\centering
 \caption{Lamina properties of the anisotropic tube.}
 \label{tab:mat}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lcccc}
 \toprule
 $E_1$ (GPa) & $E_2=E_3$ (GPa) & $G_{12}=G_{13}=G_{23}$ (GPa)
@@ -316,7 +319,7 @@ $E_1$ (GPa) & $E_2=E_3$ (GPa) & $G_{12}=G_{13}=G_{23}$ (GPa)
 \midrule
 37 & 9 & 4 & 0.3 & $-45^{\circ}$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 \begin{figure}[t]\centering
@@ -369,6 +372,7 @@ models; ``solid'' is the 3D FE benchmark; the last column is the published
 classical (EB) value where applicable. Percent errors are relative to the solid
 Timoshenko benchmark.}
 \label{tab:homo}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lrrrrr}
 \toprule
 term & TW-RM & TW-Kirchhoff & solid & classical & err (RM/Kirch) \\
@@ -382,7 +386,7 @@ $C_{44}$ (GJ)            & $1.4727\!\times\!10^{5}$ & $1.4799\!\times\!10^{5}$ &
 $C_{55}$ (EI$_2$)        & $1.2266\!\times\!10^{5}$ & $1.2243\!\times\!10^{5}$ & $1.2281\!\times\!10^{5}$ & $1.0710\!\times\!10^{5}$ & $-0.12\%/{-}0.31\%$ \\
 $C_{66}$ (EI$_3$)        & $1.2266\!\times\!10^{5}$ & $1.2247\!\times\!10^{5}$ & $1.2281\!\times\!10^{5}$ & $1.0710\!\times\!10^{5}$ & $-0.12\%/{-}0.27\%$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 \subsection{Dehomogenization}
@@ -453,6 +457,7 @@ curvature-corrected or higher-order through-thickness recovery.
 through-thickness $\sigma_{11}$ gradient (\% of mean) under pure extension for
 shell and solid.}
 \label{tab:conv}
+\small
 \begin{tabular}{cccc}
 \toprule
 $\hR$ & shell$_{\text{Timo}}$/solid$_{\text{Timo}}$ $EI$
@@ -496,6 +501,92 @@ webs), where the RM model captures stresses the Kirchhoff model cannot.
 $\sigma_{13}$, $\sigma_{23}$ on the top path. Kirchhoff returns zero transverse
 shear by construction; the RM recovery follows the solid.}
 \label{fig:oop}
+\end{figure}
+
+%==============================================================
+\section{Application to a wind-turbine blade cross-section}
+\label{sec:blade}
+%==============================================================
+To demonstrate the method on a realistic multi-material section, we analyze
+station~15 of a utility-scale wind-turbine blade (the \texttt{bar\_urc} model).
+The cross-section (Fig.~\ref{fig:st15sec}a) is a deep, multi-region laminate
+comprising unidirectional spar caps, two shear webs, foam-cored sandwich panels,
+and leading-/trailing-edge reinforcements. The high-fidelity reference is VABS,
+which performs a two-dimensional \emph{solid} finite-element cross-sectional
+analysis; we use its Timoshenko stiffness (\texttt{.K}) and recovered stress
+(\texttt{.SM}) outputs.
+
+\subsection{Homogenization}
+Table~\ref{tab:st15} compares the principal Timoshenko stiffnesses of the
+present shell models against VABS. The axial, shear and flapwise-bending
+stiffnesses ($EA$, $GA_2$, $GA_3$, $EI_2$) agree to within $\sim$2--10\%, and
+the extension--bending coupling $C_{16}$ to within 9\%; the relative norm over
+all twelve non-zero terms is $5.6\%$ for both shell models. The RM model
+improves the torsional stiffness ($GJ$ to $+2.2\%$ versus $-3.6\%$ for
+Kirchhoff), consistent with its retention of transverse shear. The chordwise
+bending stiffness $EI_3$ is high by $\sim$14\%---the same thick-section
+signature quantified for the tube in Section~\ref{sec:conv}, here because the
+deep root section is locally thick relative to its radius of curvature.
+
+\begin{table}[t]\centering
+\caption{Station-15 principal Timoshenko stiffnesses: present shell models
+versus VABS (2D solid FE). The relative norm over all twelve non-zero
+$6\times6$ terms is $5.6\%$ for both models.}
+\label{tab:st15}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+term & TW-RM & TW-Kirchhoff & VABS & err (RM/Kirch)\\
+\midrule
+$C_{11}$ (EA)        & $1.3326\!\times\!10^{10}$ & $1.3326\!\times\!10^{10}$ & $1.3083\!\times\!10^{10}$ & $+1.9\%/{+}1.9\%$\\
+$C_{16}$ (ext--bend) & $-3.241\!\times\!10^{9}$  & $-3.242\!\times\!10^{9}$  & $-3.571\!\times\!10^{9}$  & $-9.2\%/{-}9.2\%$\\
+$C_{22}$ (GA$_2$)    & $4.409\!\times\!10^{8}$   & $4.462\!\times\!10^{8}$   & $4.580\!\times\!10^{8}$   & $-3.7\%/{-}2.6\%$\\
+$C_{33}$ (GA$_3$)    & $9.507\!\times\!10^{7}$   & $9.627\!\times\!10^{7}$   & $1.055\!\times\!10^{8}$   & $-9.9\%/{-}8.8\%$\\
+$C_{44}$ (GJ)        & $1.595\!\times\!10^{8}$   & $1.504\!\times\!10^{8}$   & $1.560\!\times\!10^{8}$   & $+2.2\%/{-}3.6\%$\\
+$C_{55}$ (EI$_2$)    & $1.6715\!\times\!10^{9}$  & $1.6716\!\times\!10^{9}$  & $1.6630\!\times\!10^{9}$  & $+0.5\%/{+}0.5\%$\\
+$C_{66}$ (EI$_3$)    & $5.809\!\times\!10^{9}$   & $5.809\!\times\!10^{9}$   & $5.107\!\times\!10^{9}$   & $+13.8\%/{+}13.7\%$\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.98\textwidth]{fig_st15_section.png}
+\caption{(a) Station-15 cross-section with layup regions (spar caps, two shear
+webs, sandwich panels, LE/TE reinforcements); the highlighted line is the
+through-thickness dehomogenization path in the low-pressure fore sandwich panel.
+(b) The panel layup: thin glass-triax structural skins (4 and 2~mm) bonding a
+34~mm foam core.}
+\label{fig:st15sec}
+\end{figure}
+
+\subsection{Dehomogenization on a thin sandwich panel}
+Guided by the thickness study (Section~\ref{sec:conv}), which shows the shell
+recovery converging to the solid as the wall thins, we recover the 3D stress on
+a through-thickness path in the low-pressure fore sandwich panel
+(Fig.~\ref{fig:st15sec}). Although the panel is 40~mm overall, its load-carrying
+laminate is two \emph{thin} glass skins (4 and 2~mm) separated by a soft foam
+core---the archetypal thin-walled-shell region. Under a representative
+blade-section load, the recovered material-frame stress
+(Fig.~\ref{fig:st15deh}) matches VABS closely: the dominant axial stress
+$\sigma_{11}$, carried almost entirely by the skins, agrees to within $1.4\%$
+($21.7$ versus $21.4$~MPa peak), while the foam core is correctly near
+stress-free. The in-plane shear $\sigma_{12}$ tracks VABS to within its small
+magnitude, and the out-of-plane components $\sigma_{33},\sigma_{13},\sigma_{23}$
+are negligible, as expected away from junctions. The Kirchhoff and RM in-plane
+recoveries coincide (they share the membrane--bending response); the RM model
+additionally returns the small parabolic transverse-shear profile that Kirchhoff
+sets to zero. This confirms, on a realistic blade laminate, that in the
+thin-walled regions for which the model is intended the shell dehomogenization
+reproduces the solid (VABS) stress field.
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.98\textwidth]{fig_st15_dehom.png}
+\caption{Station-15 recovered 3D stress (material frame) through the thickness
+of the low-pressure fore sandwich panel: present shell models (TW-RM,
+TW-Kirchhoff) versus VABS. The axial stress $\sigma_{11}$ concentrates in the
+thin skins and matches VABS within $1.4\%$; the foam core is near stress-free;
+out-of-plane components are negligible.}
+\label{fig:st15deh}
 \end{figure}
 
 %==============================================================
@@ -546,12 +637,16 @@ coincide to $<0.15\%$ at all $\hR$, while the sole recovery discrepancy (the
 $\sigma_{11}$ gradient) decays linearly with $\hR$, confirming an $O(\hR)$
 thick-shell limit;
 \item the RM model recovers the transverse-shear stresses that the Kirchhoff
-model omits by construction.
+model omits by construction;
+\item on a realistic wind-turbine blade station (multi-region laminate with
+spar caps, shear webs and sandwich panels) the homogenized $6\times6$ matches a
+VABS solid-element reference to a $5.6\%$ relative norm, and the recovered stress
+in a thin sandwich panel agrees with VABS to within $1.4\%$.
 \end{itemize}
 Future work will incorporate the wall-curvature metric in the through-thickness
 recovery to extend the accuracy of the $\sigma_{11}$ gradient into the
-thick-wall regime, and will apply the method to multi-cell airfoil sections
-with shear webs.
+thick-wall regime, and will apply the method to additional multi-cell airfoil
+sections and junction regions.
 
 %==============================================================
 \section*{Data and code availability}
