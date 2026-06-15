@@ -194,24 +194,109 @@ $(\omega_1,\omega_2)$; the drilling rotation $\omega_3$ is eliminated by
 enforcing symmetry of the in-plane shear ($\eps_{12}=\eps_{21}$). The nodal
 unknowns are $\{w_1,w_2,w_3,\omega_1,\omega_2\}$ and the strain field involves
 only \emph{first} derivatives, so standard $C^{0}$ Lagrange elements suffice.
-The membrane--bending strain operator on the curved wall reads, in Voigt form
-$[\,\eps_{11},\eps_{22},2\eps_{12},\kappa_{11},\kappa_{22},2\kappa_{12}\,]$,
-\begin{equation}
-\kappa_{22}=-\dot\omega_1,\qquad
-2\kappa_{12}=-\kappa_1+\frac{\dot\omega_2}{\dot z_2}+\cdots,
-\end{equation}
-where $(\dot{\;})=\partial/\partial s$ and $\kappa_1$ is the macroscopic twist.
-A subtle but essential point is that the coefficient of the macroscopic twist
-$\kappa_1$ in the wall twisting curvature is $-1$ for the RM model (the
-remaining contribution is carried by the $\dot\omega_2$ fluctuation), in
-contrast to $-2$ for the Kirchhoff model; using the Kirchhoff value in the RM
-model corrupts the torsional stiffness $GJ$.
+The full thin-walled strain field for both models is given in
+Section~\ref{sec:strainfield}. There, the wall twisting curvature carries the
+macroscopic twist $\kappa_1$ with coefficient $-1$ for the RM model (the
+remainder carried by the $\dot\omega_2$ fluctuation), in contrast to $-2$ for
+the Kirchhoff model; using the Kirchhoff value in the RM model corrupts the
+torsional stiffness $GJ$.
 
 Because $C^{0}$ interpolation of the RM transverse-shear strains is prone to
 shear locking as $\hR\to0$, the transverse-shear energy is integrated with a
 reduced (one-point) Gauss rule while the membrane--bending energy uses full
 integration; this selective-reduced-integration cures locking without spurious
 modes for the present problems.
+
+\subsection{Shell-genome geometry and the thin-walled strain field}
+\label{sec:strainfield}
+We now give the thin-walled shell strain field on which both wall models are
+built, in the prismatic, small-strain form used in the implementation; it
+follows the MSG shell formulation \cite{yu2016msg,liu2017msg}.
+
+\paragraph{Geometry.} The reference line carries an orthonormal beam triad
+$\bm{b}_i$ with $\bm{b}_1=\partial\bar{\bm{r}}/\partial x_1$; a wall point is
+$\bm{r}(x_1,y_\eta)=\bar{\bm{r}}(x_1)+\epsilon\,y_\eta\bm{b}_\eta$,
+$\eta\in\{2,3\}$. The surface base vectors, written in the beam triad, are
+\begin{equation}
+\hat{\bm{a}}_\beta=[\bm{b}_1\;\bm{b}_2\;\bm{b}_3]
+\big[(\bm{e}_1+\tilde{\bm{k}}_b\bm{x}_b)x_{1;\beta}+\bm{x}^{b}_{;\beta}\big],
+\qquad \hat{\bm{a}}_3=\hat{\bm{a}}_1\times\hat{\bm{a}}_2,
+\end{equation}
+with $\tilde{\bm{k}}_b$ the skew matrix of the initial curvature
+$\bm{k}_b=[-k_{b2},k_{b1},k_{b3}]$; for a prismatic segment this reduces to the
+cross-sectional contour curvature $k_{22}$. The shell and beam triads are linked
+by the direction-cosine matrix $C^{ab}_{ij}=\bm{a}_i\!\cdot\!\bm{b}_j$, with
+$C^{ab}_{;\alpha}=-\tilde{\bm{k}}^{s}_\alpha C^{ab}$.
+
+\paragraph{Kinematics and drilling elimination.} The 3D displacement is
+$\bm{U}=\bm{u}+\epsilon\,\bm{w}-\tilde{\bm{x}}\,\bm{\theta}$ with warping
+$\bm{w}=[w_1,w_2,w_3]$, beam rotation $\bm{\theta}=[\theta_1,-u_3',u_2']$, and
+the normalization $\langle\!\langle w_i\rangle\!\rangle=0$. In the RM model the
+shell rotation is $\bm{\rho}=C^{ab}(\bm{\theta}+\bm{\omega})$; enforcing in-plane
+shear symmetry $\eps_{12}=\eps_{21}$ fixes the drilling rotation $\phi_3=\rho_3$
+in closed form, eliminating $\omega_3$ and leaving the independent fluctuations
+$\{w_1,w_2,w_3,\omega_1,\omega_2\}$ (five per node). The Kirchhoff model has no
+independent rotations---the normal follows the mid-surface slope---leaving
+$\{w_1,w_2,w_3\}$ with $C^1$ continuity.
+
+\paragraph{Reissner--Mindlin strain field.} Collecting the plate strains
+$\Gamma_D=[\eps_{11},\eps_{22},2\eps_{12},\kappa_{11},\kappa_{22},
+\kappa_{12}{+}\kappa_{21}]\T$ and the transverse shears
+$\Gamma_G=[2\gamma_{13},2\gamma_{23}]\T$, with $\dot{(\cdot)}=\partial/\partial
+\zeta_2$ along the contour, $R_n=x_2\dot{x}_3-x_3\dot{x}_2$, and beam strains
+$\{\gamma_{11},\kappa_1,\kappa_2,\kappa_3\}$ ($\kappa_1$ the twist),
+\begin{align}
+\eps_{11}&=\gamma_{11}+x_3\kappa_2-x_2\kappa_3+\underline{w_1'},\\
+\eps_{22}&=\dot{x}_\eta\dot{w}_\eta,\qquad
+2\eps_{12}=\dot{w}_1+\kappa_1 R_n+\underline{\dot{x}_\eta w_\eta'},\\
+\kappa_{11}&=\dot{x}_\eta\kappa_\eta+\omega_2'/\dot{x}_2+\cdots,\qquad
+\kappa_{22}=-\dot{\omega}_1,\\
+\kappa_{12}{+}\kappa_{21}&=-\kappa_1+\frac{\dot{\omega}_2}{\dot{x}_2}
++\frac{k_{22}}{2}\Big(\frac{\dot{x}_3}{\dot{x}_2}\Big)^{\!2}(\dot{w}_1-\kappa_1 R_n)
+\nonumber\\ &\quad
+-k_{22}\frac{\dot{x}_3}{\dot{x}_2^{2}}\omega_2-\omega_1'-\cdots,\\
+2\gamma_{13}&=\kappa_1\Big[x_2\Big(\dot{x}_2+\frac{\dot{x}_3^{2}}{2\dot{x}_2}\Big)
++\frac{x_3\dot{x}_3}{2}\Big]-\frac{\dot{w}_1\dot{x}_3}{2\dot{x}_2}
++\frac{\omega_2}{\dot{x}_2}
+\nonumber\\ &\quad
+-\frac{w_2'\dot{x}_3}{2}+w_3'\Big(\dot{x}_2+\frac{\dot{x}_3^{2}}{2\dot{x}_2}\Big),\\
+2\gamma_{23}&=\dot{w}_3\dot{x}_2-\dot{w}_2\dot{x}_3-\omega_1,
+\label{eq:rmstrain}
+\end{align}
+where underlined terms are $O(\epsilon^2)$, retained only for the Timoshenko
+refinement. Two features distinguish the RM field: (i) $\kappa_{22}=-\dot
+\omega_1$ and $\kappa_{12}{+}\kappa_{21}$ involve only \emph{first} contour
+derivatives of the fluctuations, so $C^0$ interpolation suffices; and (ii) the
+transverse shears $2\gamma_{13},2\gamma_{23}$ are retained, carrying
+$\omega_1,\omega_2$. The coefficient of the macroscopic twist $\kappa_1$ in
+$\kappa_{12}{+}\kappa_{21}$ is $-1$ (the remainder carried by $\dot\omega_2$),
+in contrast to $-2$ for Kirchhoff.
+
+\paragraph{Kirchhoff reduction.} Setting $2\gamma_{13}=2\gamma_{23}=0$ and
+expressing the wall rotation through the mid-surface slope recovers the
+classical (Kirchhoff) thin-walled field; its curvatures then carry \emph{second}
+contour derivatives of $w$, requiring $C^1$ continuity (cubic Hermite here).
+
+\paragraph{Closed form and the reference surface.} For a symmetric laminate at
+the center reference, the zeroth-order minimization of Eq.~\eqref{eq:msg} admits
+the closed form (isotropic case)
+\begin{equation}
+\begin{aligned}
+&\eps_{11}=\gamma_{11}+x_3\kappa_2-x_2\kappa_3,\quad
+\eps_{22}=-\nu\eps_{11},\quad 2\eps_{12}=0,\quad
+\kappa_{11}=\dot{x}_\eta\kappa_\eta,\\
+&\kappa_{22}=-\nu\dot{x}_\eta\kappa_\eta,\quad
+\kappa_{12}{+}\kappa_{21}=-2\kappa_1,\quad
+2\gamma_{13}=2\gamma_{23}=0,
+\end{aligned}
+\end{equation}
+so for a straight prismatic beam at the center reference the transverse shears
+vanish and RM reduces to Kirchhoff; at an offset (outer) reference they are
+non-zero and the RM energy stays asymptotically correct. The membrane--bending
+strains then map as $\Gamma_D=\mathbf{B}(s)\{\gamma_{11},\kappa_1,\kappa_2,
+\kappa_3\}\T$, giving the closed-form Euler--Bernoulli stiffness
+$\bC_{EB}=\oint\mathbf{B}(s)\T\bD\,\mathbf{B}(s)\,\mathrm{d}s$; torsion and the
+transverse-shear terms require the finite-element fluctuation solve below.
 
 \subsection{Plate constitutive law ($8\times8$)}
 The condensed wall behaviour relates the plate stress resultants
