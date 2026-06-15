@@ -46,6 +46,13 @@ def _shape(nodes_xi, xi):
     return N, dN
 
 
+# coefficient of k1 in the kappa12 macro.  Kirchhoff uses -2 (the full twist is
+# macro); the RM split (eq 4.23) is -1 with the rest carried by the omega2
+# fluctuation -- this is the correct RM value (validated: st15 GJ -5.9% -> +2.2%
+# vs VABS, beating Kirchhoff's -4.4%; pipe GJ unchanged at ~Table 3.1).
+KAPPA12_MACRO = -1.0
+
+
 def _macro_BD(x2, x3, t2, t3, k22):
     """6x4 plate-strain macro map B_D(eb) ; eb=[g11,k1,k2,k3].  (== Kirchhoff Ge)"""
     Rn = x2 * t3 - x3 * t2
@@ -53,7 +60,7 @@ def _macro_BD(x2, x3, t2, t3, k22):
     B[0] = [1.0, 0.0, x3, -x2]              # eps11
     B[2, 1] = Rn                            # 2eps12 = k1 Rn
     B[3, 2] = t2; B[3, 3] = t3              # kappa11 = t.k
-    B[5, 1] = -2.0 - 0.5 * k22 * Rn         # kappa12+ = (-2 - k22/2 Rn) k1
+    B[5, 1] = KAPPA12_MACRO - 0.5 * k22 * Rn   # kappa12+ macro
     return B
 
 
