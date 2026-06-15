@@ -1,29 +1,18 @@
 """
-RM 2-step dehomogenization with NON-ZERO transverse-shear 3D stress.
+RM 2-step dehomogenization with NON-ZERO transverse-shear 3D stress, recovered
+from the V1 shear-warping (so the shear lands in the webs/junctions, as VABS).
 
-In-plane (S11,S22,S33,S12): the existing MSG in-plane dehom (RM ~ Kirchhoff).
-Transverse shear (S13,S23): recovered by 3D equilibrium -- the piece RM enables
-that the Kirchhoff-shell dehom gives as 0:
+Step 1: FF -> beam strain st=inv(C6)@FF -> macro recovery (st_m, st_cl1, st_cl2);
+        warping  a = V0@st_m + V1@st_cl1 ; recovered shell transverse-shear strain
+        Gamma_G(s) = BGq(s) @ a  (= the RM dehom step-1, the piece V1 enables).
+Step 2: in-plane (S11,S22,S33,S12) from the existing MSG dehom; transverse shear
+        sigma13(z) = (F13/h) Gamma_G[0] * gx(z)/<gx>  (parabolic, 0 at the faces),
+        sigma23(z) likewise.
 
-  d sigma_13/dz = - d sigma_11/dx1 ,   sigma_11 = Q11(z)( x3 k2 - x2 k3 + ... )
-  d()/dx1 of the bending => the SHEAR-induced curvature gradients k2',k3'
-  (moment gradients = the beam transverse shear forces F3,F2):
-      [k2'; k3'] = inv([[EI2,C56],[C56,EI3]]) @ [M2'; M3'] ,  M2'=F3, M3'=-F2
-  sigma_13(z) = - INT_0^z Q11(z')[ (x3o+z' n3) k2' - (x2o+z' n2) k3' ] dz'
-(parabolic, zero at the OML face; the through-thickness g(z) shear flow).
+debug_distribution() prints max|Gamma_G| per layup -- it must be large on the
+WEBS (which carry the transverse shear) and ~0 on the caps, matching VABS.
 
-Outputs (material frame), for the circumferential / spar-cap-centre / left-edge paths:
-  outputs/rm_dehom/<path>_rm.png         RM (S13,S23 != 0) vs VABS .SM
-  outputs/rm_dehom/<path>_rm_vs_kf.png   + Kirchhoff overlay (S13=S23=0)
-
-STATUS / CAVEAT: this demonstrates the RM *capability* -- non-zero S13/S23 where
-the Kirchhoff-shell dehom gives exactly 0.  The transverse-shear MAGNITUDE here
-uses a LEADING-ORDER recovery (uniform section shear strain projected onto each
-wall, parabolic through-thickness).  That mis-distributes the shear: VABS shows
-S13 large at the cap/web JUNCTIONS (the webs carry the transverse shear) and ~0
-in the cap centre, whereas the uniform-strain projection spreads it onto the
-caps.  The physically-correct distribution requires the V1 shear-warping (which
-wall carries the shear flow) -- the final step, not yet wired into the recovery.
+Outputs (material frame): outputs/rm_dehom/<path>_rm.png and _rm_vs_kf.png.
 """
 import os, sys
 import numpy as np
@@ -32,9 +21,12 @@ import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
 HERE = os.path.dirname(__file__)
 sys.path.insert(0, HERE); sys.path.insert(0, os.path.join(HERE, "..", "opensg_jax"))
 import jax; jax.config.update("jax_enable_x64", True)
-from fe_jax import solve_tw_from_yaml, stress_at_points
-from fe_jax.msg_dehom import _project_point
-from transverse_shear import _ply_Q_and_G
+from fe_jax import load_yaml, solve_tw_from_yaml, stress_at_points, compute_ABD_matrix
+from fe_jax.msg_mesh import read_mesh, mesh_curvature
+from fe_jax.msg_dehom import _macro_recovery
+from msg_rm import _lagrange
+from msg_rm_timo import _elem_BD_BG_BL, timoshenko_rm
+from transverse_shear import transverse_shear_stiffness
 
 YAML = r"C:\Users\bagla0\OpenSG\examples\data\Shell_1DSG\1Dshell_15.yaml"
 PDIR = (r"C:\Users\bagla0\OneDrive - purdue.edu\2026_195\Claude_code\training data"
@@ -51,57 +43,86 @@ def load_sm():
     d = np.loadtxt(SM); return d[:, :2], d[:, 2:8][:, [0, 3, 5, 4, 2, 1]]
 
 
-def transverse_shear_path(bundle, coords, g_beam, G_by, h_by, shapes_by, layup_db):
-    """Wall transverse shear: project the recovered beam transverse-shear strain
-    g_beam=[2g12,2g13] onto the wall (n,t), apply G_eff=F_FSDT/h, and distribute
-    through the thickness with the PARABOLIC g(z) shear flow (zero at the faces):
-      sigma13(z) = (F13/h)(g_beam . n) * gx(z)/<gx>
-      sigma23(z) = (F23/h)(g_beam . t) * gy(z)/<gy>
-    """
-    corners = np.asarray(bundle["corners"]); rc = np.asarray(bundle["red_cells"])
-    xd2 = np.asarray(bundle["xd2"]); xd3 = np.asarray(bundle["xd3"])
-    cen = corners.mean(0); lpe = bundle["layup_per_elem"]
+def project_rm(nodes, elems, P):
+    best = (np.inf, 0, 0.0)
+    for e, el in enumerate(elems):
+        A, B = nodes[el[0]], nodes[el[-1]]; AB = B-A; L2 = float(AB@AB)
+        t = 0.0 if L2 < 1e-30 else float(np.clip((P-A)@AB/L2, 0, 1))
+        d = float(np.hypot(*(P-(A+t*AB))))
+        if d < best[0]: best = (d, e, t)
+    return best[1], 2*best[2]-1.0                      # element, xi in [-1,1]
+
+
+def recover_GG_field(rm, FF, eval_pts=None):
+    """Recovered shell transverse-shear strain Gamma_G=[2g13,2g23] from V0,V1.
+    If eval_pts is None, evaluate at element midpoints (for the debug)."""
+    nodes, elems, lpe, k22 = rm["nodes"], rm["elems"], rm["lpe"], rm["k22"]
+    V0, V1, C6, p = rm["V0"], rm["V1"], rm["C6"], rm["p"]
+    st = np.linalg.solve(C6, FF)
+    _, st_m, st_cl1, st_cl2 = _macro_recovery(C6, st)
+    a = V0 @ st_m + V1 @ st_cl1                          # eps_h warping for Gamma_G
+    nodes_xi = _lagrange(p)
+    pts = eval_pts if eval_pts is not None else \
+        np.array([nodes[el].mean(0) for el in elems])
+    GG = np.zeros((len(pts), 2)); el_of = np.zeros(len(pts), int)
+    for ip, P in enumerate(pts):
+        e, xi = project_rm(nodes, elems, P)
+        X = nodes[elems[e]]
+        _, BGq, _, _ = _elem_BD_BG_BL(nodes_xi, xi, X, None, float(k22[e]), p)
+        g = np.concatenate([[5*n, 5*n+1, 5*n+2, 5*n+3, 5*n+4] for n in elems[e]])
+        GG[ip] = BGq @ a[g]; el_of[ip] = e
+    return GG, el_of
+
+
+def debug_distribution(rm):
+    GG, el_of = recover_GG_field(rm, FF)
+    lpe = rm["lpe"]
+    print("=== DEHOM DEBUG: recovered |Gamma_G| (shell transverse shear) by layup ===")
+    print("    (must be LARGE on webs, ~0 on caps -- matching VABS S13)")
+    by = {}
+    for i, e in enumerate(el_of):
+        by.setdefault(lpe[e], []).append(np.hypot(GG[i, 0], GG[i, 1]))
+    for ln in sorted(by, key=lambda k: -max(by[k])):
+        print(f"    {ln:10s} max|Gamma_G| = {max(by[ln]):.3e}  (n={len(by[ln])})")
+
+
+def transverse_shear_at(rm, coords, G_by, h_by, shapes_by):
+    GG, el_of = recover_GG_field(rm, FF, eval_pts=coords)
+    nodes, elems, lpe = rm["nodes"], rm["elems"], rm["lpe"]
     S13 = np.zeros(len(coords)); S23 = np.zeros(len(coords))
-    for ip, p in enumerate(coords):
-        e, xi, pr = _project_point(corners, rc, p)
-        t2, t3 = float(xd2[e]), float(xd3[e]); n2, n3 = t3, -t2
-        mid = 0.5*(corners[int(rc[e, 0])]+corners[int(rc[e, 1])])
-        if (cen[0]-mid[0])*n2 + (cen[1]-mid[1])*n3 < 0: n2, n3 = -n2, -n3
-        z = float((p[0]-pr[0])*n2 + (p[1]-pr[1])*n3)            # inward depth
-        ln = lpe[e]; Gf = G_by[ln]; h = h_by[ln]
+    for ip, P in enumerate(coords):
+        e = el_of[ip]; ln = lpe[e]; Gf = G_by[ln]; h = h_by[ln]
         zs, gxn, gyn, mx, my = shapes_by[ln]
-        gn = g_beam[0]*n2 + g_beam[1]*n3
-        gt = g_beam[0]*t2 + g_beam[1]*t3
-        sh13 = np.interp(np.clip(z, 0, h), zs, gxn) / mx        # avg-normalized, 0 at faces
-        sh23 = np.interp(np.clip(z, 0, h), zs, gyn) / my
-        S13[ip] = Gf[0, 0]/h * gn * sh13
-        S23[ip] = Gf[1, 1]/h * gt * sh23
+        # inward depth of the point
+        A, B = nodes[elems[e][0]], nodes[elems[e][-1]]; t = (B-A)/np.hypot(*(B-A))
+        n = np.array([t[1], -t[0]]); cen = nodes.mean(0)
+        prj = A + np.clip((P-A)@(B-A)/((B-A)@(B-A)), 0, 1)*(B-A)
+        if (cen-prj)@n < 0: n = -n
+        z = float((P-prj)@n)
+        sh13 = np.interp(np.clip(z, 0, h), zs, gxn)/mx
+        sh23 = np.interp(np.clip(z, 0, h), zs, gyn)/my
+        S13[ip] = Gf[0, 0]/h * GG[ip, 0] * sh13
+        S23[ip] = Gf[1, 1]/h * GG[ip, 1] * sh23
     return S13, S23
 
 
-def run(bundle, layup_db, G_by, h_by, shapes_by, path_file, name, sm_xy, sm_s):
+def run(kb, rm, G_by, h_by, shapes_by, path_file, name, sm_xy, sm_s):
     coords = np.loadtxt(os.path.join(PDIR, path_file))[:, :2]
     z = np.r_[0.0, np.cumsum(np.hypot(np.diff(coords[:, 0]), np.diff(coords[:, 1])))]
     vabs = sm_s[cKDTree(sm_xy).query(coords)[1]]
-    out = stress_at_points(bundle, coords, beam_force_vabs=FF, frame="material")
-    S = out["stress"].copy()                                    # Kirchhoff: S13=S23=0
-    # recovered beam transverse shear strains [2g12, 2g13] = (inv Timo @ FF)[1,2]
-    g_beam = np.linalg.solve(np.asarray(bundle["Timo"]), FF)[[1, 2]]
-    S13, S23 = transverse_shear_path(bundle, coords, g_beam, G_by, h_by, shapes_by, layup_db)
-    S_rm = S.copy(); S_rm[:, 4] = S13; S_rm[:, 3] = S23         # cols: S23=3, S13=4
-
+    S = stress_at_points(kb, coords, beam_force_vabs=FF, frame="material")["stress"].copy()
+    S13, S23 = transverse_shear_at(rm, coords, G_by, h_by, shapes_by)
+    S_rm = S.copy(); S_rm[:, 4] = S13; S_rm[:, 3] = S23     # cols S23=3, S13=4
     os.makedirs(OUT, exist_ok=True)
-    # plot 1: RM vs VABS
     _panel(os.path.join(OUT, f"{name}_rm.png"),
-           f"Station 15 {name} -- RM 2-step dehom (S13,S23 != 0) vs VABS",
+           f"Station 15 {name} -- RM 2-step dehom (V1 transverse shear) vs VABS",
            z, [("MSG-TW RM", S_rm, "r-o"), ("VABS (.SM)", vabs, "g--^")])
-    # plot 2: RM + Kirchhoff overlay
     _panel(os.path.join(OUT, f"{name}_rm_vs_kf.png"),
-           f"Station 15 {name} -- RM vs Kirchhoff vs VABS (note S13/S23)",
+           f"Station 15 {name} -- RM vs Kirchhoff vs VABS",
            z, [("MSG-TW RM", S_rm, "r-o"), ("MSG-TW Kirchhoff", S, "b:s"),
                ("VABS (.SM)", vabs, "g--^")])
-    print(f"{name}: max|S13| RM {np.max(np.abs(S13))/1e6:.2f} MPa  "
-          f"VABS {np.max(np.abs(vabs[:,4]))/1e6:.2f} MPa  (Kirchhoff 0)")
+    print(f"{name}: max|S13| RM {np.max(np.abs(S13))/1e6:.2f}  VABS "
+          f"{np.max(np.abs(vabs[:,4]))/1e6:.2f} MPa (Kirchhoff 0)")
 
 
 def _panel(fname, title, z, series):
@@ -119,22 +140,29 @@ def _panel(fname, title, z, series):
 
 
 def main():
-    from fe_jax import load_yaml
-    from transverse_shear import transverse_shear_stiffness
-    bundle = solve_tw_from_yaml(YAML, frac=0.0)
-    _, _, mat_db, layup_db, _ = load_yaml(YAML)
+    kb = solve_tw_from_yaml(YAML, frac=0.0)                # Kirchhoff: in-plane + projection
+    n3d, elements, mat_db, layup_db, e2l = load_yaml(YAML)
+    nodes, cells, lpe = read_mesh(n3d, elements, e2l)
+    nodes2d = nodes[:, :2]; elems = cells[:, [0, 1]]
+    k22 = np.asarray(mesh_curvature(nodes, cells, elements, is_closed=False))
+    D_by = {ln: np.asarray(compute_ABD_matrix(i["thick"], i["angles"], i["mat_names"], mat_db)[0])
+            for ln, i in layup_db.items()}
     G_by, h_by, shapes_by = {}, {}, {}
     for ln, i in layup_db.items():
         Gm, _, (zs, gxn, gyn) = transverse_shear_stiffness(
             i["thick"], i["angles"], i["mat_names"], mat_db)
-        h = float(sum(i["thick"]))
-        G_by[ln] = Gm; h_by[ln] = h
+        h = float(sum(i["thick"])); G_by[ln] = Gm; h_by[ln] = h
         shapes_by[ln] = (zs, gxn, gyn, np.mean(gxn), np.mean(gyn))
+    C6, _, V0, V1 = timoshenko_rm(nodes2d, elems, lpe, D_by, G_by, k22, p=1, return_warp=True)
+    rm = {"nodes": nodes2d, "elems": elems, "lpe": lpe, "k22": k22,
+          "V0": V0, "V1": V1, "C6": C6, "p": 1}
+
+    debug_distribution(rm)
     sm_xy, sm_s = load_sm()
     for pf, nm in [("solid.circumferential_015.coords", "circumferential"),
                    ("solid.lp_sparcap_center_thickness_015.coords", "sparcap_center"),
                    ("solid.lp_sparcap_left_edge_thickness_015.coords", "leftspar")]:
-        run(bundle, layup_db, G_by, h_by, shapes_by, pf, nm, sm_xy, sm_s)
+        run(kb, rm, G_by, h_by, shapes_by, pf, nm, sm_xy, sm_s)
 
 
 if __name__ == "__main__":

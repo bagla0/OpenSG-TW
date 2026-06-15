@@ -102,7 +102,8 @@ def build_C_Psi(nodes, elems, p=1):
     return C, Psi
 
 
-def timoshenko_rm(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True):
+def timoshenko_rm(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True,
+                  return_warp=False):
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_all(
         nodes, elems, layup_per_elem, D_by, G_by, k22_e, p, reduced)
     C, Psi = build_C_Psi(nodes, elems, p)
@@ -120,4 +121,6 @@ def timoshenko_rm(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=
     C6, *_ = finalize_v1_and_compute_deff(
         jnp.array(V_aug[:n, :]), jnp.array(V0), jnp.array(Deff),
         V0DllV0, DhlV0, DhlTV0Dle, jnp.array(Psi), jnp.array(Dc))
+    if return_warp:
+        return np.asarray(C6), np.asarray(Deff), np.asarray(V0), np.asarray(V_aug[:n, :])
     return np.asarray(C6), np.asarray(Deff)
