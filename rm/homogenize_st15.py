@@ -13,6 +13,7 @@ from fe_jax import load_yaml, timoshenko_from_yaml, compute_ABD_matrix
 from fe_jax.msg_mesh import read_mesh, mesh_curvature
 from fe_jax.msg_materials import rotation_6x6
 from msg_rm import assemble_rm, solve_eb
+from transverse_shear import transverse_shear_stiffness
 
 YAML = r"C:\Users\bagla0\OpenSG\examples\data\Shell_1DSG\1Dshell_15.yaml"
 # VABS .K classical 4x4 [ext, twist, bend2, bend3]
@@ -23,15 +24,10 @@ VK = np.array([[1.3082688863e10, 0, 1.4345965587e7, -3.5711027657e9],
 LBL = ["EA  ", "GJ  ", "EI2 ", "EI3 "]
 
 
-def G_layup(info, mat_db, kcorr=5/6):
-    """2x2 transverse-shear stiffness of a layup: sum_k R2(theta) diag(G13,G23) R2^T t."""
-    Gs = np.zeros((2, 2))
-    for t, ang, mn in zip(info["thick"], info["angles"], info["mat_names"]):
-        G13, G23 = mat_db[mn]["G"][1], mat_db[mn]["G"][2]
-        th = np.deg2rad(ang); c, s = np.cos(th), np.sin(th)
-        R2 = np.array([[c, s], [-s, c]])
-        Gs += R2 @ np.diag([G13, G23]) @ R2.T * t
-    return kcorr * Gs
+def G_layup(info, mat_db):
+    """2x2 transverse-shear stiffness via FSDT/equilibrium (rm.transverse_shear)."""
+    return transverse_shear_stiffness(info["thick"], info["angles"],
+                                      info["mat_names"], mat_db)[0]
 
 
 def main():
