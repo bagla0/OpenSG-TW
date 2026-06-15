@@ -36,16 +36,21 @@ def main():
     C6, EB = timoshenko_rm(nodes2d, elems, lpe, D_by, G_by, k22, p=1)
     _, Ck, _ = timoshenko_from_yaml(YAML, frac=0.0); Ck = np.asarray(Ck)
 
-    print("Station 15 Timoshenko 6x6  [EA, GA12, GA13, GJ, EI2, EI3]\n")
-    print(f"  {'term':6s}{'RM V1':>14s}{'Kirchhoff':>14s}{'VABS .K':>14s}{'RM%':>8s}{'KF%':>8s}")
-    for i, lbl in enumerate(LBL):
-        v = VK[i, i]
-        print(f"  {lbl:6s}{C6[i,i]:14.4e}{Ck[i,i]:14.4e}{v:14.4e}"
-              f"{100*(C6[i,i]-v)/v:8.1f}{100*(Ck[i,i]-v)/v:8.1f}")
-    print("\n  transverse-shear focus (the V1 payoff):")
-    for i, lbl in [(1, "GA12 (C22)"), (2, "GA13 (C33)")]:
-        print(f"    {lbl:12s} RM {C6[i,i]:.4e}  KF {Ck[i,i]:.4e}  VABS {VK[i,i]:.4e}"
-              f"   RM {100*(C6[i,i]-VK[i,i])/VK[i,i]:+.1f}%  KF {100*(Ck[i,i]-VK[i,i])/VK[i,i]:+.1f}%")
+    # all non-zero 6x6 terms (order [ext, shear2, shear3, twist, bend2, bend3])
+    NZ = [((0, 0), "C11 EA"), ((0, 4), "C15 ext-b2"), ((0, 5), "C16 ext-b3"),
+          ((1, 1), "C22 GA12"), ((1, 2), "C23 sh2-sh3"), ((1, 3), "C24 sh2-tw"),
+          ((2, 2), "C33 GA13"), ((2, 3), "C34 sh3-tw"), ((3, 3), "C44 GJ"),
+          ((4, 4), "C55 EI2"), ((4, 5), "C56 b2-b3"), ((5, 5), "C66 EI3")]
+    print("Station 15 Timoshenko 6x6 -- ALL non-zero terms vs VABS .K\n")
+    print(f"  {'term':12s}{'RM V1':>14s}{'Kirchhoff':>14s}{'VABS .K':>14s}{'RM%':>8s}{'KF%':>8s}")
+    sr = sk = sv = 0.0
+    for (i, j), lbl in NZ:
+        v = VK[i, j]; rm = C6[i, j]; kf = Ck[i, j]
+        print(f"  {lbl:12s}{rm:14.4e}{kf:14.4e}{v:14.4e}"
+              f"{100*(rm-v)/v:8.1f}{100*(kf-v)/v:8.1f}")
+        sr += (rm-v)**2; sk += (kf-v)**2; sv += v**2
+    print(f"\n  relative norm over the 12 non-zero terms:"
+          f"  RM {100*(sr/sv)**0.5:.2f}%   Kirchhoff {100*(sk/sv)**0.5:.2f}%")
 
 
 if __name__ == "__main__":
