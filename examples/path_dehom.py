@@ -40,15 +40,16 @@ def load_sm(path):
     return d[:, :2], d[:, 2:8][:, [0, 3, 5, 4, 2, 1]]   # -> S11,S22,S33,S23,S13,S12
 
 
-def panel(fname, title, z, jax_q2, jax_q3, vabs):
+def panel(fname, title, z, jax_s, vabs):
     fig, axes = plt.subplots(2, 3, figsize=(17, 9))
     fig.suptitle(title, fontsize=13, fontweight="bold")
     for j, c in enumerate(COMP):
         ax = axes.flat[j]
-        ax.plot(z * 1e3, jax_q2[:, j] / 1e6, "r--o", ms=4, label="MSG-TW quad (order 2)")
-        ax.plot(z * 1e3, jax_q3[:, j] / 1e6, "b-.s", ms=4, label="MSG-TW cubic (order 3)")
+        ax.plot(z * 1e3, jax_s[:, j] / 1e6, "r--o", ms=5, label="MSG-TW (JAX, Kirchhoff)")
         ax.plot(z * 1e3, vabs[:, j] / 1e6, "g-^", ms=6, label="VABS")
-        ax.set_title(f"$\\sigma_{{{c[1:]}}}$  ({c})", fontweight="bold")
+        oop = c in ("S33", "S13", "S23")
+        ax.set_title(f"$\\sigma_{{{c[1:]}}}$  ({c})" + ("  [out-of-plane]" if oop else ""),
+                     fontweight="bold", color=("darkred" if oop else "black"))
         ax.set_xlabel("through-thickness  (mm, OML->IML)")
         ax.set_ylabel(f"{c}  (MPa)"); ax.grid(True, ls=":", alpha=0.7); ax.legend(fontsize=8)
     fig.tight_layout(rect=[0, 0, 1, 0.96]); fig.savefig(fname, dpi=150); plt.close(fig)
@@ -61,14 +62,14 @@ def run(path_file, name, b_oml, b_iml, sm_xy, sm_s):
     vabs = sm_s[cKDTree(sm_xy).query(coords)[1]]
     print(f"\n{name}: {len(coords)} through-thickness pts, span {z[-1]*1e3:.1f} mm")
     for tag, b in [("OML", b_oml), ("IML", b_iml)]:
-        q2 = stress_at_points(b, coords, beam_force_vabs=FF, frame="material", elem_order=2)["stress"]
-        q3 = stress_at_points(b, coords, beam_force_vabs=FF, frame="material", elem_order=3)["stress"]
-        d = np.max(np.abs(q2 - q3)) / max(np.max(np.abs(q2)), 1e-30)
-        print(f"  {tag}: max|cubic-quad|/scale = {d:.2e}")
+        S = stress_at_points(b, coords, beam_force_vabs=FF, frame="material")["stress"]
+        print(f"  {tag}: max in-plane {np.max(np.abs(S[:,[0,1,5]])):.3e}  "
+              f"max S33 {np.max(np.abs(S[:,2])):.3e}  max S13/S23 "
+              f"{np.max(np.abs(S[:,[3,4]])):.3e}")
         panel(os.path.join(OUT, f"st15_{name}_{tag}.png"),
-              f"Station 15 {name} through-thickness (material frame) — {tag}  |  "
-              "quad vs cubic step-2 dehom",
-              z, q2, q3, vabs)
+              f"Station 15 {name} through-thickness (material frame) — {tag} "
+              "(all 6 from Kirchhoff shell strain)",
+              z, S, vabs)
 
 
 def main():

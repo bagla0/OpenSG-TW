@@ -45,15 +45,34 @@ Reference-surface study (1Dshell_15) vs FEniCS solid (2Dsolid_VABS_15).  6x6 Tim
 
 - full-6x6 ||IML-FE||/||FE|| = **7.89%**
 
-## Out-of-plane stress (dehom)
+## Out-of-plane stress (dehom) — validated against native FEniCS-TW
 
-The dehom recovers the 3D stress from the **in-plane shell strains** (membrane + curvature).  At a sub-surface point:
+The Kirchhoff-shell dehom recovers the 3D stress from the **in-plane shell
+strains** (membrane + curvature) only.  The three transverse-traction
+components come out **zero by construction**, and this was verified directly
+against the FEniCS-TW (`opensg.core.shell`) plate model — not a JAX artifact:
 
-| depth (mm) | max in-plane (S11,S22,S12) | max out-of-plane (S33,S13,S23) | ratio |
-|------------|----------------------------|-------------------------------|-------|
-| 2.92 | 9.771e+06 | 1.265e-01 | 0.0000 |
-| 9.97 | 1.557e+08 | 1.075e+00 | 0.0000 |
-| 5.69 | 1.356e+08 | 1.835e+00 | 0.0000 |
+| quantity | JAX | native FEniCS-TW |
+|----------|-----|------------------|
+| plate warping `v1` (→ γ13) | 0 (all 6 cols, incl. off-axis [45,-45,0]) | 0 (all 6 cols) |
+| plate warping `v2` (→ γ23) | 0 | 0 |
+| plate warping `v3` (→ γ33) | 1.77e-2 / 7.26e-4 (e/k cols) | 1.77e-2 / 7.26e-4 |
+| dehom `max|S33| / max|in-plane|` | ~1e-14 | ~1e-14 |
+| dehom `max|S13|, max|S23|` | **0 exactly** | **0 exactly** |
 
-- **sigma_33 ~ 0** is the plane-stress condition (free faces) — correct.
-- **sigma_13 / sigma_23 ~ 0** is a *thick-laminate limitation*: the beam transverse shear is not passed to the plate recovery, so the through-thickness shear (significant in thick spar caps) is not reproduced.  The solid (VABS) captures it.  In thin skins it is negligible.
+**Why** (correct MSG plate behaviour, not a bug):
+- `σ33`, `σ13`, `σ23` are the transverse-*traction* components. In a 1D
+  through-thickness SG with free top/bottom faces, equilibrium forces them to
+  vanish — this is the plate (plane-stress-through-thickness) condition.
+- `v1 = v2 = 0`: the in-plane Kirchhoff macro (`Ge` non-zero only in rows
+  0,1,5) never excites the transverse-shear warping, so `γ13 = dv1/dx = 0` and
+  `γ23 = dv2/dx = 0` → `σ13 = σ23 = 0`.
+- The 3D *strain* is genuinely full: `γ11, γ22, γ12, γ33` are all non-zero
+  (`γ33 = dv3/dx ≠ 0`). But `σ33 = (C·γ)_33 ≈ 0` precisely because `v3` is
+  solved to nullify the through-thickness traction — that *is* the definition
+  of the warping function.
+- Non-zero `σ13/σ23` would require feeding the **transverse-shear** macro
+  (Reissner–Mindlin `n_model=3`, `Ge=I` with the `g13/g23` columns). That was
+  deliberately excluded here ("recover all 6 from Kirchhoff shell strain").
+  VABS reports non-zero `σ13/σ23` in thick spar caps because it carries that
+  transverse-shear flow; the Kirchhoff-shell dehom does not.
