@@ -114,15 +114,14 @@ def run(kb, rm, G_by, h_by, shapes_by, path_file, name, sm_xy, sm_s):
     S13, S23 = transverse_shear_at(rm, coords, G_by, h_by, shapes_by)
     S_rm = S.copy(); S_rm[:, 4] = S13; S_rm[:, 3] = S23     # cols S23=3, S13=4
     os.makedirs(OUT, exist_ok=True)
-    _panel(os.path.join(OUT, f"{name}_rm.png"),
-           f"Station 15 {name} -- RM 2-step dehom (V1 transverse shear) vs VABS",
-           z, [("MSG-TW RM", S_rm, "r-o"), ("VABS (.SM)", vabs, "g--^")])
     _panel(os.path.join(OUT, f"{name}_rm_vs_kf.png"),
            f"Station 15 {name} -- RM vs Kirchhoff vs VABS",
            z, [("MSG-TW RM", S_rm, "r-o"), ("MSG-TW Kirchhoff", S, "b:s"),
                ("VABS (.SM)", vabs, "g--^")])
-    print(f"{name}: max|S13| RM {np.max(np.abs(S13))/1e6:.2f}  VABS "
-          f"{np.max(np.abs(vabs[:,4]))/1e6:.2f} MPa (Kirchhoff 0)")
+    mx = lambda A, i: np.max(np.abs(A[:, i]))/1e6
+    return {"name": name, "S11": (mx(S, 0), mx(vabs, 0)), "S12": (mx(S, 5), mx(vabs, 5)),
+            "S13rm": np.max(np.abs(S13))/1e6, "S13v": mx(vabs, 4),
+            "S33v": mx(vabs, 2)}
 
 
 def _panel(fname, title, z, series):
@@ -159,11 +158,27 @@ def main():
 
     debug_distribution(rm)
     sm_xy, sm_s = load_sm()
-    for pf, nm in [("solid.circumferential_015.coords", "circumferential"),
-                   ("solid.lp_sparcap_center_thickness_015.coords", "sparcap_center"),
-                   ("solid.fore_web_thickness_015.coords", "fore_web"),
-                   ("solid.lp_sparcap_left_edge_thickness_015.coords", "leftspar")]:
-        run(kb, rm, G_by, h_by, shapes_by, pf, nm, sm_xy, sm_s)
+    paths = [("solid.lp_sparcap_center_thickness_015.coords", "lp_sparcap_centre"),
+             ("solid.lp_fore_panel_thickness_015.coords", "lp_fore_panel"),
+             ("solid.lp_aft_panel_thickness_015.coords", "lp_aft_panel"),
+             ("solid.hp_fore_panel_thickness_015.coords", "hp_fore_panel"),
+             ("solid.hp_aft_panel_thickness_015.coords", "hp_aft_panel"),
+             ("solid.le_lp_reinf_thickness_015.coords", "le_lp_reinf"),
+             ("solid.fore_web_thickness_015.coords", "fore_web"),
+             ("solid.circumferential_015.coords", "circumferential"),
+             ("solid.lp_sparcap_left_edge_thickness_015.coords", "lp_sparcap_left_edge")]
+    rows = []
+    for pf, nm in paths:
+        try:
+            rows.append(run(kb, rm, G_by, h_by, shapes_by, pf, nm, sm_xy, sm_s))
+        except Exception as ex:
+            print(f"  skip {nm}: {ex}")
+    print("\n=== summary: max|stress| MPa, MSG (RM/KF share in-plane) vs VABS .SM ===")
+    print(f"  {'path':22s}{'S11 MSG':>9s}{'S11 VABS':>9s}{'S12 MSG':>9s}{'S12 VABS':>9s}"
+          f"{'S13 RM':>9s}{'S13 VABS':>9s}")
+    for r in rows:
+        print(f"  {r['name']:22s}{r['S11'][0]:9.1f}{r['S11'][1]:9.1f}"
+              f"{r['S12'][0]:9.1f}{r['S12'][1]:9.1f}{r['S13rm']:9.2f}{r['S13v']:9.2f}")
 
 
 if __name__ == "__main__":
