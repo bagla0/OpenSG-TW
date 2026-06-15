@@ -161,6 +161,7 @@ def main():
     sm_xy, sm_s = load_sm()
     for pf, nm in [("solid.circumferential_015.coords", "circumferential"),
                    ("solid.lp_sparcap_center_thickness_015.coords", "sparcap_center"),
+                   ("solid.fore_web_thickness_015.coords", "fore_web"),
                    ("solid.lp_sparcap_left_edge_thickness_015.coords", "leftspar")]:
         run(kb, rm, G_by, h_by, shapes_by, pf, nm, sm_xy, sm_s)
 
