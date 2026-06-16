@@ -46,11 +46,17 @@ def _shape(nodes_xi, xi):
     return N, dN
 
 
-# coefficient of k1 in the kappa12 macro.  Kirchhoff uses -2 (the full twist is
-# macro); the RM split (eq 4.23) is -1 with the rest carried by the omega2
-# fluctuation -- this is the correct RM value (validated: st15 GJ -5.9% -> +2.2%
-# vs VABS, beating Kirchhoff's -4.4%; pipe GJ unchanged at ~Table 3.1).
-KAPPA12_MACRO = -1.0
+# coefficient of k1 in the kappa12 macro.  The physical plate-twist measure for a
+# beam twisting at rate k1 is kappa12+kappa21 = -2 k1 (ASC25 Eq. 24; Roy-Yu Eq. V),
+# so the macro must carry the full -2.  The omega2 fluctuation that a -1 split
+# relied on to supply the other -1 is locked to ~0 by the transverse-shear
+# stiffness of a thin wall, so a -1 macro under-counts OPEN-section torsion by 4x
+# (St-Venant J = W h^3/3 collapses to W h^3/12).  Closed cells hide this -- their
+# torsion is A66-membrane (Bredt) dominated and the plate-twist term is a <1%
+# correction -- which is why the closed tube/airfoil passed with -1; the open flat
+# strip is the discriminating test.  -2 fixes the strip (centre GJ -75% -> -0.6%
+# at h/W=0.01) and PRESERVES the tube (centre GJ -1.0% -> -0.3% at h/R=0.2).
+KAPPA12_MACRO = -2.0
 
 
 def _macro_BD(x2, x3, t2, t3, k22):

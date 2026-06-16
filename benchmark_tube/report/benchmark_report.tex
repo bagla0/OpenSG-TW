@@ -1,4 +1,4 @@
-% Homogenization benchmark report -- compile with pdflatex (twice) or tectonic.
+% Homogenization benchmark report -- compile with tectonic (or pdflatex twice).
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,bm}
@@ -8,15 +8,13 @@
 \usepackage[table]{xcolor}
 \usepackage[hidelinks]{hyperref}
 \usepackage{caption}
+\usepackage{placeins}
 \graphicspath{{figures/}}
 \newcommand{\T}{^{\mathsf{T}}}
-\newcommand{\hR}{h/R}
-\newcommand{\bD}{\mathbf{D}}
-\newcommand{\bG}{\mathbf{G}}
 
-\title{\textbf{Homogenization benchmark of a thin-walled MSG shell model\\
-against 3D solid finite elements:\\
-isotropic and $[45/\!-\!45]$ circular tubes across the thin-to-thick range}}
+\title{\textbf{Homogenization benchmark of thin-walled MSG shell models\\
+(Reissner--Mindlin and Kirchhoff) against 3D solid finite elements:\\
+isotropic and $[45/\!-\!45]$ tubes and plate-strips, thin to thick}}
 \author{Akshat Bagla\\\small School of Aeronautics and Astronautics, Purdue University%
 \thanks{Author/affiliation placeholder --- verify before distribution.}}
 \date{\today}
@@ -27,241 +25,282 @@ isotropic and $[45/\!-\!45]$ circular tubes across the thin-to-thick range}}
 \begin{abstract}
 We benchmark a thin-walled Mechanics-of-Structure-Genome (MSG) shell
 cross-sectional analysis---in both Reissner--Mindlin (RM, $C^0$) and Kirchhoff
-($C^1$) wall kinematics---against a three-dimensional (3D) solid finite-element
-cross-sectional analysis (FEniCSx), the latter taking the role usually played by
-VABS. Two circular composite tubes are studied: an isotropic tube and a balanced
-anisotropic $[45/\!-\!45]$ tube. The wall slenderness $\hR$ is swept over five
-values from thin-shell ($0.01$) to thick-shell ($0.20$), and the shell wall is
-referenced at either the mid-surface (``centre'') or the outer mould line
-(``OML''). The full Timoshenko $6\times6$ stiffness is compared term by term and
-the isotropic case is additionally checked against the exact annulus closed form.
-\emph{Key results.} At the centre reference, the shell reproduces the solid to
-$<1\%$ on every non-zero stiffness ($EA$, $GA$, $GJ$, $EI$) across the entire
-thin-to-thick range, for both RM and Kirchhoff. At the OML reference the error
-grows roughly linearly with $\hR$: $EA$ and $EI$ over-predict by $\approx h/2R$
-(the $(1+z/R)$ curvature/arc-length factor) and the two shell models diverge on
-$GA$ and $GJ$. The $[45/\!-\!45]$ tube exhibits the expected high torsional
-stiffness ($GJ/EA\approx0.85$), captured to $<1\%$ at the centre; its
-extension--twist coupling is near zero (balanced layup). The practical
-recommendation is to reference the wall at its mid-surface, where the thin-walled
-shell model is essentially exact through $\hR=0.20$.
+($C^1$) wall kinematics---against a 3D solid finite-element cross-sectional
+analysis (FEniCSx), which here plays the role of VABS. Four sections are studied
+across a thin-to-thick sweep: a \emph{closed} circular tube and an \emph{open}
+flat plate-strip, each isotropic and balanced anisotropic $[45/\!-\!45]$. The
+report is results-focused: it reports the full Timoshenko $6\times6$ stiffness
+for every case, term by term, with the matrix components labelled by both index
+and engineering meaning ($C_{11}{=}EA$, $C_{22}{=}GA_2$, $C_{33}{=}GA_3$,
+$C_{44}{=}GJ$, $C_{55}{=}EI_2$, $C_{66}{=}EI_3$).
+\emph{Key results.} For the \textbf{tube}, both shell models reproduce the solid
+to $<1\%$ on every non-zero stiffness at the mid-surface reference across the
+whole range ($h/R=0.01$--$0.20$); the outer-mould-line (OML) reference adds an
+$O(h/R)$ curvature/arc-length drift. For the \textbf{strip}, the axial $EA$ and
+the strong in-plane bending $EI_3$ are exact in both models; the open section
+proved a discriminating test for torsion: it exposed (and we corrected) the RM
+twist measure, which must carry the full $\kappa_{12}{+}\kappa_{21}{=}{-}2\kappa_1$.
+With the correction the RM torsion recovers the St-Venant value exactly and
+\emph{outperforms} Kirchhoff for the thick open section ($GJ$ at $h/W{=}0.20$: RM
+$-0.1\%$ vs.\ KF $+22\%$). The weak bending $EI_2$ is captured at the centre
+(Kirchhoff marginally better; RM slightly soft owing to bend--twist coupling).
+The transverse shear $GA$ is the genuinely method-sensitive quantity: the
+thickness-direction $GA_3$ of a wide strip is a two-dimensional, $h^3$-governed
+field that no 1D-shell genome resolves (both models err), and the in-plane $GA_2$
+of the balanced strip is carried by Kirchhoff but under-predicted by the RM $C^0$
+kinematics. The off-diagonal couplings confirm the theory: $C_{15},C_{16},C_{56}$
+are identically zero at the centroid for these symmetric sections (appearing only
+as a parallel-axis artifact under an off-centroid reference), while the genuine
+antisymmetric-$[45/\!-\!45]$ couplings are extension--twist ($C_{14}$) and
+transverse-shear--bending ($C_{25}/C_{36}$).
 \end{abstract}
 
 %================================================================
-\section{Introduction}
-Cross-sectional homogenization reduces a slender composite structure to a 1D beam
-with an effective $6\times6$ stiffness, after which a global beam solution and a
-dehomogenization (3D stress recovery) complete the analysis. For thin-walled
-sections, a \emph{shell} idealization of the wall is far cheaper than a 2D
-\emph{solid} discretization, but its accuracy depends on the wall slenderness
-$\hR$ and on the choice of wall reference surface. This report quantifies both
-dependencies by benchmarking an MSG thin-walled shell model (RM and Kirchhoff)
-against a 3D solid analysis for isotropic and $[45/\!-\!45]$ tubes, over a
-thin-to-thick $\hR$ sweep, at the mid-surface and OML references.
+\section{Setup}
+\paragraph{Sections and materials.} Tube radius $R=1$~m, strip width $W=1$~m;
+wall/laminate thickness swept over $h/R$ (resp.\ $h/W$)
+$=\{0.01,0.03,0.06,0.12,0.20\}$. Isotropic: $E=\SI{70}{GPa}$, $\nu=0.3$
+($G=\SI{26.923}{GPa}$). Anisotropic $[45/\!-\!45]$: $E_1=37$, $E_2=E_3=9$,
+$G_{ij}=4$~GPa, $\nu=0.3$; the $+45^\circ$ ply is the outer (tube) / top (strip)
+band and $-45^\circ$ the inner / bottom band. The shell wall is referenced at the
+mid-surface (\emph{centre}, $\mathrm{frac}=0.5$) or the outer mould line
+(\emph{OML}, $\mathrm{frac}=0$).
 
-%================================================================
-\section{Model and method}
-\subsection{Thin-walled MSG shell (summary)}
-The wall is a 1D structure genome (the mid-surface curve) whose through-thickness
-behaviour is condensed into an $8\times8$ plate law
-\begin{equation}
-\begin{Bmatrix}\bm N\\ \bm M\\ \bm Q\end{Bmatrix}=
-\begin{bmatrix}\mathbf A&\mathbf B&\bm0\\ \mathbf B&\mathbf D&\bm0\\
-\bm0&\bm0&\bG\end{bmatrix}
-\begin{Bmatrix}\bm\varepsilon^0\\ \bm\kappa\\ \bm\gamma^s\end{Bmatrix},
-\end{equation}
-with the membrane--bending block $[\mathbf A,\mathbf B;\mathbf B,\mathbf D]$ from
-classical lamination theory and the transverse-shear block $\bG$ from a
-first-order shear-deformation (FSDT) 3D-equilibrium argument (reducing to
-$\tfrac56 Gh$ for an isotropic plate); this is an engineering approximation to
-the asymptotically-exact transverse-shear stiffness, which in the rigorous RM
-shell theory follows from energy minimization rather than an assumed correction
-factor~\cite{yu2002rmshell}. Two wall kinematics are used on the same
-genome: a Kirchhoff model (no transverse shear, $C^1$ cubic Hermite) and a
-Reissner--Mindlin model (transverse shear retained, $C^0$ Lagrange with selective
-reduced integration for the shear energy). The Euler--Bernoulli ($4\times4$) and
-Timoshenko ($6\times6$) stiffnesses follow from the asymptotic fluctuation fields
-$\mathbf V_0$ and $\mathbf V_1$. Full kinematics and the strain field are given in
-the companion paper; here we focus on the benchmark.
+\paragraph{Models.} \emph{Solid} --- 2D solid cross-sectional analysis (FEniCSx,
+first-order quadrilaterals, full 3D constitutive, lamina baked into the element
+frame); $N_c=200{\times}N_r=16$ (tube) and $120{\times}16$ (strip), $8$ elements
+per ply for $[45/\!-\!45]$. \emph{Shell} --- the 1D MSG structure genome along the
+wall with the $8\times8$ plate law
+$\{\bm N,\bm M,\bm Q\}=[\,\mathbf A,\mathbf B,\bm0;\mathbf B,\mathbf D,\bm0;
+\bm0,\bm0,\bm G\,]\{\bm\varepsilon^0,\bm\kappa,\bm\gamma^s\}$ condensed to the
+Timoshenko $6\times6$, in two kinematics: Kirchhoff ($C^1$ Hermite, no transverse
+shear) and Reissner--Mindlin ($C^0$ Lagrange, transverse shear retained). The
+geometry, $[45/\!-\!45]$ orientation, and the matching solid mesh are shown in
+Figs.~\ref{fig:geom_tube}--\ref{fig:geom_strip}; the closed tube uses connectivity
+that wraps, the open strip does not.
 
-\subsection{Reference surface}
-The shell ABD is referenced either to the wall mid-surface (\emph{centre},
-$\mathrm{frac}=0.5$) or to the outer mould line (\emph{OML}, $\mathrm{frac}=0$).
-A reference shift by a through-thickness offset $z_0$ uses the parallel-axis
-relation $\mathbf B\!\to\!\mathbf B-z_0\mathbf A$,
-$\mathbf D\!\to\!\mathbf D-2z_0\mathbf B+z_0^2\mathbf A$, and the wall reference
-curvature is $k_{22}=-1/r_{\mathrm{ref}}$ with $r_{\mathrm{ref}}=R$ (centre) or
-$R+h/2$ (OML). The present flat-plate ABD omits the $(1+z/R)$ shell metric in the
-through-thickness integration; the consequence is quantified below. For the
-symmetric tubes studied here the tension and shear centres coincide with the
-geometric centre, so the centre-referenced $6\times6$ is itself the
-reference-invariant comparison~\cite{yu2012vabs}; the OML results are a deliberate
-reference-sensitivity study, not an alternative ``stiffness'' of the tube.
+\begin{figure}[t]\centering
+\includegraphics[width=\textwidth]{geom_tube.png}
+\caption{\textbf{Tube.} Left: the 1D shell genome (mid-surface circle) with the
+local frame $e_1$ (beam, out of plane), $e_2$ (hoop), $e_3$ (through-thickness).
+Centre: the $[+45/\!-\!45]$ material orientation (fiber tows shown in each ply,
+relative to $e_1$/$e_2$). Right: the matching FEniCS 2D-solid annulus with the
+two ply bands and the mid-surface reference.}
+\label{fig:geom_tube}
+\end{figure}
 
-\subsection{Solid reference}
-The 3D reference is a 2D solid cross-sectional analysis (FEniCSx, first-order
-quadrilaterals) with the full 3D constitutive law and the lamina orientation in
-the element frame; it plays the role of VABS. The annulus is meshed with
-$N_c=200$ circumferential and $N_r=16$ radial elements (8 per ply for
-$[45/\!-\!45]$). For the isotropic tube the solid reproduces the exact annulus
-closed form ($EA=E\pi(r_o^2-r_i^2)$, $EI=E\tfrac\pi4(r_o^4-r_i^4)$, $GJ=2EI\,G/E$)
-to $<0.1\%$ at every $\hR$, confirming mesh convergence.
-
-\subsection{Benchmark matrix}
-\begin{table}[h]\centering
-\caption{Benchmark cases. $R=1$~m; Timoshenko order
-$[\,EA,\,GA_2,\,GA_3,\,GJ,\,EI_2,\,EI_3\,]$.}
-\begin{tabular}{ll}
-\toprule
-isotropic tube & $E=\SI{70}{GPa}$, $\nu=0.3$ \\
-anisotropic tube & $[45/\!-\!45]$, $E_1{=}37$, $E_2{=}E_3{=}9$, $G{=}4$~GPa, $\nu{=}0.3$\\
-$\hR$ sweep & $0.01,\;0.03,\;0.06,\;0.12,\;0.20$ \\
-references & centre ($\mathrm{frac}{=}0.5$), OML ($\mathrm{frac}{=}0$)\\
-shell models & Reissner--Mindlin, Kirchhoff\\
-reference solution & FEniCS 2D-solid (VABS-equivalent)\\
-\bottomrule
-\end{tabular}
-\end{table}
+\begin{figure}[t]\centering
+\includegraphics[width=\textwidth]{geom_strip.png}
+\caption{\textbf{Plate-strip.} Left: the flat 1D genome with the local frame
+($e_2$ along the width, $e_3$ through the thickness). Centre: the same
+$[+45/\!-\!45]$ orientation. Right: the matching FEniCS 2D-solid rectangle. The
+strip is an \emph{open} section (free edges), unlike the closed tube.}
+\label{fig:geom_strip}
+\end{figure}
 
 %================================================================
 \section{Results}
-The per-stiffness tables (errors relative to the solid) are collected in
-Tables~\ref{tab:iso_EA}--\ref{tab:aniso_exttwist}; the convergence with $\hR$ is
-plotted in Figs.~\ref{fig:err_iso}--\ref{fig:abs_aniso}.
 
-\subsection{Isotropic tube}
-At the \textbf{centre} reference the shell is essentially exact:
-$EA$ within $0.01\%$, and $GA$, $GJ$, $EI$ within $1\%$ even at $\hR=0.20$
-(Table~\ref{tab:iso_EA}--\ref{tab:iso_EI}, Fig.~\ref{fig:err_iso}). Both RM and
-Kirchhoff overlap with the solid and with the analytic annulus values.
-At the \textbf{OML} reference the error grows almost linearly in $\hR$:
-$EA$ and $EI$ over-predict by $\approx h/2R$ ($+10\%$ and $+9.4\%$ at
-$\hR=0.20$), consistent with the OML radius being $(1+h/2R)$ times the
-mid-surface radius (the omitted curvature metric). $GA$ under-predicts and the
-two models split ($GJ$: RM $+20\%$, KF $-10\%$ at $\hR=0.20$).
+\subsection{Circular tube (closed section)}
+At the \textbf{centre} reference the shell is essentially exact on the full
+$6\times6$: $EA$ within $0.1\%$ and $GA$, $GJ$, $EI$ within $\approx1\%$ even at
+$h/R=0.20$, for \emph{both} RM and Kirchhoff (Fig.~\ref{fig:err_tube_iso},
+\ref{fig:err_tube_aniso}; Tables~\ref{tab:tube_iso_props}--\ref{tab:tube_aniso_full}).
+The balanced $[45/\!-\!45]$ tube shows the expected high torsional stiffness
+($GJ/EA\approx0.85$), captured to $<1\%$. At the \textbf{OML} reference the error
+grows almost linearly in $h/R$: $EA$, $EI$ over-predict by $\approx h/2R$ (the
+$(1+z/R)$ curvature/arc-length factor) and $GA$, $GJ$ pick up an $O(h/R)$ drift.
+The off-diagonal couplings are negligible for these symmetric / balanced sections
+(see the full $6\times6$, Tables~\ref{tab:tube_iso_full},
+\ref{tab:tube_aniso_full}).
 
 \begin{figure}[t]\centering
-\includegraphics[width=0.92\textwidth]{err_iso.png}
-\caption{Isotropic tube: shell-vs-solid \% error in each stiffness vs $\hR$. The
-centre-reference curves stay near zero through the thick-shell range; the OML
-curves grow $\sim$linearly and the RM/KF models diverge on $GA$ and $GJ$.}
-\label{fig:err_iso}
+\includegraphics[width=0.96\textwidth]{err_tube_iso.png}
+\caption{Isotropic tube: \% error vs.\ the solid for each Timoshenko component.
+Centre-reference curves (solid lines) hug zero through the thick range; OML
+(dashed) drifts $O(h/R)$.}
+\label{fig:err_tube_iso}
 \end{figure}
 
 \begin{figure}[t]\centering
-\includegraphics[width=0.78\textwidth]{abs_iso.png}
-\caption{Isotropic tube: absolute stiffness vs $\hR$ (centre reference,
-log--log). Shell (RM, KF) and solid overlap across the full range.}
-\label{fig:abs_iso}
+\includegraphics[width=0.96\textwidth]{err_tube_aniso.png}
+\caption{Anisotropic $[45/\!-\!45]$ tube: \% error vs.\ the solid. Same behaviour
+as the isotropic tube; $<1\%$ at the centre for both models across $h/R$.}
+\label{fig:err_tube_aniso}
 \end{figure}
 
-\subsection{Anisotropic $[45/\!-\!45]$ tube}
-The balanced $[45/\!-\!45]$ layup yields a high torsional stiffness
-($GJ/EA\approx0.85$), reproduced to $<1\%$ at the centre reference across all
-$\hR$ (Table~\ref{tab:aniso_GJ}, Fig.~\ref{fig:err_aniso}). $EA$, $GA$ and $EI$
-behave as in the isotropic case: $<1\%$ at the centre, $\sim h/2R$ drift at the
-OML. The extension--twist coupling $C_{14}$ is two-to-three orders below $EA$
-(the $+45$ and $-45$ contributions nearly cancel); the large \emph{relative}
-error there (Table~\ref{tab:aniso_exttwist}) is therefore on a physically
-negligible term and is not indicative of a modelling deficiency. (A single
-$-45^\circ$ ply, by contrast, has a significant tension--twist coupling.)
+\subsection{Flat plate-strip (open section)}
+The open strip separates the stiffnesses into three groups
+(Figs.~\ref{fig:err_strip_iso}--\ref{fig:err_strip_aniso};
+Tables~\ref{tab:strip_iso_props}--\ref{tab:strip_aniso_full}).
+
+\paragraph{Exact terms --- $EA$ and $EI_3$.} The axial stiffness and the strong
+in-plane bending ($\sim W^3$) match the solid to $<2\%$ for both models, both
+materials, across the whole range; the isotropic centre values equal the
+Euler--Bernoulli closed form ($EA=EWh$, $EI_3=EhW^3/12$) exactly.
+
+\paragraph{Torsion $GJ$ --- the open section corrects and vindicates RM.} For a
+thin open strip the St-Venant constant is $J=Wh^3/3$. The closed tube hides the
+torsion path because its $GJ$ is membrane (Bredt, $A_{66}$) dominated; the open
+strip, having no closed cell, routes all of $GJ$ through the plate-twist measure.
+This exposed a coefficient error in the RM twist row: the physical plate twist of
+a beam twisting at rate $\kappa_1$ is $\kappa_{12}+\kappa_{21}=-2\kappa_1$, so the
+macro must carry the full $-2$; a $-1$ split (relying on a rotation fluctuation
+that a thin wall's transverse-shear stiffness locks to $\approx0$) under-counts
+open-section torsion by exactly a factor of four ($Wh^3/3\!\to\!Wh^3/12$). With the
+twist measure corrected to $-2$, the RM torsion is \emph{exact} ($GJ$ within
+$0.2\%$ at the centre for all $h/W$) and the closed-tube $GJ$ is preserved
+($-1.0\%\!\to\!-0.3\%$ at $h/R=0.20$). Kirchhoff, by contrast, over-stiffens the
+open-section torsion as the wall thickens (\,$GJ$: $+0.5\%$ at $h/W=0.01$ rising to
+$+22\%$ at $0.20$). The RM model is therefore the more accurate of the two for
+thick open-section torsion (Fig.~\ref{fig:err_strip_iso}, panel $C_{44}$).
+
+\paragraph{Weak bending $EI_2$ ($\sim h^3$).} At the centre this is captured by
+both models; Kirchhoff is marginally better (within $-3$ to $+7\%$), while RM runs
+slightly soft for $[45/\!-\!45]$ ($-10$ to $-20\%$), the expected effect of the
+bend--twist coupling ($D_{16}\neq0$) on the free-warping cross-section. The OML
+reference for $EI_2$ is dominated by the parallel-axis $EA\,(h/2)^2$ term and is a
+pure reference offset, not a stiffness error (the OML curves run off-scale in the
+plots; the values are in the tables).
+
+\paragraph{Transverse shear $GA$ --- the method-sensitive group.} $GA_3$ (the
+thickness-direction shear of a \emph{wide} strip) scales like $h^3$ and is a
+genuinely two-dimensional field that a 1D-shell genome cannot represent; both RM
+and Kirchhoff err on it ($-37\%$ thin to $+50$--$135\%$ thick), so it is a limit
+of the shell idealization rather than of either kinematics. $GA_2$ (the in-plane
+shear) is exact for the isotropic strip in both models; for the balanced
+$[45/\!-\!45]$ strip Kirchhoff stays within $0$--$7\%$ while the RM $C^0$
+kinematics under-predict it by $\approx33$--$46\%$. This RM residual is mesh- and
+quadrature-converged (unchanged under full vs.\ selectively-reduced integration
+and under doubling the genome resolution), i.e.\ it is intrinsic to the present RM
+open-section shear-warping representation, not a discretization artifact, and
+marks the open-section transverse-shear solve as the remaining item to refine.
 
 \begin{figure}[t]\centering
-\includegraphics[width=0.98\textwidth]{err_aniso.png}
-\caption{Anisotropic $[45/\!-\!45]$ tube: shell-vs-solid \% error vs $\hR$. The
-principal stiffnesses mirror the isotropic case; the ext--twist panel is the
-near-zero balanced-layup coupling (large relative error on a negligible term).}
-\label{fig:err_aniso}
+\includegraphics[width=0.96\textwidth]{err_strip_iso.png}
+\caption{Isotropic strip: \% error vs.\ the solid. $EA$, $EI_3$ exact; $GJ$ exact
+for RM and $+0.5$--$14\%$ for KF; $EI_2$ within $2\%$ for both; $GA_3$ off for
+both (1D-shell limit). OML $EI_2$/$GJ$ are reference offsets (off-scale).}
+\label{fig:err_strip_iso}
 \end{figure}
 
 \begin{figure}[t]\centering
-\includegraphics[width=0.78\textwidth]{abs_aniso.png}
-\caption{Anisotropic $[45/\!-\!45]$ tube: absolute stiffness vs $\hR$ (centre
-reference). Note the high $GJ$ ($\approx0.85\,EA$).}
-\label{fig:abs_aniso}
+\includegraphics[width=0.96\textwidth]{err_strip_aniso.png}
+\caption{Anisotropic $[45/\!-\!45]$ strip: \% error vs.\ the solid. $C_{44}$ ($GJ$):
+RM exact, KF rising to $+22\%$. $C_{22}$ ($GA_2$): KF within $7\%$, RM $\approx-40\%$
+(converged RM open-section residual). $C_{33}$ ($GA_3$): off for both (1D limit).
+$C_{55}$ ($EI_2$): RM soft (bend--twist), KF closer.}
+\label{fig:err_strip_aniso}
 \end{figure}
 
-\subsection{Reference surface: centre vs OML}
-The decisive finding is the reference dependence. The mid-surface reference
-keeps every principal stiffness within $1\%$ of the solid from thin to thick
-shells; the OML reference incurs an $O(\hR)$ error that reaches $10$--$20\%$ at
-$\hR=0.20$. The over-prediction of $EA$/$EI$ matches the $(1+h/2R)$ arc-length
-factor expected when the wall is integrated about the outer surface without the
-$(1+z/R)$ shell metric. For design use the wall should be referenced at its
-mid-surface.
+\subsection{Coupling terms ($C_{14}$, $C_{15}$, $C_{16}$, $C_{25}$, $C_{36}$, $C_{56}$)}
+Figs.~\ref{fig:coupl_tube_aniso}--\ref{fig:coupl_strip_iso} give the normalized
+coupling coefficients $|c_{ij}|=|C_{ij}|/\sqrt{C_{ii}C_{jj}}$ (the off-diagonal
+sign follows each model's axis convention---our solid and shell take opposite
+through-thickness normals---so the convention-independent comparison is the
+magnitude; the diagonal terms are sign-independent). Three facts organize the
+results, and they are consistent with classical lamination theory and the
+asymptotic thin-walled theory~\cite{deoyu2020,royyu2006,bagla2025}:
 
-\subsection{Reissner--Mindlin vs Kirchhoff}
-At the centre reference RM and Kirchhoff are both within $1\%$ and nearly
-coincide; the transverse-shear kinematics of RM matter most for $GA$ and for the
-OML reference, where the two models diverge (RM and KF bracket the solid $GJ$).
-For the recovered transverse-shear \emph{stress} (not a homogenization quantity)
-the RM model is essential, since Kirchhoff returns it as identically zero; that
-behaviour is documented in the companion paper.
+\begin{itemize}
+\item \textbf{$C_{15}$ (ext--$M_2$), $C_{16}$ (ext--$M_3$), $C_{56}$ ($M_2$--$M_3$)
+are \emph{identically zero} at the centroid} for both the circular and the
+rectangular section, \emph{regardless of the $[45/\!-\!45]$ layup}: they require a
+first moment ($C_{15},C_{16}$) or product of inertia ($C_{56}$) of the axial
+stiffness about the reference axes, which vanishes for a stiffness distribution
+symmetric about a centred circle / rectangle. In the data $C_{16},C_{56}$ sit at
+the $10^{-13}$ floor. $C_{15}$ is zero at the centre and jumps to $\approx0.96$
+\emph{only} at the OML reference---the textbook parallel-axis (Steiner) artifact
+of an off-centroid reference line, not a material coupling.
+\item \textbf{The genuine material couplings of the antisymmetric $[45/\!-\!45]$
+section are $C_{14}$ (extension--twist, from $B_{16}$) and $C_{25}/C_{36}$
+(transverse-shear--bending).} For the open strip they are large ($|c_{14}|\approx0.29$,
+$|c_{25}|\approx0.43$); the centred shells reproduce $C_{14}$ well (both RM and KF
+$\approx0.29$), and $C_{25}$ is captured by Kirchhoff ($\approx0.43$) but
+under-predicted by RM ($\approx0.13$)---the same open-section shear-warping
+residual seen in $GA_2$.
+\item \textbf{The tube's couplings are an order of magnitude smaller}
+($|c_{14}|,|c_{25}|,|c_{36}|\approx0.04$) because the closed wrap-around and the
+circumferential averaging of the local $B$-coupling suppress what the flat open
+strip expresses fully. All couplings vanish for the isotropic sections
+(Figs.~\ref{fig:coupl_tube_iso},~\ref{fig:coupl_strip_iso}).
+\end{itemize}
 
-% per-stiffness tables generated by bench_report.py
+\begin{figure}[t]\centering
+\includegraphics[width=0.96\textwidth]{coupl_tube_aniso.png}
+\caption{Anisotropic $[45/\!-\!45]$ \textbf{tube}: normalized couplings vs.\ the
+solid. Genuine $C_{14},C_{25},C_{36}\approx0.04$ (suppressed by closure);
+$C_{15},C_{16},C_{56}\approx0$.}
+\label{fig:coupl_tube_aniso}
+\end{figure}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.96\textwidth]{coupl_strip_aniso.png}
+\caption{Anisotropic $[45/\!-\!45]$ \textbf{strip}: $C_{14}$ ($\approx0.29$,
+captured by both models) and $C_{25}$ ($\approx0.43$, captured by KF,
+under-predicted by RM) are the genuine couplings; $C_{15}$ is the OML
+parallel-axis artifact; $C_{16},C_{36},C_{56}\approx0$.}
+\label{fig:coupl_strip_aniso}
+\end{figure}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.49\textwidth]{coupl_tube_iso.png}\hfill
+\includegraphics[width=0.49\textwidth]{coupl_strip_iso.png}
+\caption{Isotropic tube (left) and strip (right): all material couplings vanish;
+the only non-zero entry is the $C_{15}$ parallel-axis artifact at the OML
+reference of the strip.}
+\label{fig:coupl_strip_iso}
+\end{figure}
+
+% per-case Timoshenko tables (properties + thick-case error + full 6x6)
 \input{tables.tex}
 
+\FloatBarrier
 %================================================================
-\section{Discussion}
-Three points stand out. (i) The thin-walled MSG shell is not merely a thin-limit
-approximation: at the mid-surface reference it reproduces the 3D solid to $<1\%$
-well into the thick-shell range ($\hR=0.20$), for isotropic and balanced
-anisotropic walls alike, in both RM and Kirchhoff forms. (ii) The dominant
-error source for thick walls is the \emph{reference-surface} choice, not the
-shell kinematics: the OML reference omits the $(1+z/R)$ curvature metric and
-incurs an $O(\hR)$ bias, whereas the mid-surface reference is symmetric and the
-leading curvature term integrates to zero~\cite{yu2002rmshell}. (iii) RM and
-Kirchhoff agree at the centre; the model split that appears \emph{only} at the
-OML reflects the off-centric configuration activating a transverse-shear measure
-($2\gamma_{12}\!\sim\!\kappa_1 h$) that the Kirchhoff kinematics cannot
-carry~\cite{bagla2025}, which is why $GA$ and $GJ$---the shear-sensitive
-terms---are where the two models diverge. RM's standing advantage is in
-transverse-shear quantities ($GA$ and, in dehomogenization, the transverse-shear
-stress, which Kirchhoff returns as identically zero). The sub-$1\%$
-centre-reference residual on $GA$/$GJ$ is this Kirchhoff-vs-RM shear gap (and the
-FSDT shear approximation), not a missing shear-correction factor. The small
-extension--twist coupling of the balanced $[45/\!-\!45]$ tube ($A_{16}=A_{26}=0$,
-the $\pm45$ contributions cancelling~\cite{bagla2025}) is a reminder to judge
-couplings by absolute magnitude, not relative error; a single $-45^\circ$ ply,
-by contrast, carries an $O(1)$ tension--twist coupling.
+\section{Discussion and conclusions}
+For \textbf{closed} thin-walled sections (the tube) the MSG shell is not merely a
+thin-limit approximation: at the mid-surface reference it reproduces the full 3D
+solid Timoshenko stiffness to $<1\%$ well into the thick regime ($h/R=0.20$), for
+isotropic and balanced anisotropic walls, in both RM and Kirchhoff forms; the
+dominant error for thick walls is the OML reference choice (an $O(h/R)$
+curvature/arc-length bias), not the wall kinematics. The mid-surface reference is
+recommended.
 
-\medskip\noindent The physical interpretations above were cross-checked against
-the asymptotic shell/beam literature (the curvature Jacobian and $O(\hR)$
-energy ordering~\cite{yu2002rmshell}; the off-centric transverse-shear
-activation and balanced-layup decoupling~\cite{bagla2025}; the reference-centre
-invariants~\cite{yu2012vabs}).
+The \textbf{open} strip is the discriminating case. It cleanly separates terms the
+shell captures exactly ($EA$, $EI_3$, and---with the corrected $-2$ twist
+measure---$GJ$, where RM now matches St-Venant and beats Kirchhoff for thick
+sections) from terms that are intrinsically harder: the weak bending $EI_2$
+(bend--twist sensitive) and the transverse shear $GA$. Of the latter, the
+thickness-direction $GA_3$ is a fundamental 1D-shell limitation shared by both
+kinematics, whereas the in-plane $GA_2$ of the balanced strip is captured by
+Kirchhoff but under-predicted by the present RM open-section shear-warping
+representation---a converged, kinematic residual that is the natural target for
+the next refinement. In short: use the mid-surface reference; trust $EA$, $EI$ and
+(with the twist correction) $GJ$ in both models for open and closed sections; and
+treat the open-section $GA$ as the method-sensitive quantity, with RM's standing
+advantage being thick-section torsion and the recovery of transverse-shear stress
+in dehomogenization (documented in the companion paper).
 
-%================================================================
-\section{Conclusions}
-A thin-walled MSG shell cross-sectional analysis, referenced at the wall
-mid-surface, matches a 3D solid (VABS-equivalent) analysis to better than $1\%$
-on the full Timoshenko stiffness of isotropic and $[45/\!-\!45]$ circular tubes,
-across $\hR=0.01$--$0.20$, in both Reissner--Mindlin and Kirchhoff forms. The
-outer-mould-line reference introduces an $O(\hR)$ curvature/arc-length error that
-reaches $10$--$20\%$ for thick walls and splits the two shell models; the
-mid-surface reference is therefore recommended. The high torsional stiffness of
-the balanced anisotropic layup is captured to $<1\%$. These results delineate the
-validity envelope of the thin-walled shell model and confirm it is accurate far
-beyond the nominally ``thin'' regime when the wall reference is chosen correctly.
-
-\paragraph{Reproducibility.} All cases are generated by
-\texttt{bench\_solid.py} (FEniCS 2D-solid, WSL), \texttt{bench\_shell.py}
-(JAX MSG-TW shell), and \texttt{bench\_report.py} (tables and figures); raw
-$6\times6$ data are in \texttt{data/}.
+\paragraph{Reproducibility.}\begin{sloppypar}
+The FEniCS 2D-solid cases (WSL) are generated by
+\texttt{bench\_solid.py} and \texttt{bench\_strip\_solid.py}; the JAX MSG-TW shell
+cases by \texttt{bench\_shell.py} and \texttt{bench\_strip\_shell.py}; the tables
+and figures by \texttt{bench\_report.py}. Raw $6\times6$ data are in
+\texttt{data/}. The twist-measure correction is at \texttt{rm/msg\_rm.py}
+(\texttt{KAPPA12\_MACRO} $=-2$).\end{sloppypar}
 
 %================================================================
 % TODO: verify exact bibliographic details before distribution.
 \begin{thebibliography}{9}
-\bibitem{yu2002rmshell} W.~Yu, D.~H. Hodges, V.~V. Volovoi, Asymptotic
-generalization of Reissner--Mindlin theory: accurate three-dimensional recovery
-for composite shells, Comput. Methods Appl. Mech. Engrg. 191 (2002) 5087--5109.
+\bibitem{bagla2025} A.~Bagla, E.~Camarena, W.~Yu, Theory of arbitrarily-shaped
+thin-walled composite beams via the mechanics of structure genome, Proc. American
+Society for Composites (ASC), 2025.
+\bibitem{royyu2006} M.~Roy, W.~Yu, Thin-walled composite beam cross-sectional
+analysis, AIAA-2006-1647, 2006.
 \bibitem{yu2012vabs} W.~Yu, D.~H. Hodges, J.~C. Ho, Variational asymptotic beam
 sectional analysis --- an updated version, Int. J. Eng. Sci. 59 (2012) 40--64.
 \bibitem{deoyu2020} A.~Deo, W.~Yu, Thin-walled composite beam cross-sectional
-analysis using the mechanics of structure genome, AIAA SciTech, 2020.
-\bibitem{bagla2025} A.~Bagla et~al., Theory of arbitrarily-shaped thin-walled
-composite beams via the mechanics of structure genome, Proc. American Society
-for Composites (ASC), 2025.
+analysis using the mechanics of structure genome, Thin-Walled Structures 152 (2020).
 \end{thebibliography}
 
 \end{document}
