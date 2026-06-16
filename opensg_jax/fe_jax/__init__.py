@@ -35,6 +35,10 @@ from .msg_materials import (
     plate_stress_at_depth,
     shift_abd_reference,
 )
+from .msg_transverse_shear import (
+    transverse_shear_stiffness,
+    plate_8x8,
+)
 from .msg_mesh import (
     load_yaml,
     read_mesh,

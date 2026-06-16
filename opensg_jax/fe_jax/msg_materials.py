@@ -9,6 +9,7 @@ Provides:
 """
 
 import numpy as np
+from .msg_transverse_shear import transverse_shear_stiffness, plate_8x8
 
 
 def build_stiffness_6x6(E, G, nu):
@@ -96,13 +97,22 @@ def _plate_B(nodes_xi, xi, he):
 
 
 def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
-                       return_warping=False, elem_order=2):
-    """6x6 ABD plate stiffness via MSG 1D through-thickness SG.
+                       return_warping=False, elem_order=2, shear_refined=False):
+    """Plate stiffness via MSG 1D through-thickness SG.
+
+    By default returns the 6x6 ABD (the Kirchhoff plate law). Set
+    ``shear_refined=True`` to instead return the 8x8 Reissner-Mindlin plate
+    stiffness [[A,B,0],[B,D,0],[0,0,G]], i.e. the same 6x6 ABD plus the 2x2
+    transverse-shear block G (the MSG/coupling-aware value, see
+    :func:`msg_transverse_shear.transverse_shear_stiffness`). The 6x6 default is
+    untouched so the Kirchhoff path is unaffected; the 8x8 is the RM-model input.
 
     Uses quadratic Lagrange elements (3-node, 3-pt Gauss). With n_per_layer=1
     the result is exact to machine precision for uniform layers.
 
-    Reference surface at the bottom face (x=0, outer layer).
+    Reference surface at the bottom face (x=0, outer layer). The transverse-shear
+    block G is reference-independent, so a later parallel-axis shift of the ABD
+    (e.g. to the mid-surface) leaves the 8x8's G unchanged.
 
     Variational principle:
       gamma_h(v) = [0, 0, dv3/dx, dv2/dx, dv1/dx, 0]
@@ -122,7 +132,8 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
 
     Returns
     -------
-    D_eff : (6,6) ndarray — MSG ABD stiffness
+    stiff : (6,6) MSG ABD stiffness (default), or (8,8) RM plate stiffness
+            [[A,B,0],[B,D,0],[0,0,G]] when ``shear_refined=True``
     mass  : [mu, mu*xm3, i22] — mass per unit area, first/second moment
     warp  : dict (only if return_warping) — {V0, node_x, elem_layer, C_layers}
             the plate warping V0 (ndofs,6) and geometry needed to recover the
@@ -212,12 +223,18 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
     D_eff = D_ee + V0.T @ F_load
 
     xm3 = mu_x / mu if mu > 0 else 0.0
+
+    stiff = D_eff
+    if shear_refined:                            # RM: append the 2x2 transverse-shear G
+        Gmat = transverse_shear_stiffness(thick, angles_deg, mat_names, material_db)[0]
+        stiff = plate_8x8(D_eff, Gmat)           # 8x8 [[A,B,0],[B,D,0],[0,0,G]]
+
     if return_warping:
         warp = {"V0": V0, "node_x": node_x, "elem_layer": elem_layer,
                 "C_layers": C_layers, "elem_order": p,
                 "angles": list(angles_deg)}
-        return D_eff, [mu, mu * xm3, i22_m], warp
-    return D_eff, [mu, mu * xm3, i22_m]
+        return stiff, [mu, mu * xm3, i22_m], warp
+    return stiff, [mu, mu * xm3, i22_m]
 
 
 def plate_dehom_strain(warp, shell_strain, n_eval_per_elem=3):
