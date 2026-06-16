@@ -33,10 +33,22 @@ def _ply_Q_and_G(E, G, nu, theta_deg):
     return Qb11, Qb22, Gbar
 
 
-def transverse_shear_stiffness(thick, angles, mat_names, mat_db, nz_per_ply=40):
+def transverse_shear_stiffness(thick, angles, mat_names, mat_db, nz_per_ply=40,
+                               coupled=False):
     """2x2 transverse-shear stiffness G_2x2 (rows/cols = [2g13, 2g23]) and the
     shear-flow shapes for stress recovery.  Returns (Gmat, recover) where
-    recover(z, V) -> [sigma13, sigma23]."""
+    recover(z, V) -> [sigma13, sigma23].
+
+    ``coupled`` selects the transverse-shear constitutive route:
+      * False (default) -- the FSDT / Whitney(1973) energy-equivalence stiffness,
+        per direction with the diagonal G13'/G23', F = D_eff^2 / INT g^2/G dz.
+      * True -- the coupling-aware ("no-shear-correction-factor") MSG form: the
+        full 2x2 from the laminate complementary shear energy with the FULL
+        through-thickness shear-flexibility Gbar^{-1}(z),
+        F = M^{-1}, M_ab = INT ghat_a ghat_b [Gbar^{-1}]_ab dz, ghat = g/D_eff.
+        Identical to the FSDT diagonal when Gbar(z) is diagonal (G13=G23, or any
+        specially-orthotropic wall); it differs only when the rotated transverse
+        shear couples (G13 != G23 with off-axis plies)."""
     nlay = len(thick)
     zb = np.concatenate([[0.0], np.cumsum(thick)])     # ply boundaries from OML=0
     htot = zb[-1]
@@ -61,7 +73,14 @@ def transverse_shear_stiffness(thick, angles, mat_names, mat_db, nz_per_ply=40):
 
     Fx, gx, Dx = direction(Qb11, Gb[:, 0, 0])          # 2g13 : G13'
     Fy, gy, Dy = direction(Qb22, Gb[:, 1, 1])          # 2g23 : G23'
-    Gmat = np.array([[Fx, 0.0], [0.0, Fy]])            # diagonal (orthotropic Y=0)
+    if coupled:
+        gh1, gh2 = gx/Dx, gy/Dy                        # normalized shear-flow shapes
+        Ginv = np.linalg.inv(Gb)                       # (N,2,2) full shear flexibility
+        M = np.array([[np.sum(gh1*gh1*Ginv[:, 0, 0]*dz), np.sum(gh1*gh2*Ginv[:, 0, 1]*dz)],
+                      [np.sum(gh1*gh2*Ginv[:, 1, 0]*dz), np.sum(gh2*gh2*Ginv[:, 1, 1]*dz)]])
+        Gmat = np.linalg.inv(M)                         # full 2x2 (couples if Gbar off-diag)
+    else:
+        Gmat = np.array([[Fx, 0.0], [0.0, Fy]])        # diagonal (orthotropic Y=0)
 
     def recover(z, V):                                 # transverse-shear stress at depth z
         i = min(int(z/htot*len(zs)), len(zs)-1)
