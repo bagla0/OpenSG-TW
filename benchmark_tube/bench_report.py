@@ -18,6 +18,13 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Wedge, FancyArrow
 
+# Larger fonts so the figures stay legible when shrunk to the text width.
+plt.rcParams.update({
+    "font.size": 15, "axes.titlesize": 18, "axes.labelsize": 16,
+    "xtick.labelsize": 14, "ytick.labelsize": 14, "legend.fontsize": 13,
+    "figure.titlesize": 19, "lines.linewidth": 2.4, "lines.markersize": 9,
+})
+
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "data")
 REP = os.path.join(HERE, "report"); FIG = os.path.join(REP, "figures")
@@ -72,9 +79,9 @@ def case_data(solid_csv, shell_csv, mat):
 
 # ============================================================ plots
 def plot_errors(geom, mat, xlab, solid, shell, hrs, fname):
-    fig, ax = plt.subplots(2, 3, figsize=(13.5, 7.6))
+    fig, ax = plt.subplots(3, 2, figsize=(13.0, 15.0))
     fig.suptitle(f"{PRETTY[(geom, mat)]}: shell-vs-solid \\% error in the "
-                 f"Timoshenko stiffness (solid = 0 line)", fontsize=13, fontweight="bold")
+                 f"Timoshenko stiffness (solid = 0 line)", fontweight="bold")
     for idx, (i, j, cij, eng) in enumerate(DIAG):
         a = ax.flat[idx]
         allvals, finite = {}, []
@@ -90,19 +97,19 @@ def plot_errors(geom, mat, xlab, solid, shell, hrs, fname):
         M = max(3.0, 1.25*max(abs(v) for v in finite)) if finite else 30.0
         clipped = False
         for lbl, (ys, col, ls, mk) in allvals.items():
-            a.plot(hrs, ys, color=col, ls=ls, marker=mk, ms=6, lw=1.8, label=lbl, clip_on=True)
+            a.plot(hrs, ys, color=col, ls=ls, marker=mk, label=lbl, clip_on=True)
             if np.any(np.abs(ys[np.isfinite(ys)]) > M):
                 clipped = True
         a.set_ylim(-M, M)
-        a.axhline(0, color="0.45", lw=1.0, zorder=0)
-        a.set_title(f"${cij}$ (${eng}$)", fontsize=12)
+        a.axhline(0, color="0.45", lw=1.2, zorder=0)
+        a.set_title(f"${cij}$ (${eng}$)")
         a.set_xlabel(f"${xlab}$"); a.set_ylabel("\\% error vs solid")
         a.grid(True, ls=":", alpha=0.6)
         if clipped:
             a.text(0.97, 0.04, "OML off-scale\n(parallel-axis; see table)", transform=a.transAxes,
-                   ha="right", va="bottom", fontsize=7, style="italic", color="0.35")
-    ax.flat[0].legend(fontsize=9, loc="best", framealpha=0.9)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+                   ha="right", va="bottom", fontsize=12, style="italic", color="0.35")
+    ax.flat[0].legend(loc="best", framealpha=0.9)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(os.path.join(FIG, fname), dpi=150); plt.close(fig)
 
 
@@ -113,23 +120,23 @@ def plot_couplings(geom, mat, xlab, solid, shell, hrs, fname):
     def coef(M, i, j):
         d = np.sqrt(abs(M[i, i]*M[j, j]))
         return abs(M[i, j])/d if d > 0 else np.nan
-    fig, ax = plt.subplots(2, 3, figsize=(13.5, 7.6))
+    fig, ax = plt.subplots(3, 2, figsize=(13.0, 15.0))
     fig.suptitle(f"{PRETTY[(geom, mat)]}: normalized coupling "
                  f"$|c_{{ij}}|=|C_{{ij}}|/\\sqrt{{C_{{ii}}C_{{jj}}}}$ "
-                 f"(shell vs FEniCS-solid)", fontsize=13, fontweight="bold")
+                 f"(shell vs FEniCS-solid)", fontweight="bold")
     for idx, (i, j, cij, eng) in enumerate(COUPLINGS):
         a = ax.flat[idx]
         sv = [coef(solid[(mat, str(hr))][1], i, j) for hr in hrs]
-        a.plot(hrs, sv, color="k", ls="-", marker="D", ms=7, lw=2.4,
+        a.plot(hrs, sv, color="k", ls="-", marker="D", ms=11, lw=2.8,
                label="FEniCS-solid", zorder=5)
         for lbl, ref, mdl, col, ls, mk in METHODS:
             ys = [coef(shell[(mat, str(hr), ref, mdl)][1], i, j) for hr in hrs]
-            a.plot(hrs, ys, color=col, ls=ls, marker=mk, ms=6, lw=1.8, label=lbl)
-        a.set_title(f"${cij}$ (${eng}$)", fontsize=12)
+            a.plot(hrs, ys, color=col, ls=ls, marker=mk, label=lbl)
+        a.set_title(f"${cij}$ (${eng}$)")
         a.set_xlabel(f"${xlab}$"); a.set_ylabel("$|c_{ij}|$")
         a.set_ylim(bottom=0.0); a.grid(True, ls=":", alpha=0.6)
-    ax.flat[0].legend(fontsize=8.5, loc="best", framealpha=0.9)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    ax.flat[0].legend(loc="best", framealpha=0.9)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(os.path.join(FIG, fname), dpi=150); plt.close(fig)
 
 
@@ -224,14 +231,14 @@ def _genome_panel(ax, kind, R=1.0, H=0.28, W=2.4):
 
 
 def geometry_figure(kind, fname):
-    fig, ax = plt.subplots(1, 3, figsize=(13.5, 4.4))
+    fig, ax = plt.subplots(1, 3, figsize=(16.0, 5.6))
     _genome_panel(ax[0], kind)
     _layup_panel(ax[1])
     _coarse_band_mesh(ax[2], kind)
     ttl = "Circular tube" if kind == "tube" else "Flat plate-strip"
     fig.suptitle(f"{ttl}: shell genome, $[45/\\!-\\!45]$ material orientation, and "
-                 f"the matching 3D-solid cross-section", fontsize=12, fontweight="bold")
-    fig.tight_layout(rect=[0, 0, 1, 0.94])
+                 f"the matching 3D-solid cross-section", fontsize=15, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(os.path.join(FIG, fname), dpi=150); plt.close(fig)
 
 
