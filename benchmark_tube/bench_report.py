@@ -30,6 +30,40 @@ DATA = os.path.join(HERE, "data")
 REP = os.path.join(HERE, "report"); FIG = os.path.join(REP, "figures")
 os.makedirs(FIG, exist_ok=True)
 
+# geometry + isotropic material for the analytic closed forms (R=tube radius,
+# W=strip width; both = 1 m, matching the drivers)
+R, W = 1.0, 1.0
+ISO_E, ISO_NU = 70e9, 0.3
+ISO_G = ISO_E/(2*(1+ISO_NU))
+
+
+def iso_analytic_timo(geom, hr):
+    """Closed-form isotropic Timoshenko 6 diagonals [EA,GA2,GA3,GJ,EI2,EI3].
+
+    Transverse shear uses the MSG plate transverse-shear G matrix, which for an
+    isotropic wall is G_plate = 5/6 * G * h (= transverse_shear_stiffness for an
+    isotropic layer, no shear-correction factor assumed).
+      Tube (annulus, ri=R-h/2, ro=R+h/2): exact EA=E*A, EI=E*I, GJ=G*J=2G*I. The
+        CLOSED-cell beam transverse shear is the wall membrane (Bredt) shear, not
+        the through-thickness plate G; the thin-tube value is GA=1/2*G*A.
+      Strip (rectangle W x h): EA=E*W*h, EI2=E*W*h^3/12 (about the wide axis),
+        EI3=E*h*W^3/12, exact St-Venant rectangular torsion J, and the MSG-plate-G
+        transverse shear GA = G_plate * W = (5/6 G h) * W.  This is exact for GA2;
+        GA3 of a *wide* strip is a 2D plate quantity the 1D plate-G over-predicts
+        (only the 3D solid captures it)."""
+    E, nu, G = ISO_E, ISO_NU, ISO_G
+    if geom == "tube":
+        H = hr*R; ri, ro = R-H/2, R+H/2
+        A = np.pi*(ro**2-ri**2); I = np.pi/4*(ro**4-ri**4); J = 2*I
+        GA = 0.5*G*A                                       # thin tube: wall membrane shear
+        return np.array([E*A, GA, GA, G*J, E*I, E*I])
+    H = hr*W; A = W*H
+    a, b = W, H; bb = b/a
+    Jr = a*b**3*(1.0/3 - 0.21*bb*(1 - bb**4/12))          # exact rectangle torsion
+    G_plate = 5.0/6*G*H                                     # MSG plate transverse-shear G
+    GA = G_plate*W                                          # = 5/6 G W h
+    return np.array([E*A, GA, GA, G*Jr, E*W*H**3/12, E*H*W**3/12])
+
 # six principal Timoshenko stiffnesses: (matrix index i, j) and (Cij, engineering)
 DIAG = [(0, 0, "C_{11}", "EA"), (1, 1, "C_{22}", "GA_2"), (2, 2, "C_{33}", "GA_3"),
         (3, 3, "C_{44}", "GJ"), (4, 4, "C_{55}", "EI_2"), (5, 5, "C_{66}", "EI_3")]
@@ -99,6 +133,15 @@ def plot_errors(geom, mat, xlab, solid, shell, hrs, fname):
         for lbl, (ys, col, ls, mk) in allvals.items():
             a.plot(hrs, ys, color=col, ls=ls, marker=mk, label=lbl, clip_on=True)
             if np.any(np.abs(ys[np.isfinite(ys)]) > M):
+                clipped = True
+        if mat == "iso":                                   # analytic closed form vs solid
+            ya = []
+            for hr in hrs:
+                sv = solid[(mat, str(hr))][1][i, j]
+                av = iso_analytic_timo(geom, hr)[idx]
+                ya.append(100*(av-sv)/sv if abs(sv) > 1 else np.nan)
+            a.plot(hrs, ya, color="0.1", ls=":", marker="P", label="analytic", clip_on=True)
+            if np.any(np.abs(np.array(ya)[np.isfinite(ya)]) > M):
                 clipped = True
         a.set_ylim(-M, M)
         a.axhline(0, color="0.45", lw=1.2, zorder=0)
@@ -331,6 +374,49 @@ def summary_table(allcase):
         f.write("\n".join(t))
 
 
+def analytic_tables(allcase):
+    """Isotropic Timoshenko stiffness: closed-form ANALYTIC as a column next to
+    FEniCS-solid and the MSG shell (RM, KF; centre), for the strip and the tube,
+    at the thinnest and thickest section (the h/R / h/W endpoints)."""
+    tex = []
+    for geom, mat, xlab, solid, shell, hrs in allcase:
+        if mat != "iso":
+            continue
+        name = PRETTY[(geom, mat)]; tag = f"{geom}_iso"
+        for hsel in [hrs[0], hrs[-1]]:
+            an = iso_analytic_timo(geom, hsel)
+            tex += [r"\begin{table}[t]\centering",
+                    rf"\caption{{{name}: isotropic Timoshenko stiffness at "
+                    rf"${xlab}={hsel:.2f}$ --- closed-form \textbf{{analytic}} vs "
+                    rf"FEniCS-solid vs MSG shell (RM, KF; centre), SI units. The "
+                    rf"analytic transverse shear uses the MSG plate $G=\tfrac56 Gh$.}}",
+                    rf"\label{{tab:{tag}_analytic_{int(hsel*100)}}}",
+                    r"\resizebox{\textwidth}{!}{%",
+                    r"\begin{tabular}{lrrrrr}\toprule",
+                    r"term & analytic & FEniCS-solid & RM (centre) & KF (centre) "
+                    r"& analytic vs solid\\\midrule"]
+            for idx, (i, j, cij, eng) in enumerate(DIAG):
+                sv = solid[("iso", str(hsel))][1][i, j]
+                rc = shell[("iso", str(hsel), "center", "RM")][1][i, j]
+                kc = shell[("iso", str(hsel), "center", "KF")][1][i, j]
+                if geom == "strip" and idx == 2:           # GA3: 2D wide-strip, n/a
+                    pe = r"$\dagger$"
+                else:
+                    pe = f"{100*(an[idx]-sv)/sv:+.2f}\\%" if abs(sv) > 1 else "--"
+                tex.append(f"${cij}$ (${eng}$) & {fmt(an[idx])} & {fmt(sv)} & "
+                           f"{fmt(rc)} & {fmt(kc)} & {pe}\\\\")
+            tex += [r"\bottomrule\end{tabular}}"]
+            if geom == "strip":
+                tex.append(r"\\[2pt]{\footnotesize $\dagger$ The compact $G\!A_3$ "
+                           r"($=\tfrac56 GWh$) over-predicts the wide-strip "
+                           r"thickness-direction shear, a 2D plate quantity no 1D "
+                           r"model (analytic or shell) captures; only the 3D solid "
+                           r"resolves it.}")
+            tex += [r"\end{table}", ""]
+    with open(os.path.join(REP, "analytic_tables.tex"), "w") as f:
+        f.write("\n".join(tex))
+
+
 # ============================================================ main
 def main():
     allcase = []
@@ -343,6 +429,7 @@ def main():
     geometry_figure("strip", "geom_strip.png")
     tables(allcase)
     summary_table(allcase)
+    analytic_tables(allcase)
 
     print("=== verification summary: % error vs solid (diagonal Timoshenko) ===")
     for geom, mat, xlab, solid, shell, hrs in allcase:
@@ -360,6 +447,17 @@ def main():
                 pe = lambda x: 100*(x-sv)/sv if abs(sv) > 1 else float('nan')
                 line += f" |{pe(rc):+5.1f}/{pe(kc):+5.1f}/{pe(ro):+5.1f}/{pe(ko):+5.1f}"
             print(line)
+
+    print("\n=== ANALYTIC vs solid (isotropic, % of solid) ===")
+    for geom in ["tube", "strip"]:
+        solid, _, hrs = case_data(*({"tube": ("solid_6x6.csv", "shell_6x6.csv"),
+                                     "strip": ("strip_solid_6x6.csv", "strip_shell_6x6.csv")}[geom]), "iso")
+        print(f"\n## {geom}/iso   " + "".join(f"{eng:>11s}" for *_, eng in DIAG))
+        for hr in hrs:
+            an = iso_analytic_timo(geom, hr)
+            sv = np.array([solid[("iso", str(hr))][1][i, i] for i in range(6)])
+            print(f" h={hr:.2f}  " + "".join(f"{100*(an[k]-sv[k])/sv[k]:+10.2f}%" for k in range(6)))
+
     print("\nwrote report/tables.tex, err_{tube,strip}_{iso,aniso}.png, "
           "geom_{tube,strip}.png")
 
