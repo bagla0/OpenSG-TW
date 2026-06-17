@@ -196,10 +196,14 @@ unknowns are $\{w_1,w_2,w_3,\omega_1,\omega_2\}$ and the strain field involves
 only \emph{first} derivatives, so standard $C^{0}$ Lagrange elements suffice.
 The full thin-walled strain field for both models is given in
 Section~\ref{sec:strainfield}. There, the wall twisting curvature carries the
-macroscopic twist $\kappa_1$ with coefficient $-1$ for the RM model (the
-remainder carried by the $\dot\omega_2$ fluctuation), in contrast to $-2$ for
-the Kirchhoff model; using the Kirchhoff value in the RM model corrupts the
-torsional stiffness $GJ$.
+macroscopic twist $\kappa_1$ with the full plate-twist coefficient $-2$
+($\kappa_{12}{+}\kappa_{21}=-2\kappa_1$), the same as for the Kirchhoff model;
+the independent rotation fluctuation $\dot\omega_2$ then supplies only a
+higher-order correction, since on a thin wall its transverse-shear stiffness
+suppresses it. (Assigning only $-1$ to the macro---intending the $\dot\omega_2$
+fluctuation to carry the remaining $-\kappa_1$---under-predicts the torsional
+stiffness $GJ$, because that fluctuation is shear-locked; the effect is hidden
+for a closed cell, whose $GJ$ is membrane-dominated.)
 
 Because $C^{0}$ interpolation of the RM transverse-shear strains is prone to
 shear locking as $\hR\to0$, the transverse-shear energy is integrated with a
@@ -251,7 +255,7 @@ $\{\gamma_{11},\kappa_1,\kappa_2,\kappa_3\}$ ($\kappa_1$ the twist),
 2\eps_{12}=\dot{w}_1+\kappa_1 R_n+\underline{\dot{x}_\eta w_\eta'},\\
 \kappa_{11}&=\dot{x}_\eta\kappa_\eta+\omega_2'/\dot{x}_2+\cdots,\qquad
 \kappa_{22}=-\dot{\omega}_1,\\
-\kappa_{12}{+}\kappa_{21}&=-\kappa_1+\frac{\dot{\omega}_2}{\dot{x}_2}
+\kappa_{12}{+}\kappa_{21}&=-2\kappa_1+\frac{\dot{\omega}_2}{\dot{x}_2}
 +\frac{k_{22}}{2}\Big(\frac{\dot{x}_3}{\dot{x}_2}\Big)^{\!2}(\dot{w}_1-\kappa_1 R_n)
 \nonumber\\ &\quad
 -k_{22}\frac{\dot{x}_3}{\dot{x}_2^{2}}\omega_2-\omega_1'-\cdots,\\
@@ -269,8 +273,9 @@ refinement. Two features distinguish the RM field: (i) $\kappa_{22}=-\dot
 derivatives of the fluctuations, so $C^0$ interpolation suffices; and (ii) the
 transverse shears $2\gamma_{13},2\gamma_{23}$ are retained, carrying
 $\omega_1,\omega_2$. The coefficient of the macroscopic twist $\kappa_1$ in
-$\kappa_{12}{+}\kappa_{21}$ is $-1$ (the remainder carried by $\dot\omega_2$),
-in contrast to $-2$ for Kirchhoff.
+$\kappa_{12}{+}\kappa_{21}$ is $-2$ (the full plate twist), the same as Kirchhoff;
+the $\dot\omega_2$ fluctuation contributes only a shear-suppressed higher-order
+correction on a thin wall.
 
 \paragraph{Kirchhoff reduction.} Setting $2\gamma_{13}=2\gamma_{23}=0$ and
 expressing the wall rotation through the mid-surface slope recovers the
@@ -464,12 +469,12 @@ term & TW-RM & TW-Kirchhoff & solid & classical & err (RM/Kirch) \\
 \midrule
 $C_{11}$ (EA)            & $4.7835\!\times\!10^{7}$ & $4.7853\!\times\!10^{7}$ & $4.7843\!\times\!10^{7}$ & $4.7785\!\times\!10^{7}$ & $-0.02\%/{+}0.02\%$ \\
 $C_{14}$ (ext--twist)    & $-9.3125\!\times\!10^{5}$ & $-9.2971\!\times\!10^{5}$ & $-9.3459\!\times\!10^{5}$ & $-9.3755\!\times\!10^{5}$ & $-0.36\%/{-}0.52\%$ \\
-$C_{22}$ (GA$_2$)        & $1.4502\!\times\!10^{7}$ & $1.4450\!\times\!10^{7}$ & $1.4548\!\times\!10^{7}$ & --- & $-0.31\%/{-}0.67\%$ \\
-$C_{33}$ (GA$_3$)        & $1.4502\!\times\!10^{7}$ & $1.4473\!\times\!10^{7}$ & $1.4548\!\times\!10^{7}$ & --- & $-0.31\%/{-}0.51\%$ \\
-$C_{25}$ (shear--bend)   & $4.6976\!\times\!10^{5}$ & $4.6716\!\times\!10^{5}$ & $4.6855\!\times\!10^{5}$ & --- & $+0.26\%/{-}0.30\%$ \\
-$C_{44}$ (GJ)            & $1.4727\!\times\!10^{5}$ & $1.4799\!\times\!10^{5}$ & $1.4820\!\times\!10^{5}$ & $1.4896\!\times\!10^{5}$ & $-0.62\%/{-}0.14\%$ \\
-$C_{55}$ (EI$_2$)        & $1.2266\!\times\!10^{5}$ & $1.2243\!\times\!10^{5}$ & $1.2281\!\times\!10^{5}$ & $1.0710\!\times\!10^{5}$ & $-0.12\%/{-}0.31\%$ \\
-$C_{66}$ (EI$_3$)        & $1.2266\!\times\!10^{5}$ & $1.2247\!\times\!10^{5}$ & $1.2281\!\times\!10^{5}$ & $1.0710\!\times\!10^{5}$ & $-0.12\%/{-}0.27\%$ \\
+$C_{22}$ (GA$_2$)        & $1.4504\!\times\!10^{7}$ & $1.4450\!\times\!10^{7}$ & $1.4548\!\times\!10^{7}$ & --- & $-0.30\%/{-}0.67\%$ \\
+$C_{33}$ (GA$_3$)        & $1.4504\!\times\!10^{7}$ & $1.4473\!\times\!10^{7}$ & $1.4548\!\times\!10^{7}$ & --- & $-0.30\%/{-}0.51\%$ \\
+$C_{25}$ (shear--bend)   & $4.6958\!\times\!10^{5}$ & $4.6716\!\times\!10^{5}$ & $4.6855\!\times\!10^{5}$ & --- & $+0.22\%/{-}0.30\%$ \\
+$C_{44}$ (GJ)            & $1.4822\!\times\!10^{5}$ & $1.4799\!\times\!10^{5}$ & $1.4820\!\times\!10^{5}$ & $1.4896\!\times\!10^{5}$ & $+0.01\%/{-}0.14\%$ \\
+$C_{55}$ (EI$_2$)        & $1.2269\!\times\!10^{5}$ & $1.2243\!\times\!10^{5}$ & $1.2281\!\times\!10^{5}$ & $1.0710\!\times\!10^{5}$ & $-0.10\%/{-}0.31\%$ \\
+$C_{66}$ (EI$_3$)        & $1.2269\!\times\!10^{5}$ & $1.2247\!\times\!10^{5}$ & $1.2281\!\times\!10^{5}$ & $1.0710\!\times\!10^{5}$ & $-0.10\%/{-}0.27\%$ \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -606,9 +611,10 @@ Table~\ref{tab:st15} compares the principal Timoshenko stiffnesses of the
 present shell models against VABS. The axial, shear and flapwise-bending
 stiffnesses ($EA$, $GA_2$, $GA_3$, $EI_2$) agree to within $\sim$2--10\%, and
 the extension--bending coupling $C_{16}$ to within 9\%; the relative norm over
-all twelve non-zero terms is $5.6\%$ for both shell models. The RM model
-improves the torsional stiffness ($GJ$ to $+2.2\%$ versus $-3.6\%$ for
-Kirchhoff), consistent with its retention of transverse shear. The chordwise
+all twelve non-zero terms is $5.6\%$ for both shell models. Both models capture
+the torsional stiffness to within $\sim$5\% ($GJ$: $-4.9\%$ for RM, $-3.6\%$ for
+Kirchhoff); for this closed, membrane-dominated section the two are comparable,
+as expected (the RM/Kirchhoff torsion split is an open-section effect). The chordwise
 bending stiffness $EI_3$ is high by $\sim$14\%---the same thick-section
 signature quantified for the tube in Section~\ref{sec:conv}, here because the
 deep root section is locally thick relative to its radius of curvature.
@@ -627,7 +633,7 @@ $C_{11}$ (EA)        & $1.3326\!\times\!10^{10}$ & $1.3326\!\times\!10^{10}$ & $
 $C_{16}$ (ext--bend) & $-3.241\!\times\!10^{9}$  & $-3.242\!\times\!10^{9}$  & $-3.571\!\times\!10^{9}$  & $-9.2\%/{-}9.2\%$\\
 $C_{22}$ (GA$_2$)    & $4.409\!\times\!10^{8}$   & $4.462\!\times\!10^{8}$   & $4.580\!\times\!10^{8}$   & $-3.7\%/{-}2.6\%$\\
 $C_{33}$ (GA$_3$)    & $9.507\!\times\!10^{7}$   & $9.627\!\times\!10^{7}$   & $1.055\!\times\!10^{8}$   & $-9.9\%/{-}8.8\%$\\
-$C_{44}$ (GJ)        & $1.595\!\times\!10^{8}$   & $1.504\!\times\!10^{8}$   & $1.560\!\times\!10^{8}$   & $+2.2\%/{-}3.6\%$\\
+$C_{44}$ (GJ)        & $1.484\!\times\!10^{8}$   & $1.504\!\times\!10^{8}$   & $1.560\!\times\!10^{8}$   & $-4.9\%/{-}3.6\%$\\
 $C_{55}$ (EI$_2$)    & $1.6715\!\times\!10^{9}$  & $1.6716\!\times\!10^{9}$  & $1.6630\!\times\!10^{9}$  & $+0.5\%/{+}0.5\%$\\
 $C_{66}$ (EI$_3$)    & $5.809\!\times\!10^{9}$   & $5.809\!\times\!10^{9}$   & $5.107\!\times\!10^{9}$   & $+13.8\%/{+}13.7\%$\\
 \bottomrule
@@ -712,7 +718,7 @@ $C_{11}$ (EA)        & $1.4094\!\times\!10^{10}$ & $1.4095\!\times\!10^{10}$ & $
 $C_{16}$ (ext--bend) & $-3.829\!\times\!10^{9}$  & $-3.830\!\times\!10^{9}$  & $-4.371\!\times\!10^{9}$  & $-12.4\%/{-}12.4\%$\\
 $C_{22}$ (GA$_2$)    & $5.234\!\times\!10^{8}$   & $5.272\!\times\!10^{8}$   & $5.441\!\times\!10^{8}$   & $-3.8\%/{-}3.1\%$\\
 $C_{33}$ (GA$_3$)    & $1.300\!\times\!10^{8}$   & $1.313\!\times\!10^{8}$   & $1.282\!\times\!10^{8}$   & $+1.5\%/{+}2.4\%$\\
-$C_{44}$ (GJ)        & $2.588\!\times\!10^{8}$   & $2.640\!\times\!10^{8}$   & $2.425\!\times\!10^{8}$   & $+6.7\%/{+}8.9\%$\\
+$C_{44}$ (GJ)        & $2.616\!\times\!10^{8}$   & $2.640\!\times\!10^{8}$   & $2.425\!\times\!10^{8}$   & $+7.9\%/{+}8.9\%$\\
 $C_{55}$ (EI$_2$)    & $2.620\!\times\!10^{9}$   & $2.621\!\times\!10^{9}$   & $2.443\!\times\!10^{9}$   & $+7.2\%/{+}7.3\%$\\
 $C_{66}$ (EI$_3$)    & $7.810\!\times\!10^{9}$   & $7.811\!\times\!10^{9}$   & $7.185\!\times\!10^{9}$   & $+8.7\%/{+}8.7\%$\\
 \bottomrule
