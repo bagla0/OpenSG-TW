@@ -8,7 +8,7 @@ curvatures carry second contour derivatives of w, so the V1 (shear-warping)
 condensation alone produces the beam transverse-shear GA.  Prints the 6x6 at the
 centre and the OML references.  Order [ext, shear2, shear3, twist, bend2, bend3].
 
-The driver `solve_tw_from_yaml` runs the full Kirchhoff pipeline internally:
+`solve_tw_from_yaml` runs the full Kirchhoff pipeline internally:
   per-ply ABD (1D SG, parallel-axis shifted to the reference) -> Hermite mesh
   (corner value+slope DOFs) -> assemble_system_matrices_hermite (Dhh,Dhe,Dee,
   Dll,Dhl,Dle by energy autodiff) -> build_constraints_hermite (C, Psi) ->
@@ -21,8 +21,8 @@ Run (Windows):
 """
 import os, sys
 import numpy as np
-HERE = os.path.dirname(__file__)
-sys.path.insert(0, os.path.join(HERE, "..", "opensg_jax"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "opensg_jax"))
 import jax; jax.config.update("jax_enable_x64", True)
 from fe_jax.msg_hermite import solve_tw_from_yaml
 

@@ -1,21 +1,21 @@
 """
-Write the two cross-section input files for the isotropic plate-strip example:
+Write the two cross-section input files for the isotropic plate-strip example
+(into this Claude_code directory):
 
-  strip_iso_1D.yaml     -- the 1D shell structure-genome (a straight line of
-                           nodes along the width, with the wall laminate and the
-                           local frame).  Read by strip_RM.py / strip_Kirchhoff.py.
-  strip_iso_solid.yaml  -- the 2D solid cross-section (a rectangle of quad
-                           elements).  Read by the FEniCS 2D-solid analysis
-                           (VABS-equivalent), e.g. opensg SolidBounMesh.
+  strip_iso_1D.yaml     -- 1D shell structure-genome (straight line of nodes along
+                           the width, with the wall laminate and the local frame).
+                           Read by strip_RM.py / strip_Kirchhoff.py.
+  strip_iso_solid.yaml  -- 2D solid cross-section (rectangle of quad elements).
+                           Read by the FEniCS 2D-solid analysis strip_solid.py.
 
 Strip: width W=1 m, thickness h = HW*W, isotropic E=70 GPa, nu=0.3.
-Change HW below (e.g. 0.01 thin, 0.20 thick) and re-run to regenerate both files.
+Change HW below (0.01 thin, 0.20 thick) and re-run to regenerate both files.
 """
 import os
 import numpy as np
 import yaml as _yaml
 
-HERE = os.path.dirname(__file__)
+HERE = os.path.dirname(os.path.abspath(__file__))
 W = 1.0
 HW = 0.01                      # h/W (thin); set 0.20 for thick
 H = HW*W
@@ -26,8 +26,8 @@ NC, NR = 120, 16               # width x thickness quads for the 2D solid
 
 def write_1d(path):
     """1D shell genome: nodes along y2 in [-W/2, W/2] at the top OML (y3=H/2);
-    one straight chain of 2-node line elements; single isotropic ply of
-    thickness h; local frame e1=beam(0,0,1), e2=width(1,0,0), e3=inward(0,-1,0)."""
+    one chain of 2-node line elements; single isotropic ply of thickness h;
+    local frame e1=beam(0,0,1), e2=width(1,0,0), e3=inward(0,-1,0)."""
     y2 = np.linspace(-W/2, W/2, N1D)
     data = {
         "nodes": [[float(y), float(H/2), 0.0] for y in y2],
@@ -44,7 +44,7 @@ def write_1d(path):
 
 
 def write_solid(path):
-    """2D solid rectangle (centred at the origin): y2 in [-W/2,W/2],
+    """2D solid rectangle centred at the origin: y2 in [-W/2,W/2],
     y3 in [-H/2,H/2], NC x NR quads; isotropic; e1=beam, e3=+y3."""
     y2 = np.linspace(-W/2, W/2, NC+1)
     y3 = np.linspace(-H/2, H/2, NR+1)

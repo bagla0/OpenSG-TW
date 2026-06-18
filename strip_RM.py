@@ -18,9 +18,9 @@ Run (Windows):
 import os, sys
 import numpy as np
 from scipy.sparse import coo_matrix
-HERE = os.path.dirname(__file__)
-sys.path.insert(0, os.path.join(HERE, "..", "rm"))
-sys.path.insert(0, os.path.join(HERE, "..", "opensg_jax"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "rm"))
+sys.path.insert(0, os.path.join(HERE, "opensg_jax"))
 import jax; jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import pypardiso
