@@ -97,7 +97,8 @@ def _plate_B(nodes_xi, xi, he):
 
 
 def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
-                       return_warping=False, elem_order=2, shear_refined=False):
+                       return_warping=False, elem_order=2, shear_refined=False,
+                       z_ref=0.0):
     """Plate stiffness via MSG 1D through-thickness SG.
 
     By default returns the 6x6 ABD (the Kirchhoff plate law). Set
@@ -127,6 +128,15 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
     mat_names  : list[str]   — material name per layer (keys in material_db)
     material_db: dict        — {name: {E:[3], G:[3], nu:[3], rho:float}}
     n_per_layer: int         — quadratic sub-elements per layer (default 1)
+    z_ref      : float        — through-thickness coordinate of the REFERENCE
+                  surface, measured from the bottom/OML face (default 0 = OML).
+                  The 1D SG mesh origin is shifted by z_ref so the membrane and
+                  bending are referenced there: z_ref = 0 (OML), sum(thick)/2
+                  (mid-surface / centre), sum(thick) (IML).  This is the mesh-based
+                  reference change: the plies keep their order along the inward
+                  through-thickness direction and only the origin moves, exactly as
+                  the FEniCS OpenSG plate solver does (preferred over a
+                  parallel-axis transform of the assembled ABD).
     return_warping : bool     — also return the through-thickness fluctuation
                   field for plate dehomogenization (see :func:`plate_dehom_strain`)
 
@@ -171,6 +181,7 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
             elem_layer[idx] = k
             idx += 1
     node_x[p * n_elem] = layer_bot[-1]
+    node_x = node_x - z_ref                   # mesh-based reference shift (origin at z_ref)
 
     xi_g, w_g = np.polynomial.legendre.leggauss(max(3, p + 1))
 
