@@ -34,7 +34,8 @@ def _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p):
         # EB warping strain (eps_h)
         BDq[1, o+1] += t2*dN[a]; BDq[1, o+2] += t3*dN[a]
         BDq[2, o+0] += dN[a]
-        BDq[4, o+3] += -dN[a]
+        BDq[4, o+3] += dN[a]   # kappa22 = +dN(omega1): curvature of the rotation fluctuation
+        # (was -dN; the wrong sign made the closed-tube shear-bend coupling over-count +66%)
         BDq[5, o+4] += dN[a]; BDq[5, o+0] += 0.5*k22*dN[a]
         BGq[0, o+4] += N[a]
         BGq[1, o+1] += n2*dN[a]; BGq[1, o+2] += n3*dN[a]; BGq[1, o+3] += -N[a]

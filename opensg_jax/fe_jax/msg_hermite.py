@@ -134,7 +134,7 @@ def hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
     Ge = Ge.at[:, 2, 1].set(Rn)
     Ge = Ge.at[:, 3, 2].set(xd2)
     Ge = Ge.at[:, 3, 3].set(xd3)
-    Ge = Ge.at[:, 5, 1].set(-2.0 - k22 / 2.0 * Rn)
+    Ge = Ge.at[:, 5, 1].set(-2.0 + k22 / 2.0 * Rn)
 
     def eps_h(u):
         dw1 = phi_d1 @ u[_I1]; dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
@@ -150,7 +150,7 @@ def hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
         return jnp.stack([
             w1, jnp.zeros(Q_pts), xd2*w2 + xd3*w3, jnp.zeros(Q_pts),
             jnp.zeros(Q_pts),
-            2.0*xd3*dw2 - 2.0*xd2*dw3 - (k22/2.0)*(xd2*w2 + xd3*w3)], axis=1)
+            2.0*xd3*dw2 - 2.0*xd2*dw3 + (k22/2.0)*(xd2*w2 + xd3*w3)], axis=1)
 
     def eps_e(ue):
         return jnp.einsum("qip,p->qi", Ge, ue)
@@ -354,6 +354,7 @@ def solve_tw_from_yaml(yaml_path, reference="OML", frac=None):
 
     return {
         "EB": _np.array(Ceff), "Timo": _np.array(C6),
+        "Btim": _np.array(_Btim), "Ctim": _np.array(_Ctim),
         "V0": _np.array(V0), "V1": _np.array(V1),
         "corners": _np.array(corners), "red_cells": _np.array(red_cells),
         "k22": _np.array(k22), "L": _np.array(L_e),

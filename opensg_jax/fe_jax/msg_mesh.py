@@ -368,4 +368,24 @@ def mesh_curvature(nodes_2d, cells, elements_1b, is_closed=True):
     """
     if len(elements_1b[0]) >= 3:
         return compute_curvature(nodes_2d, cells, is_closed)
-    return np.zeros(cells.shape[0])
+    # Flat 2-node elements carry no within-element curvature, but a curved contour
+    # (tube / airfoil) still has wall curvature: recover it from consecutive corner
+    # triples (the inter-element turning), the discrete analogue of FEniCS's
+    # k22 = (e2 . grad(e3)).  Gives -1/R for a circular tube; 0 for a straight strip.
+    return _curvature_from_corners(nodes_2d, cells)
+
+
+def _curvature_from_corners(nodes_2d, cells):
+    N = cells.shape[0]
+    V = nodes_2d[cells[:, 0]]                                  # start corner of each element, in order
+    closed = np.allclose(nodes_2d[cells[-1, -1]], nodes_2d[cells[0, 0]])
+    k22 = np.zeros(N)
+    for i in range(N):
+        if not closed and (i == 0 or i == N - 1):
+            continue                                          # open-chain endpoints: no curvature
+        a, b, d = V[(i - 1) % N], V[i], V[(i + 1) % N]
+        d01, d12 = b - a, d - b
+        cross = d01[0] * d12[1] - d01[1] * d12[0]
+        denom = np.linalg.norm(d01) * np.linalg.norm(d12) * np.linalg.norm(d - a)
+        k22[i] = -2.0 * cross / denom if denom > 1e-30 else 0.0
+    return k22

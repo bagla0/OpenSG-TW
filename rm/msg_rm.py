@@ -66,7 +66,7 @@ def _macro_BD(x2, x3, t2, t3, k22):
     B[0] = [1.0, 0.0, x3, -x2]              # eps11
     B[2, 1] = Rn                            # 2eps12 = k1 Rn
     B[3, 2] = t2; B[3, 3] = t3              # kappa11 = t.k
-    B[5, 1] = KAPPA12_MACRO - 0.5 * k22 * Rn   # kappa12+ macro
+    B[5, 1] = KAPPA12_MACRO + 0.5 * k22 * Rn   # kappa12+ macro (curvature sign matches the k22=-1/R convention)
     return B
 
 
@@ -107,7 +107,7 @@ def assemble_rm(nodes, elems, node_dofs, D, Gs, k22_e, p=2, reduced=True):
                     o = 5*a
                     BDq[1, o+1] += t2*dN[a]; BDq[1, o+2] += t3*dN[a]   # eps22
                     BDq[2, o+0] += dN[a]                              # 2eps12 = w1'
-                    BDq[4, o+3] += -dN[a]                             # kappa22 = -w1'(omega1)
+                    BDq[4, o+3] += dN[a]                              # kappa22 = +dN(omega1) (rotation curvature; was -dN)
                     BDq[5, o+4] += dN[a]; BDq[5, o+0] += 0.5*k22*dN[a]  # kappa12+
                     BGq[0, o+4] += N[a]                               # 2g13 = omega2
                     BGq[1, o+1] += n2*dN[a]; BGq[1, o+2] += n3*dN[a]   # 2g23 = dwn/ds
