@@ -148,7 +148,7 @@ def hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
         w1 = phi_val @ u[_I1]; w2 = phi_val @ u[_I2]; w3 = phi_val @ u[_I3]
         dw2 = phi_d1 @ u[_I2]; dw3 = phi_d1 @ u[_I3]
         return jnp.stack([
-            w1, jnp.zeros(Q_pts), xd2*w2 + xd3*w3, jnp.zeros(Q_pts),
+            w1, xd2*dw2 + xd3*dw3, xd2*w2 + xd3*w3, jnp.zeros(Q_pts),
             jnp.zeros(Q_pts),
             2.0*xd3*dw2 - 2.0*xd2*dw3 + (k22/2.0)*(xd2*w2 + xd3*w3)], axis=1)
 
