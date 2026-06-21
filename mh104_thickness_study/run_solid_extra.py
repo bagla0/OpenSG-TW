@@ -16,7 +16,7 @@ RES = STUDY + "/results"
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
 
 t0 = time.time()
-for f in [0.1, 0.8, 1.0]:
+for f in [0.3, 0.75]:
     t = "f%03d" % int(round(f * 100))
     out = RES + "/C6_solid_%s.txt" % t
     if os.path.exists(out):
