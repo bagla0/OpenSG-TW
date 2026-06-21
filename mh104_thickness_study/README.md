@@ -38,8 +38,11 @@ sweep, comparing the **JAX MSG-shell (Kirchhoff / C1-Hermite)** to the **VABS-va
 - `results/C6_shell_jax_{OML,center,IML}_f0NN.txt` — JAX-Kirchhoff shell 6×6, 18 files.
 - `results/timo_shell_jax_summary.txt` — shell diagonals, all f/refs.
 - `results/timo_comparison_tables.txt` — full shell-vs-solid tables (abs + %diff).
-- `figures/timo_all_terms.png` — **all 21 Timoshenko terms** vs f (6×6 grid, OML/center/IML vs solid).
-- `figures/timo_diag_abs.png`, `timo_diag_pctdiff.png` — diagonal stiffness / %diff vs f.
+- `figures/oml_abs_{diagonal,coupling_1,coupling_2}.png` — all 21 Timo terms vs f, **shell OML vs solid**
+  (absolute, enlarged).
+- `figures/oml_pcterr_{diagonal,coupling_1,coupling_2}.png` — **% error** of all 21 terms vs solid (OML, enlarged).
+- `figures/ref_orient_oml_center.png`, `iml_orient_debug.png` — reference-surface e1/e2/e3 (OML is the
+  default; center/IML offset shown for debugging the thick-wall web-junction fold).
 - `figures/orient_shell_f0NN.png` — e1/e2/e3 element orientation (shell).
 - `figures/orient_cmp_f0NN_*.png` — solid-vs-shell orientation check (e2·e2/e3·e3 ≈ +1).
 
