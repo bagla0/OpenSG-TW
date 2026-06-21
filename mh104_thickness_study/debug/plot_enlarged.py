@@ -66,11 +66,12 @@ def grid(terms, mode, fname, title):
     for k, (i, j) in enumerate(terms):
         ax = axf[k]
         if mode == "abs":
-            ax.plot(fv, gv(K, i, j), "-o", color=KC, ms=5, lw=1.8, label="JAX-Kirchhoff")
-            ax.plot(fv, gv(R, i, j), "-^", color=RC, ms=5, lw=1.8, label="JAX-RM")
+            ax.plot(fv, gv(K, i, j), "-o", color=KC, ms=6, lw=1.6, mfc="none", mew=1.6, label="JAX-Kirchhoff")
+            ax.plot(fv, gv(R, i, j), "-^", color=RC, ms=6, lw=1.6, mfc="none", mew=1.6, label="JAX-RM")
             if INCLUDE_FE:
-                ax.plot(fv, gv(F, i, j), "-d", color=FC, ms=5, lw=1.8, label="FEniCS-shell")
-            ax.plot(fv, gv(S, i, j), "k-s", ms=6, lw=2.2, label="FEniCS-solid")
+                ax.plot(fv, gv(F, i, j), "-d", color=FC, ms=6, lw=1.6, mfc="none", mew=1.6, label="FEniCS-shell")
+            # FEniCS-solid = benchmark: bold black, large FILLED X markers, drawn on top
+            ax.plot(fv, gv(S, i, j), "-", color="k", marker="X", ms=11, lw=2.6, zorder=6, label="FEniCS-solid (benchmark)")
         else:
             ax.plot(fv, er(K, i, j), "-o", color=KC, ms=5, lw=1.8, label="JAX-Kirchhoff")
             ax.plot(fv, er(R, i, j), "-^", color=RC, ms=5, lw=1.8, label="JAX-RM")
@@ -98,8 +99,7 @@ fe = " / FEniCS-shell" if INCLUDE_FE else ""
 tag = "JAX-Kirchhoff / JAX-RM%s / FEniCS-solid" % fe
 grid(diag, "abs", "oml_abs_diagonal.png", "mh104 OML diagonal (4 way): " + tag)
 grid(coup, "abs", "oml_abs_coupling.png", "mh104 OML couplings (|solid|>=1e7): " + tag)
-grid(diag, "pct", "oml_pcterr_diagonal.png", "mh104 OML diagonal %% error vs solid (grey +-5%)")
-grid(coup, "pct", "oml_pcterr_coupling.png", "mh104 OML couplings %% error vs solid")
+# (% error plots intentionally NOT generated for mh104 -- the direct/absolute plots are preferred)
 dropped = [(i, j) for (i, j) in od if not keep(i, j)]
 print("%s: diagonal=ALL 6  couplings>=1e7=%s" % ("4-way" if INCLUDE_FE else "3-way", ["C%d%d" % (min(i, j) + 1, max(i, j) + 1) for i, j in coup]))
 print("dropped couplings (|solid|<%.0e): %s" % (THRESH, ["C%d%d" % (min(i, j) + 1, max(i, j) + 1) for i, j in dropped]))

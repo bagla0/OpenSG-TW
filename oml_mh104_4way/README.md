@@ -10,13 +10,15 @@ laminate bending stiffness ≈ E·t³ instead of the old fixed `[1.2e13,2.5e13]`
 the thin-wall flapwise collapse: FEniCS-shell GA3 went from **−94% → −5%** at f=0.2 (EI2 −85% → +3%
 at f=0.1). The tube is unchanged (its max_D → penalty ≈ the old validated 1.3e13).
 
-## Plots (significant terms; couplings stuck in the ~1e6 range dropped)
-Each panel: JAX-Kirchhoff (blue ●), JAX-RM (red ▲), FEniCS-shell (green ◆), FEniCS-solid (black ■).
+## Plots (absolute stiffness vs f; significant terms only)
+Each panel: JAX-Kirchhoff (blue ○), JAX-RM (red △), FEniCS-shell (green ◇) — open markers — and the
+**FEniCS-solid BENCHMARK** drawn on top as a bold black line with large filled **X** markers.
 Diagonal panels labelled `EA (C11)…`; coupling panels `C14: EA-GJ` etc. Dashed line = **f=0.3**
-thin/thick boundary (spar h/H≈0.08). **Error = signed RELATIVE % error** `(model−solid)/solid`.
-- `figures/oml_abs_diagonal.png` — all 6 stiffnesses (absolute).
+thin/thick boundary (spar h/H≈0.08). Couplings stuck in the ~1e6 range are dropped.
+- `figures/oml_abs_diagonal.png` — all 6 stiffnesses.
 - `figures/oml_abs_coupling.png` — couplings C14, C15, C16, C24, C25 (|solid|≥1e7).
-- `figures/oml_pcterr_diagonal.png`, `oml_pcterr_coupling.png` — the same as % error.
+- (% error plots are intentionally omitted for mh104 — the direct/absolute plots read better;
+  the numbers are still in `data/timo_full_comparison.txt`.)
 
 ## Headline
 - **JAX-Kirchhoff and JAX-RM bracket the solid** on the shear terms (Kirchhoff over, RM under).
