@@ -43,7 +43,20 @@ for i in range(6):
             name = "C%d%d_%s-%s" % (j + 1, i + 1, lab[j], lab[i]); title = "C%d%d:  %s-%s" % (j + 1, i + 1, lab[j], lab[i])
         ax.axvline(0.3, color="0.45", ls="--", lw=1.3, zorder=0)
         ax.set_title(title, fontsize=13); ax.set_xlabel("thickness factor f", fontsize=11)
-        ax.set_ylabel("stiffness", fontsize=11); ax.grid(alpha=0.3); ax.legend(fontsize=9)
+        ax.set_ylabel("stiffness", fontsize=11); ax.grid(alpha=0.3)   # NO per-plot legend
         fig.tight_layout(); fig.savefig(os.path.join(OUT, name + ".png"), dpi=150, bbox_inches="tight")
         plt.close(fig); n += 1
 print("wrote %d individual term plots to %s" % (n, OUT))
+
+# standalone legend (shared by all individual plots)
+import matplotlib.lines as mlines
+handles = [
+    mlines.Line2D([], [], color=KC, marker="o", ms=9, lw=1.6, mfc="none", mew=1.8, label="JAX-Kirchhoff"),
+    mlines.Line2D([], [], color=RC, marker="^", ms=9, lw=1.6, mfc="none", mew=1.8, label="JAX-RM"),
+    mlines.Line2D([], [], color=FC, marker="d", ms=9, lw=1.6, mfc="none", mew=1.8, label="FEniCS-shell"),
+    mlines.Line2D([], [], color="k", marker="*", ms=16, lw=2.6, label="FEniCS-solid (benchmark)"),
+]
+figL = plt.figure(figsize=(4.6, 1.8))
+figL.legend(handles=handles, loc="center", fontsize=13, frameon=True)
+figL.savefig(os.path.join(OUT, "_legend.png"), dpi=150, bbox_inches="tight"); plt.close(figL)
+print("wrote _legend.png")
