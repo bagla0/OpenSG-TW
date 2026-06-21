@@ -23,7 +23,7 @@ if NOFE:
     FIG = os.path.join(os.path.dirname(STUDY), "oml_mh104_jax_vs_solid", "figures")
     os.makedirs(FIG, exist_ok=True)
 lab = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-FS = [10, 20, 40, 60]; fv = [x / 100 for x in FS]
+FS = [10, 20, 30, 40, 60, 75]; fv = [x / 100 for x in FS]
 KC, RC, FC = "tab:blue", "tab:red", "tab:green"
 THIN = 0.3          # thin/thick boundary (geometry: spar h/H~0.08; h/H=0.1 at f~0.4)
 THRESH = 1e7        # drop terms whose |solid| never exceeds this (i.e. stuck in the ~1e6 range)
@@ -70,7 +70,7 @@ def grid(terms, mode, fname, title):
             ax.plot(fv, gv(R, i, j), "-^", color=RC, ms=5, lw=1.8, label="JAX-RM")
             if INCLUDE_FE:
                 ax.plot(fv, gv(F, i, j), "-d", color=FC, ms=5, lw=1.8, label="FEniCS-shell")
-            ax.plot(fv, gv(S, i, j), "k--s", ms=6, lw=2, label="FEniCS-solid")
+            ax.plot(fv, gv(S, i, j), "k-s", ms=6, lw=2.2, label="FEniCS-solid")
         else:
             ax.plot(fv, er(K, i, j), "-o", color=KC, ms=5, lw=1.8, label="JAX-Kirchhoff")
             ax.plot(fv, er(R, i, j), "-^", color=RC, ms=5, lw=1.8, label="JAX-RM")
