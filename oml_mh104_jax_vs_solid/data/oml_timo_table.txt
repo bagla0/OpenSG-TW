@@ -1,0 +1,31 @@
+mh104 OML Timoshenko DIAGONAL: JAX-Kirchhoff / JAX-RM vs FEniCS solid (no FEniCS-shell)
+order [EA,GA2,GA3,GJ,EI2,EI3]   (f=0.1..0.6)
+
+== f=0.10 ==
+  JAX-Kirchhoff EA=2.8434e+08  GA2=7.2223e+07  GA3=8.9708e+06  GJ=3.4418e+06  EI2=3.5994e+06  EI3=6.1383e+07
+  JAX-RM       EA=2.8367e+08  GA2=4.3401e+07  GA3=6.6179e+06  GJ=3.2652e+06  EI2=3.5429e+06  EI3=6.1336e+07
+  FEniCS-solid EA=2.7990e+08  GA2=7.0856e+07  GA3=7.6508e+06  GJ=3.3678e+06  EI2=3.5506e+06  EI3=5.9371e+07
+  Kirch %err   EA=   +1.6%  GA2=   +1.9%  GA3=  +17.3%  GJ=   +2.2%  EI2=   +1.4%  EI3=   +3.4%
+  RM %err      EA=   +1.3%  GA2=  -38.7%  GA3=  -13.5%  GJ=   -3.0%  EI2=   -0.2%  EI3=   +3.3%
+
+== f=0.20 ==
+  JAX-Kirchhoff EA=5.6867e+08  GA2=1.5021e+08  GA3=1.6072e+07  GJ=6.5754e+06  EI2=6.9458e+06  EI3=1.2256e+08
+  JAX-RM       EA=5.6706e+08  GA2=8.3119e+07  GA3=9.7981e+06  GJ=6.1403e+06  EI2=6.8170e+06  EI3=1.2249e+08
+  FEniCS-solid EA=5.4995e+08  GA2=1.4008e+08  GA3=1.3259e+07  GJ=6.3715e+06  EI2=6.7229e+06  EI3=1.1575e+08
+  Kirch %err   EA=   +3.4%  GA2=   +7.2%  GA3=  +21.2%  GJ=   +3.2%  EI2=   +3.3%  EI3=   +5.9%
+  RM %err      EA=   +3.1%  GA2=  -40.7%  GA3=  -26.1%  GJ=   -3.6%  EI2=   +1.4%  EI3=   +5.8%
+
+== f=0.40 ==
+  JAX-Kirchhoff EA=1.1374e+09  GA2=3.0418e+08  GA3=2.9165e+07  GJ=1.2032e+07  EI2=1.2892e+07  EI3=2.4446e+08
+  JAX-RM       EA=1.1337e+09  GA2=1.4093e+08  GA3=1.4134e+07  GJ=1.1093e+07  EI2=1.2596e+07  EI3=2.4430e+08
+  FEniCS-solid EA=1.0639e+09  GA2=2.6117e+08  GA3=2.0116e+07  GJ=1.1576e+07  EI2=1.2020e+07  EI3=2.2070e+08
+  Kirch %err   EA=   +6.9%  GA2=  +16.5%  GA3=  +45.0%  GJ=   +3.9%  EI2=   +7.3%  EI3=  +10.8%
+  RM %err      EA=   +6.6%  GA2=  -46.0%  GA3=  -29.7%  GJ=   -4.2%  EI2=   +4.8%  EI3=  +10.7%
+
+== f=0.60 ==
+  JAX-Kirchhoff EA=1.7061e+09  GA2=4.5768e+08  GA3=4.0407e+07  GJ=1.6511e+07  EI2=1.7933e+07  EI3=3.6580e+08
+  JAX-RM       EA=1.7002e+09  GA2=1.8101e+08  GA3=1.7804e+07  GJ=1.5150e+07  EI2=1.7468e+07  EI3=3.6548e+08
+  FEniCS-solid EA=1.5440e+09  GA2=3.4763e+08  GA3=2.4202e+07  GJ=1.5915e+07  EI2=1.6087e+07  EI3=3.1594e+08
+  Kirch %err   EA=  +10.5%  GA2=  +31.7%  GA3=  +67.0%  GJ=   +3.7%  EI2=  +11.5%  EI3=  +15.8%
+  RM %err      EA=  +10.1%  GA2=  -47.9%  GA3=  -26.4%  GJ=   -4.8%  EI2=   +8.6%  EI3=  +15.7%
+
