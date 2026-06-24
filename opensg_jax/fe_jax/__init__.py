@@ -75,4 +75,9 @@ from .msg_dehom import (
     dehomogenize,
     stress_at_points,
 )
+# Canonical e1/e2/e3 orientation plot -- COMPULSORY output on every homogenization run.
+from .orient_plot import (
+    plot_orient,
+    auto_emit,
+)
 
