@@ -1,0 +1,61 @@
+\begin{table}[t]\centering
+\caption{Isotropic tube: isotropic Timoshenko stiffness at $h/R=0.01$ --- closed-form \textbf{analytic} vs FEniCS-solid vs MSG shell (RM, KF; centre), SI units. The analytic transverse shear uses the MSG plate $G=\tfrac56 Gh$.}
+\label{tab:tube_iso_analytic_1}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrr}\toprule
+term & analytic & FEniCS-solid & RM (centre) & KF (centre) & analytic vs solid\\\midrule
+$C_{11}$ ($EA$) & 4.3982e+9 & 4.3975e+9 & 4.3979e+9 & 4.3979e+9 & +0.02\%\\
+$C_{22}$ ($GA_2$) & 8.4581e+8 & 8.4578e+8 & 8.4577e+8 & 8.4566e+8 & +0.00\%\\
+$C_{33}$ ($GA_3$) & 8.4581e+8 & 8.4578e+8 & 8.4577e+8 & 8.4566e+8 & +0.00\%\\
+$C_{44}$ ($GJ$) & 1.6917e+9 & 1.6911e+9 & 1.6909e+9 & 1.6909e+9 & +0.03\%\\
+$C_{55}$ ($EI_2$) & 2.1992e+9 & 2.1985e+9 & 2.1985e+9 & 2.1985e+9 & +0.03\%\\
+$C_{66}$ ($EI_3$) & 2.1992e+9 & 2.1985e+9 & 2.1985e+9 & 2.1985e+9 & +0.03\%\\
+\bottomrule\end{tabular}}
+\end{table}
+
+\begin{table}[t]\centering
+\caption{Isotropic tube: isotropic Timoshenko stiffness at $h/R=0.20$ --- closed-form \textbf{analytic} vs FEniCS-solid vs MSG shell (RM, KF; centre), SI units. The analytic transverse shear uses the MSG plate $G=\tfrac56 Gh$.}
+\label{tab:tube_iso_analytic_20}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrr}\toprule
+term & analytic & FEniCS-solid & RM (centre) & KF (centre) & analytic vs solid\\\midrule
+$C_{11}$ ($EA$) & 8.7965e+10 & 8.7950e+10 & 8.7959e+10 & 8.7988e+10 & +0.02\%\\
+$C_{22}$ ($GA_2$) & 1.6916e+10 & 1.7193e+10 & 1.7063e+10 & 1.7012e+10 & -1.61\%\\
+$C_{33}$ ($GA_3$) & 1.6916e+10 & 1.7193e+10 & 1.7063e+10 & 1.7012e+10 & -1.61\%\\
+$C_{44}$ ($GJ$) & 3.4171e+10 & 3.4160e+10 & 3.4071e+10 & 3.4268e+10 & +0.03\%\\
+$C_{55}$ ($EI_2$) & 4.4422e+10 & 4.4408e+10 & 4.4172e+10 & 4.4128e+10 & +0.03\%\\
+$C_{66}$ ($EI_3$) & 4.4422e+10 & 4.4408e+10 & 4.4172e+10 & 4.4130e+10 & +0.03\%\\
+\bottomrule\end{tabular}}
+\end{table}
+
+\begin{table}[t]\centering
+\caption{Isotropic strip: isotropic Timoshenko stiffness at $h/W=0.01$ --- closed-form \textbf{analytic} vs FEniCS-solid vs MSG shell (RM, KF; centre), SI units. The analytic transverse shear uses the MSG plate $G=\tfrac56 Gh$.}
+\label{tab:strip_iso_analytic_1}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrr}\toprule
+term & analytic & FEniCS-solid & RM (centre) & KF (centre) & analytic vs solid\\\midrule
+$C_{11}$ ($EA$) & 7.0000e+8 & 7.0000e+8 & 7.0000e+8 & 7.0000e+8 & +0.00\%\\
+$C_{22}$ ($GA_2$) & 2.2436e+8 & 2.2437e+8 & 2.2437e+8 & 2.2436e+8 & -0.01\%\\
+$C_{33}$ ($GA_3$) & 2.2436e+8 & 8.1825e+5 & 5.1530e+5 & 5.0556e+5 & $\dagger$\\
+$C_{44}$ ($GJ$) & 8.9178e+3 & 8.9290e+3 & 8.9175e+3 & 8.9743e+3 & -0.13\%\\
+$C_{55}$ ($EI_2$) & 5.8333e+3 & 5.9490e+3 & 5.8333e+3 & 5.8333e+3 & -1.94\%\\
+$C_{66}$ ($EI_3$) & 5.8333e+7 & 5.8334e+7 & 5.8334e+7 & 5.8333e+7 & -0.00\%\\
+\bottomrule\end{tabular}}
+\\[2pt]{\footnotesize $\dagger$ The compact $G\!A_3$ ($=\tfrac56 GWh$) over-predicts the wide-strip thickness-direction shear, a 2D plate quantity no 1D model (analytic or shell) captures; only the 3D solid resolves it.}
+\end{table}
+
+\begin{table}[t]\centering
+\caption{Isotropic strip: isotropic Timoshenko stiffness at $h/W=0.20$ --- closed-form \textbf{analytic} vs FEniCS-solid vs MSG shell (RM, KF; centre), SI units. The analytic transverse shear uses the MSG plate $G=\tfrac56 Gh$.}
+\label{tab:strip_iso_analytic_20}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrr}\toprule
+term & analytic & FEniCS-solid & RM (centre) & KF (centre) & analytic vs solid\\\midrule
+$C_{11}$ ($EA$) & 1.4000e+10 & 1.4000e+10 & 1.4000e+10 & 1.4000e+10 & +0.00\%\\
+$C_{22}$ ($GA_2$) & 4.4872e+9 & 4.4874e+9 & 4.4873e+9 & 4.4872e+9 & -0.00\%\\
+$C_{33}$ ($GA_3$) & 4.4872e+9 & 2.5760e+9 & 6.0518e+9 & 4.0445e+9 & $\dagger$\\
+$C_{44}$ ($GJ$) & 6.2750e+7 & 6.2767e+7 & 6.2708e+7 & 7.1795e+7 & -0.03\%\\
+$C_{55}$ ($EI_2$) & 4.6667e+7 & 4.6692e+7 & 4.6667e+7 & 4.6667e+7 & -0.05\%\\
+$C_{66}$ ($EI_3$) & 1.1667e+9 & 1.1667e+9 & 1.1667e+9 & 1.1667e+9 & -0.00\%\\
+\bottomrule\end{tabular}}
+\\[2pt]{\footnotesize $\dagger$ The compact $G\!A_3$ ($=\tfrac56 GWh$) over-predicts the wide-strip thickness-direction shear, a 2D plate quantity no 1D model (analytic or shell) captures; only the 3D solid resolves it.}
+\end{table}

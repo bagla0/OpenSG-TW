@@ -1,0 +1,65 @@
+[info]     PreVABS 2.0.0 (VABS 4.0, SwiftComp 2.1)  main.cpp:main:218
+[info]     prevabs start (2026-06-21 15:46:57)  main.cpp:main:245
+[info]     reading input files  PModel.cpp:homogenize:276
+[info]     reading main input file: mh104.xml  PModelIOReadCrossSection.cpp:readCrossSection:542
+[info]     reading airfoil data file: mh104.dat  PModelIOReadAirfoil.cpp:readAirfoilSectionsFromFile:215
+[info]     reading materials file: C:\Users\bagla0\OneDrive - purdue.edu\2026_195\PreVABS\prevabs-v2.0.1-windows-x64-full\prevabs-v2.0.1-windows-x64-full\MaterialDB.xml  PModelIOReadMaterial.cpp:readMaterialsFile:189
+[warning]  material '3K70P/NB321 fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material '3G150 NASS/NCT321': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'S2/SP381': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T650 3K-70-PW/7740 Fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'G30-500 12K/7740': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T300 3KPW/E765': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T700 24KP/E765': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T300 3KPW/E765': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T300 6K 5HS/E765': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T700GC-12K-31E': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'HITEX 33 6k/E7K8': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'AS4 12k/E7K8': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'Celion 3000/E7K8 fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'HITEX 33 6k/E7K8 fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'GY-70/934': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'E-Glass 7781/EA 9396': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T650-35 12k/976': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'S2-449 43k/SP381': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material '7781/EA9396 fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'Celion 12k/938': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'AS4 12k/3502': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T300 15k/976': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'AS4 6k/PR 500_fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T300 3k/EA 9396_fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'T650-35 3k 976_fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'AS4/5250-3': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'Celion 3000/F670_fabric': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'IM6 12k/APC-2': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[warning]  material 'S2-449 17k/SP 381': <nu23> not specified, using default 0.3; provide nu23 explicitly for accuracy  PModelIOReadMaterial.cpp:readXMLElementMaterial:393
+[info]     reading materials file: materials.xml  PModelIOReadMaterial.cpp:readMaterialsFile:189
+[info]     reading input files -- done  PModel.cpp:homogenize:281
+[info]     building the shape  PModel.cpp:homogenize:287
+[info]     building the cross section, step 1  CrossSection.cpp:build:173
+[info]     building component: surface  PComponent.cpp:build:152
+[info]     building component: web1  PComponent.cpp:build:152
+[info]     building component: web2  PComponent.cpp:build:152
+[info]     building the cross section, step 2  CrossSection.cpp:build:211
+[info]     building component details: surface  PComponent.cpp:buildDetails:196
+[info]     building component details: web1  PComponent.cpp:buildDetails:196
+[info]     building component details: web2  PComponent.cpp:buildDetails:196
+[info]     fixing geometry  DCELValidator.cpp:fixDCELGeometry:116
+[info]     building the shape -- done  PModel.cpp:homogenize:291
+[info]     modeling in Gmsh  PModel.cpp:homogenize:297
+[info]     creating gmsh vertices  PModelBuildGmsh.cpp:createGmshVertices:33
+[info]     creating gmsh edges  PModelBuildGmsh.cpp:createGmshEdges:175
+[info]     creating gmsh faces  PModelBuildGmsh.cpp:createGmshFaces:250
+[info]     creating physical groups  PModelBuildGmsh.cpp:createGmshPhyscialGroups:397
+[info]     meshing  PModelBuildGmsh.cpp:buildGmsh:521
+[info]     modeling in Gmsh -- done  PModel.cpp:homogenize:301
+[info]     writing outputs  PModel.cpp:homogenize:309
+[info]     writing sg file: mh104.sg  PModelIOSG.cpp:writeSG:89
+[info]     writing nodes  PModelIOGmsh.cpp:writeNodes:61
+[info]     writing elements  PModelIOGmsh.cpp:writeElements:134
+[info]       writing connectivity  PModelIOGmsh.cpp:writeElementsVABS:164
+[info]       writing local orientation  PModelIOGmsh.cpp:writeElementsVABS:212
+[info]     writing material id-name file: mh104.sg.mat  PModelIOSG.cpp:writeSG:162
+[info]     writing outputs -- done  PModel.cpp:homogenize:322
+[info]     prevabs finished (2026-06-21 15:46:58)  main.cpp:main:270
+[info]     total running time: 0.716579 sec  main.cpp:main:271

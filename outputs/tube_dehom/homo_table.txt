@@ -1,0 +1,19 @@
+term                      TW-RM     TW-Kirch        solid     Table3.2
+EA  (C11)            4.7835e+07   4.7853e+07   4.7843e+07   4.7785e+07
+ext-twist (C14)     -9.3125e+05  -9.2971e+05  -9.3459e+05  -9.3755e+05
+GA2 (C22)            1.4502e+07   1.4450e+07   1.4548e+07            -
+GA3 (C33)            1.4502e+07   1.4473e+07   1.4548e+07            -
+shear-bend (C25)     4.6976e+05   4.6716e+05   4.6855e+05            -
+GJ  (C44)            1.4727e+05   1.4799e+05   1.4820e+05   1.4896e+05
+EI2 (C55)            1.2266e+05   1.2243e+05   1.2281e+05   1.0710e+05
+EI3 (C66)            1.2266e+05   1.2247e+05   1.2281e+05   1.0710e+05
+
+% error vs FEniCS-solid (Timoshenko):
+  EA  (C11)          RM   -0.02%   Kirch   +0.02%
+  ext-twist (C14)    RM   -0.36%   Kirch   -0.52%
+  GA2 (C22)          RM   -0.31%   Kirch   -0.67%
+  GA3 (C33)          RM   -0.31%   Kirch   -0.51%
+  shear-bend (C25)   RM   +0.26%   Kirch   -0.30%
+  GJ  (C44)          RM   -0.62%   Kirch   -0.14%
+  EI2 (C55)          RM   -0.12%   Kirch   -0.31%
+  EI3 (C66)          RM   -0.12%   Kirch   -0.27%

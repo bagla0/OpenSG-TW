@@ -35,6 +35,10 @@ from .msg_materials import (
     plate_stress_at_depth,
     shift_abd_reference,
 )
+from .msg_transverse_shear import (
+    transverse_shear_stiffness,
+    plate_8x8,
+)
 from .msg_mesh import (
     load_yaml,
     read_mesh,
@@ -70,5 +74,10 @@ from .msg_dehom import (
     recover_shell_strains,
     dehomogenize,
     stress_at_points,
+)
+# Canonical e1/e2/e3 orientation plot -- COMPULSORY output on every homogenization run.
+from .orient_plot import (
+    plot_orient,
+    auto_emit,
 )
 

@@ -45,3 +45,6 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+
+# mh104 thickness-study converter intermediates
+mh104_thickness_study/yaml_solid/*_t1only.yaml

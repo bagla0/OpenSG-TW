@@ -168,7 +168,7 @@ def offset_oml_to_iml(nodes_2d, cells, layup_per_elem, layup_db, elem_e3=None,
     nodes = np.asarray(nodes_2d, dtype=float)
     n_node = nodes.shape[0]
     cen = nodes.mean(axis=0)
-    acc_in = np.zeros((n_node, 2)); acc_t = np.zeros(n_node); cnt = np.zeros(n_node)
+    acc_in = np.zeros((n_node, 2)); per_node = [[] for _ in range(n_node)]
     for e in range(cells.shape[0]):
         c0, c1 = int(cells[e, 0]), int(cells[e, -1])
         seg = nodes[c1] - nodes[c0]; L = np.hypot(seg[0], seg[1])
@@ -184,11 +184,17 @@ def offset_oml_to_iml(nodes_2d, cells, layup_per_elem, layup_db, elem_e3=None,
                 inward = -inward
         h = float(sum(layup_db[layup_per_elem[e]]['thick']))
         for c in (c0, c1):
-            acc_in[c] += inward; acc_t[c] += h; cnt[c] += 1
-    cnt = np.maximum(cnt, 1.0)
+            acc_in[c] += inward; per_node[c].append((inward, h))
     in_nrm = acc_in / (np.linalg.norm(acc_in, axis=1, keepdims=True) + 1e-30)
-    thick = acc_t / cnt
-    return nodes + frac * thick[:, None] * in_nrm          # frac x thickness inward
+    # Thickness from the element whose inward is MOST ALIGNED with the consensus direction (the smooth
+    # skin contour), NOT the average over all touching elements.  At a web/skin junction this picks the
+    # skin thickness instead of the thick perpendicular web, so the node is not over-offset and the
+    # thick-wall IML geometry does not fold (the old average folded it -> EI2/GA3 blew up at frac=1).
+    thick = np.zeros(n_node)
+    for c in range(n_node):
+        if per_node[c]:
+            thick[c] = max(per_node[c], key=lambda ih: float(ih[0] @ in_nrm[c]))[1]
+    return nodes + frac * thick[:, None] * in_nrm          # frac x (skin) thickness inward
 
 
 # =============================================================================
@@ -368,4 +374,54 @@ def mesh_curvature(nodes_2d, cells, elements_1b, is_closed=True):
     """
     if len(elements_1b[0]) >= 3:
         return compute_curvature(nodes_2d, cells, is_closed)
+    # Flat 2-node elements carry NO within-element curvature -> k22 = 0 for ALL of them (user directive).
+    # A curved wall is captured by MESH REFINEMENT (more flat facets), not by a per-element curvature;
+    # the old adjacency recovery (_curvature_from_corners) produced spurious k22 at webs / T-junctions /
+    # sharp TE.  NOTE: this zeroes curvature for closed sections too (tube / st15) -> those now rely on
+    # refinement for accuracy, matching how FEniCS-shell treats linear facets.
     return np.zeros(cells.shape[0])
+
+
+def _curvature_from_corners(nodes_2d, cells):
+    """Per-element wall curvature from the actual MESH ADJACENCY, not the element LIST order.
+
+    For each element the curvature is the inter-element turning at its start corner, using the
+    neighbour element that most smoothly CONTINUES this wall (max tangent alignment).  This is
+    robust to multi-component meshes (airfoils with shear webs, where elements are not one ordered
+    loop): a straight web -> the in-line web neighbour -> k22 = 0; a web/skin T-junction or a sharp
+    TE wrap -> no smoothly-aligned neighbour (turn > ~78 deg) -> k22 = 0; a smooth skin -> its real
+    -1/R.  (The old version used V[i-1],V[i],V[i+1] from the list order, which gave huge spurious
+    curvature to appended web elements and to the TE.)"""
+    N = cells.shape[0]
+    ends = cells[:, [0, -1]].astype(np.int64)                 # (N,2) corner node ids
+    touch = {}
+    for ei in range(N):
+        touch.setdefault(int(ends[ei, 0]), []).append(ei)
+        touch.setdefault(int(ends[ei, 1]), []).append(ei)
+    ALIGN_MIN = 0.2                                            # require turn < ~78 deg to be the same wall
+    k22 = np.zeros(N)
+    for i in range(N):
+        a, b = int(ends[i, 0]), int(ends[i, 1])
+        t_fwd = nodes_2d[b] - nodes_2d[a]; nf = np.linalg.norm(t_fwd)
+        if nf < 1e-30:
+            continue
+        best_far, best_align = -1, ALIGN_MIN                  # wall-predecessor at corner a
+        for e in touch[a]:
+            if e == i:
+                continue
+            ea, eb = int(ends[e, 0]), int(ends[e, 1])
+            far = eb if ea == a else ea
+            t_prev = nodes_2d[a] - nodes_2d[far]; npv = np.linalg.norm(t_prev)
+            if npv < 1e-30:
+                continue
+            align = float(np.dot(t_prev, t_fwd) / (npv * nf))
+            if align > best_align:
+                best_align, best_far = align, far
+        if best_far < 0:                                      # web end / TE wrap / disconnected -> straight
+            continue
+        c = nodes_2d[best_far]
+        d01, d12 = nodes_2d[a] - c, t_fwd
+        cross = d01[0] * d12[1] - d01[1] * d12[0]
+        denom = np.linalg.norm(d01) * nf * np.linalg.norm(nodes_2d[b] - c)
+        k22[i] = -2.0 * cross / denom if denom > 1e-30 else 0.0
+    return k22
