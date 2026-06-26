@@ -94,3 +94,32 @@ def diag_table(name, C, S):
     print("  %-5s %15s %15s %12s" % ("term", name, "benchmark", "%err"))
     for i in range(6):
         print("  %-5s %15.5e %15.5e %+11.4f" % (LBL[i], C[i, i], S[i, i], 100.0 * (C[i, i] - S[i, i]) / S[i, i]))
+
+
+def pcterr(C, S, neglect=1000.0):
+    """Alias of :func:`full_pcterr` (the 6x6 %-error matrix), kept for the tutorial notebooks."""
+    return full_pcterr(C, S, neglect)
+
+
+def parse_vabs(path):
+    """Read the Timoshenko 6x6 from a VABS ``.K`` / ``.sg.K`` file (its 'Timoshenko Stiffness Matrix' block)."""
+    lines = open(path).read().splitlines()
+    i = next(k for k, l in enumerate(lines) if "Timoshenko Stiffness Matrix" in l)
+    rows = []
+    for l in lines[i + 1:]:
+        q = l.split()
+        if len(q) == 6:
+            try:
+                rows.append([float(x) for x in q])
+            except ValueError:
+                continue
+        if len(rows) == 6:
+            break
+    return np.asarray(rows)
+
+
+def wall_t(meshp):
+    """Total wall thickness of a 1-D shell SG YAML = sum of the ply thicknesses of ``sections[0].layup``."""
+    import yaml
+    d = yaml.safe_load(open(meshp))
+    return sum(float(p[1]) for p in d["sections"][0]["layup"])

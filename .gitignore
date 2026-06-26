@@ -55,8 +55,10 @@ docs/tutorials/_gen/
 
 # run logs and regenerable run artifacts
 *.log
-# auto-emitted orientation PNGs next to data YAMLs (regenerable)
+# auto-emitted orientation PNGs next to data YAMLs (regenerable) -- but KEEP the per-case spotcheck PNGs
+# bundled in examples/data/1d_yaml/ so the e2/e3 orientation can be eyeballed straight from the repo
 *_orient_e1e2e3.png
+!/examples/data/1d_yaml/*_orient_e1e2e3.png
 SG_mesh.*
 sgmesh.msh
 **/jax_cache/
