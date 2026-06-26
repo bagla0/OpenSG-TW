@@ -50,6 +50,11 @@ def read_solid_yaml(path):
     elem_type = {3: "triangle", 4: "quad"}.get(nN)
     if elem_type is None:
         raise ValueError("unsupported element node count %d" % nN)
+    if elem_type == "quad":
+        # gmsh/VABS quads are CCW [(0,0),(1,0),(1,1),(0,1)]; basix tabulates the P1 quad in
+        # lexicographic order [(0,0),(1,0),(0,1),(1,1)] -> swap nodes 2,3 ([0,1,3,2]), else each
+        # element folds into a bowtie and the integrated area (hence every stiffness) is ~0.58x off.
+        cells = cells[:, [0, 1, 3, 2]]
 
     # --- element sets -> per-element domain (material/layer) id ---
     materials = d["materials"]

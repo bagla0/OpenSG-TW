@@ -3,8 +3,9 @@ vs a VABS `.K` reference (the Timoshenko Stiffness Matrix). FULL 6x6 comparison 
 
   python -m opensg_jax.fe_jax.benchmark_vabs <solid_yaml> <vabs.sg.K>
 
-%-error rule (kept identical for every Timo comparison): terms with |VABS value| < CUTOFF (1e6, denominator
-noise from near-zero couplings) report 0.0% so tiny terms do not show spurious huge percentages.
+%-error rule (kept identical for every Timo comparison): use ALL nonzero terms, but NEGLECT any term
+whose |value| is >= 1000x below the largest |term| in the reference matrix (i.e. |term| < max|term|/1000) --
+those are denominator noise. The neglect threshold scales with the matrix, no fixed cutoff.
 """
 import sys
 import os
@@ -17,7 +18,7 @@ else:
     from .solid_timo import compute_timo_from_yaml
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-CUTOFF = 1e6
+NEGLECT_RATIO = 1000.0   # neglect terms >= this many times below the max |term|
 
 
 def parse_vabs_timo(path):
@@ -41,11 +42,6 @@ def sym(M):
     M = np.asarray(M); return 0.5 * (M + M.T)
 
 
-def pcterr(a, b):
-    """%-error of a vs reference b; 0.0 when |b| < CUTOFF (denominator noise)."""
-    return 0.0 if abs(b) < CUTOFF else 100.0 * (a - b) / b
-
-
 def show(M, title):
     print("\n%s:" % title)
     for i in range(6):
@@ -59,28 +55,25 @@ def main():
     show(jax6, "JAX (Beam_solid pipeline + 2D-YAML)")
     show(vabs6, "VABS .K reference")
 
-    # every term of the upper triangle (diagonals + all couplings), relative to the term itself
-    # (rel%) and to EA (rel_EA%, the noise-floor view -- a tiny coupling with a large rel% but a
-    # negligible rel_EA% is structurally ~0, not an error).
-    EA = abs(vabs6[0, 0])
-    print("\n  all 6x6 terms (upper triangle: diagonals + couplings):")
-    print("  %-8s %15s %15s %11s %8s %9s" % ("term", "JAX", "VABS", "abs_diff", "rel%", "rel_EA%"))
-    worst_rel = worst_rel_lbl = None
+    thresh = float(np.max(np.abs(vabs6))) / NEGLECT_RATIO
+    print("\n  neglect threshold = max|VABS| / %g = %.4e   (terms below -> neglected)" % (NEGLECT_RATIO, thresh))
+    print("\n  all nonzero 6x6 terms (upper triangle: diagonals + couplings):")
+    print("  %-8s %16s %16s %11s %9s  %s" % ("term", "JAX", "VABS", "abs_diff", "rel%", "kept?"))
+    worst = worst_lbl = None
     for i in range(6):
         for j in range(i, 6):
-            jv, vv, ad = jax6[i, j], vabs6[i, j], abs(jax6[i, j] - vabs6[i, j])
+            jv, vv = jax6[i, j], vabs6[i, j]; ad = abs(jv - vv)
+            keep = abs(vv) >= thresh
             rel = 100.0 * ad / abs(vv) if vv != 0 else 0.0
-            rel_ea = 100.0 * ad / EA
             lbl = "%s-%s" % (LBL[i], LBL[j])
-            print("  %-8s %+15.6e %+15.6e %11.3e %7.4f %8.5f" % (lbl, jv, vv, ad, rel, rel_ea))
-            if abs(vv) >= CUTOFF and (worst_rel is None or rel > worst_rel):
-                worst_rel, worst_rel_lbl = rel, lbl
+            print("  %-8s %+16.6e %+16.6e %11.3e %9s  %s"
+                  % (lbl, jv, vv, ad, ("%.4f" % rel) if keep else "   -   ", "yes" if keep else "neglect"))
+            if keep and (worst is None or rel > worst):
+                worst, worst_lbl = rel, lbl
 
     dmax = max(100.0 * abs(jax6[i, i] - vabs6[i, i]) / abs(vabs6[i, i]) for i in range(6))
-    relea_max = max(100.0 * abs(jax6[i, j] - vabs6[i, j]) / EA for i in range(6) for j in range(i, 6))
-    print("\n  max |diagonal rel%%|                       = %.5f %%" % dmax)
-    print("  worst coupling rel%% (|VABS term| >= 1e6)  = %.5f %% (%s)" % (worst_rel, worst_rel_lbl))
-    print("  max |any term| / EA                       = %.6f %%" % relea_max)
+    print("\n  max |diagonal rel%%|                            = %.5f %%" % dmax)
+    print("  worst rel%% over kept terms (|term|>=max/%g)  = %.5f %% (%s)" % (NEGLECT_RATIO, worst, worst_lbl))
 
 
 if __name__ == "__main__":

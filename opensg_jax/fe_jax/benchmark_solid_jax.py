@@ -42,13 +42,14 @@ def main():
     dmax = max(abs(100 * (jax6[i, i] - fe6[i, i]) / fe6[i, i]) for i in range(6))
     print("\n  max |diagonal %% error| = %.3f %%" % dmax)
 
-    # full-matrix relative error on non-negligible terms
+    # full-matrix relative error over kept terms: neglect any term >=1000x below the max |term|
+    thr = float(np.max(np.abs(fe6))) / 1000.0
     bad = 0.0
     for i in range(6):
         for j in range(6):
-            if abs(fe6[i, j]) >= 1e6:
+            if abs(fe6[i, j]) >= thr:
                 bad = max(bad, abs(100 * (jax6[i, j] - fe6[i, j]) / fe6[i, j]))
-    print("  max |6x6 %% error| (|term|>=1e6) = %.3f %%" % bad)
+    print("  max |6x6 %% error| (|term| >= max/1000) = %.3f %%" % bad)
 
 
 if __name__ == "__main__":

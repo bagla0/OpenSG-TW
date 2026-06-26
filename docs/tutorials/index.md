@@ -40,6 +40,12 @@ Real wind-turbine blade: windIO → OpenSG YAML (via OpenSG_io) → full Timoshe
 :link-type: doc
 Multi-cell composite tube from the ASC paper — KL vs RM vs JAX-solid across an internal-web junction.
 :::
+
+:::{grid-item-card} 6 · Station-15 (thick web)
+:link: st15_solid_vs_shell
+:link-type: doc
+A thick-web blade station from both solid and shell — solid exact (quad mesh), shells drift on the web.
+:::
 ::::
 
 ```{list-table} Cross-sections and benchmarks used
@@ -70,6 +76,10 @@ Multi-cell composite tube from the ASC paper — KL vs RM vs JAX-solid across an
   - `multicell_tube/data/tube2cell_aniso_thin.yaml`
   - KL + RM + `compute_timo_from_yaml`
   - 2-D solid `C6_solid_tube2cell_aniso_thin.txt`
+* - Station-15
+  - `…/1Dshell_15.yaml` + `…/2Dsolid_VABS_15.yaml` (quad)
+  - KL + RM + `compute_timo_from_yaml`
+  - VABS `.K` (station 15)
 ```
 
 Each notebook can be reproduced from the command line by the matching numbered script in `examples/`
