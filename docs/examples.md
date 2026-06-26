@@ -21,7 +21,8 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
   - {doc}`tutorials/solid_timo_from_yaml`
 ```
 
-Each script: emits the `e1/e2/e3` orientation PNG, computes the Timoshenko 6×6, and prints the per-term
+Each numbered example is a **distinct concept** (build the Timoshenko 6×6 from the RM shell, the KL shell,
+or the 2-D solid). Each emits the `e1/e2/e3` orientation PNG, computes the 6×6, and prints the per-term
 %-error against the benchmark.
 
 ```powershell
@@ -29,6 +30,28 @@ Each script: emits the `e1/e2/e3` orientation PNG, computes the Timoshenko 6×6,
 python examples\1_get_beam_props_rm_shell.py
 python examples\2_get_beam_props_kl_shell.py
 python examples\3_get_beam_props_jax_solid.py
+```
+
+Two further cross-sections are demonstrations rather than core concepts, so they live elsewhere:
+
+```{list-table}
+:header-rows: 1
+:widths: 30 30 40
+
+* - Case
+  - Where
+  - What it shows
+* - IEA-22 windIO blade
+  - tutorial {doc}`tutorials/iea22_windio_to_timo`
+  - windIO → OpenSG YAML → full 6×6 vs VABS (uses the solid concept on a real blade)
+* - Two-cell [-45] (multi-cell)
+  - **test** `tests/test_twocell_m45_benchmark.py` + tutorial {doc}`tutorials/twocell_m45_asc`
+  - KL vs RM vs solid across an internal-web junction (the ASC multi-cell benchmark)
+```
+
+```powershell
+python tests\test_twocell_m45_benchmark.py     # benchmark table
+pytest  tests\test_twocell_m45_benchmark.py    # regression assertions
 ```
 
 ## Benchmark utilities

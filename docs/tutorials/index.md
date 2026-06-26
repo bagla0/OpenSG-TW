@@ -26,6 +26,22 @@ JAX 2-D solid Timoshenko from a 2-D solid YAML — full 6×6 vs VABS. (MH-104 ai
 :::
 ::::
 
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 4 · IEA-22 windIO → full 6×6
+:link: iea22_windio_to_timo
+:link-type: doc
+Real wind-turbine blade: windIO → OpenSG YAML (via OpenSG_io) → full Timoshenko 6×6, matched to VABS.
+:::
+
+:::{grid-item-card} 5 · Two-cell [-45] (ASC)
+:link: twocell_m45_asc
+:link-type: doc
+Multi-cell composite tube from the ASC paper — KL vs RM vs JAX-solid across an internal-web junction.
+:::
+::::
+
 ```{list-table} Cross-sections and benchmarks used
 :header-rows: 1
 :widths: 22 26 26 26
@@ -46,6 +62,14 @@ JAX 2-D solid Timoshenko from a 2-D solid YAML — full 6×6 vs VABS. (MH-104 ai
   - `prevabs_mh104/2Dsolid_VABS_mh_104.yaml`
   - `compute_timo_from_yaml`
   - VABS `mh104.sg.K`
+* - IEA-22
+  - `windio_converter/validation/solid_iea22_r050.yaml`
+  - `compute_timo_from_yaml` (+ RM)
+  - VABS `iea22_r050.sg.K`
+* - Two-cell [-45]
+  - `multicell_tube/data/tube2cell_aniso_thin.yaml`
+  - KL + RM + `compute_timo_from_yaml`
+  - 2-D solid `C6_solid_tube2cell_aniso_thin.txt`
 ```
 
 Each notebook can be reproduced from the command line by the matching numbered script in `examples/`

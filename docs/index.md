@@ -113,6 +113,8 @@ tutorials/index
 tutorials/rm_timo_from_yaml
 tutorials/kl_timo_from_yaml
 tutorials/solid_timo_from_yaml
+tutorials/iea22_windio_to_timo
+tutorials/twocell_m45_asc
 ```
 
 ```{toctree}
