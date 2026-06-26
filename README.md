@@ -6,7 +6,7 @@ FEniCSx / MPI**.
 
 ### 📖 Documentation → **https://bagla0.github.io/OpenSG-TW/**
 
-[![docs](https://github.com/bagla0/OpenSG-TW/actions/workflows/docs.yml/badge.svg?branch=windio-converter)](https://bagla0.github.io/OpenSG-TW/)
+[![docs](https://github.com/bagla0/OpenSG-TW/actions/workflows/docs.yml/badge.svg?branch=main)](https://bagla0.github.io/OpenSG-TW/)
 
 ---
 
