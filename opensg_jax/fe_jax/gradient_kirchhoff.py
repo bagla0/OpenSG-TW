@@ -24,18 +24,16 @@ import sys
 import numpy as np
 import scipy.sparse as sp
 
-CC = r"C:\Users\bagla0\OneDrive - purdue.edu\2026_195\Claude_code"
-sys.path.insert(0, os.path.join(CC, "opensg_jax"))
 import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import pypardiso
-from fe_jax.msg_mesh import load_yaml, read_mesh, mesh_curvature, offset_oml_to_iml, element_e3_from_yaml
-from fe_jax.msg_materials import compute_ABD_matrix, shift_abd_reference
-from fe_jax.msg_solver import (gauss_legendre_01, compute_element_geometry,
+from .msg_mesh import load_yaml, read_mesh, mesh_curvature, offset_oml_to_iml, element_e3_from_yaml
+from .msg_materials import compute_ABD_matrix, shift_abd_reference
+from .msg_solver import (gauss_legendre_01, compute_element_geometry,
     solve_fluctuation_field, prepare_v1_rhs, finalize_v1_and_compute_deff)
-from fe_jax.msg_hermite import assemble_system_matrices_hermite, build_constraints_hermite
-from fe_jax.orient_plot import auto_emit                    # COMPULSORY e1/e2/e3 orientation plot
+from .msg_hermite import assemble_system_matrices_hermite, build_constraints_hermite
+from .orient_plot import auto_emit                    # COMPULSORY e1/e2/e3 orientation plot
 
 
 def _node_info(red_cells, n_unique, xd2, xd3, tol_deg=30.0):
@@ -170,8 +168,7 @@ def gradient_junction_kirchhoff(yaml_path, frac=0.0, tol_deg=30.0, dshift=None, 
 
 
 if __name__ == "__main__":
-    from fe_jax.msg_hermite import timoshenko_from_yaml
-    sys.path.insert(0, os.path.join(CC, "mh104_9cells", "scripts"))
+    from .msg_hermite import timoshenko_from_yaml
     from junction_kirchhoff import junction_kirchhoff
     LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
     D9 = os.path.join(CC, "mh104_9cells", "data")

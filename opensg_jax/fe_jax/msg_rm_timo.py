@@ -13,13 +13,11 @@ Constraints C: <w1>=<w2>=<w3>=<omega1>=0 (conjugate to Psi).
 import os, sys
 import numpy as np
 from scipy.sparse import coo_matrix
-HERE = os.path.dirname(__file__)
-sys.path.insert(0, os.path.join(HERE, "..", "opensg_jax"))
 import jax; jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
-from fe_jax.msg_solver import (solve_fluctuation_field, prepare_v1_rhs,
+from .msg_solver import (solve_fluctuation_field, prepare_v1_rhs,
                                finalize_v1_and_compute_deff)
-from msg_rm import _lagrange, _shape, _macro_BD, _macro_BG
+from .msg_rm import _lagrange, _shape, _macro_BD, _macro_BG
 
 
 def _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p):
@@ -47,11 +45,21 @@ def _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p):
     return BDq, BGq, BLq, (x2, x3, t2, t3, Jac)
 
 
-def assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True):
+def assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True,
+                 shear="mitc"):
+    """shear: transverse-shear (G-energy) integration scheme.
+      'mitc'    -- SELECTIVE assumed-strain (default, the soft-core fix): full-integrate the
+                   NON-locking gamma13=omega2 row, assumed-strain (tying point xi=0 for p=1,
+                   +-1/sqrt(3) for p=2) the locking-prone gamma23=n.dw/ds-omega1 row.
+                   See docs/MITC_transverse_shear.md (Dvorkin-Bathe MITC / Prathap field-consistency).
+      'reduced' -- legacy uniform reduced integration of the whole G-energy (leaves the omega2
+                   antisymmetric mode unpenalized -> soft-core hourglass that over-softens GA2).
+      'full'    -- full integration of the whole G-energy (locks thin walls)."""
     Nn = len(nodes); ndof = 5*Nn
     nodes_xi = _lagrange(p)
     Dhh = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 4)); Dee = np.zeros((4, 4))
     Dhl = np.zeros((ndof, ndof)); Dll = np.zeros((ndof, ndof)); Dle = np.zeros((ndof, 4))
+    Dhh_mem = np.zeros((ndof, ndof))   # membrane/bending-only fluctuation stiffness (NO transverse-shear G)
     xgD, wgD = np.polynomial.legendre.leggauss(p+1)
     xgG, wgG = np.polynomial.legendre.leggauss(max(1, p))
     for e, el in enumerate(elems):
@@ -63,27 +71,61 @@ def assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=T
             BDq, BGq, BLq, geo = _elem_BD_BG_BL(nodes_xi, xi, X, None, k22, p)
             x2, x3, t2, t3, Jac = geo; dl = Jac*w
             BDe = _macro_BD(x2, x3, t2, t3, k22)
-            Dhh[np.ix_(g, g)] += BDq.T @ D @ BDq * dl
+            kdd = BDq.T @ D @ BDq * dl
+            Dhh[np.ix_(g, g)] += kdd
+            Dhh_mem[np.ix_(g, g)] += kdd          # membrane/bending part (shared with Dhh)
             Dhe[g] += BDq.T @ D @ BDe * dl
             Dee += BDe.T @ D @ BDe * dl
             Dhl[np.ix_(g, g)] += BDq.T @ D @ BLq * dl
             Dll[np.ix_(g, g)] += BLq.T @ D @ BLq * dl
             Dle[g] += BLq.T @ D @ BDe * dl
-        # G-energy (reduced int)
-        for xi, w in zip((xgG, xgD)[not reduced], (wgG, wgD)[not reduced]):
-            BDq, BGq, BLq, geo = _elem_BD_BG_BL(nodes_xi, xi, X, None, k22, p)
-            x2, x3, t2, t3, Jac = geo; dl = Jac*w
-            BGe = _macro_BG(x2, x3, t2, t3)
-            Dhh[np.ix_(g, g)] += BGq.T @ G @ BGq * dl
-            Dhe[g] += BGq.T @ G @ BGe * dl
-            Dee += BGe.T @ G @ BGe * dl
-    return Dhh, Dhe, Dee, Dhl, Dll, Dle
+        # ---- G-energy: transverse shear ----
+        if shear == "mitc":
+            # SELECTIVE assumed-strain. gamma13 = omega2 (BGq row 0) is algebraic in the DOF and
+            # does NOT lock -> integrate it FULLY (reduced int leaves the omega2 antisymmetric mode
+            # unpenalised -> the soft-core hourglass). gamma23 = n.dw/ds - omega1 (BGq row 1) IS
+            # locking-prone -> sample it at the Barlow/tying points and re-interpolate (MITC),
+            # then full-integrate.  (Dvorkin-Bathe 1984/86; Prathap field-consistency.)
+            if p == 1:
+                ty = [0.0]; Nas = lambda xi: (1.0,)                       # constant assumed gamma23
+            else:
+                aa = 1.0/np.sqrt(3.0); ty = [-aa, aa]
+                Nas = lambda xi: ((1.0 - np.sqrt(3.0)*xi)/2.0, (1.0 + np.sqrt(3.0)*xi)/2.0)
+            BG23 = []
+            for xt in ty:
+                _, BGq_t, _, _ = _elem_BD_BG_BL(nodes_xi, xt, X, None, k22, p)
+                BG23.append(BGq_t[1:2, :].copy())                        # gamma23 operator at tying pt
+            for xi, w in zip(xgD, wgD):                                   # FULL integration
+                BDq, BGq, BLq, geo = _elem_BD_BG_BL(nodes_xi, xi, X, None, k22, p)
+                x2, x3, t2, t3, Jac = geo; dl = Jac*w
+                Nk = Nas(xi)
+                BG23bar = sum(Nk[k]*BG23[k] for k in range(len(ty)))     # assumed gamma23
+                BGb = np.vstack([BGq[0:1, :], BG23bar])                   # row0 full, row1 assumed
+                BGe = _macro_BG(x2, x3, t2, t3)
+                Dhh[np.ix_(g, g)] += BGb.T @ G @ BGb * dl
+                Dhe[g] += BGb.T @ G @ BGe * dl
+                Dee += BGe.T @ G @ BGe * dl
+        else:
+            for xi, w in zip((xgG, xgD)[shear == "full"], (wgG, wgD)[shear == "full"]):
+                BDq, BGq, BLq, geo = _elem_BD_BG_BL(nodes_xi, xi, X, None, k22, p)
+                x2, x3, t2, t3, Jac = geo; dl = Jac*w
+                BGe = _macro_BG(x2, x3, t2, t3)
+                Dhh[np.ix_(g, g)] += BGq.T @ G @ BGq * dl
+                Dhe[g] += BGq.T @ G @ BGe * dl
+                Dee += BGe.T @ G @ BGe * dl
+    return Dhh, Dhe, Dee, Dhl, Dll, Dle, Dhh_mem
 
 
-def build_C_Psi(nodes, elems, p=1):
+def build_C_Psi(nodes, elems, p=1, w2null=False):
+    """4 rigid-kernel modes (w1,w2,w3 translations + twist) and conjugate <.> constraints.
+    w2null=True adds a 5th mode for the director omega2 (constant-omega2 Psi column + <omega2>
+    constraint row) -- the Eq.85/100 V1s projection otherwise misses omega2's near-null mode for a
+    soft core (it is in NO rigid mode), leaking the soft-Gs director into the section shear."""
     Nn = len(nodes); ndof = 5*Nn
+    idmode = (w2null == "id")                    # 'id' = constrain EVERY omega2 DOF (full subspace)
+    nm = (4 + Nn) if idmode else (5 if w2null else 4)
     nodes_xi = _lagrange(p)
-    C = np.zeros((4, ndof)); Psi = np.zeros((ndof, 4))
+    C = np.zeros((nm, ndof)); Psi = np.zeros((ndof, nm))
     xg, wg = np.polynomial.legendre.leggauss(p+1)
     for el in elems:
         X = nodes[el]
@@ -94,23 +136,30 @@ def build_C_Psi(nodes, elems, p=1):
                 C[1, 5*nd+1] += N[a]*dl          # <w2>
                 C[2, 5*nd+2] += N[a]*dl          # <w3>
                 C[3, 5*nd+3] += N[a]*dl          # <omega1>
+                if w2null is True:
+                    C[4, 5*nd+4] += N[a]*dl      # <omega2>  (5th constraint, average)
     for nd in range(Nn):
         y2, y3 = nodes[nd]
         Psi[5*nd+0, 0] = 1.0                     # w1 translation
         Psi[5*nd+1, 1] = 1.0                     # w2 translation
         Psi[5*nd+2, 2] = 1.0                     # w3 translation
         Psi[5*nd+1, 3] = -y3; Psi[5*nd+2, 3] = y2; Psi[5*nd+3, 3] = -1.0  # twist
+        if w2null is True:
+            Psi[5*nd+4, 4] = 1.0                 # constant-omega2 mode
+        elif idmode:
+            C[4+nd, 5*nd+4] = 1.0                # identity: constrain this omega2 DOF
+            Psi[5*nd+4, 4+nd] = 1.0
     return C, Psi
 
 
 def timoshenko_rm(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True,
                   return_warp=False):
-    Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_all(
+    Dhh, Dhe, Dee, Dhl, Dll, Dle, Dhh_mem = assemble_all(
         nodes, elems, layup_per_elem, D_by, G_by, k22_e, p, reduced)
     C, Psi = build_C_Psi(nodes, elems, p)
     Dc = C.T
     Dhh_coo = coo_matrix(Dhh)
-    V0, D1, A_aug = solve_fluctuation_field(Dhh_coo, -Dhe, Dc)
+    V0, D1, A_aug = solve_fluctuation_field(Dhh_coo, -Dhe, Dc)   # G stays in the EB warping
     Deff = Dee + np.asarray(D1)
     bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
         jnp.array(V0), jnp.array(Dhl), jnp.array(Dll), jnp.array(Dle),

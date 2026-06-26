@@ -15,7 +15,7 @@ import os, sys
 import numpy as np
 
 # opensg FEniCS package (training-data copy) on the path
-PKG = "/mnt/c/Users/bagla0/OneDrive - purdue.edu/2026_195/Claude_code/training data/opensg-FEniCS"
+PKG = "/mnt/c/Users/bagla0/OneDrive - purdue.edu/2026_195/Claude_code/tests/research/training data/opensg-FEniCS"
 sys.path.insert(0, PKG)
 HERE = "/mnt/c/Users/bagla0/OneDrive - purdue.edu/2026_195/Claude_code"
 YAML = os.path.join(HERE, "strip_iso_solid.yaml")

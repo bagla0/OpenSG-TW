@@ -21,12 +21,10 @@ Run (Windows):
 """
 import os, sys
 import numpy as np
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "opensg_jax"))
 import jax; jax.config.update("jax_enable_x64", True)
-from fe_jax.msg_hermite import solve_tw_from_yaml
+from .msg_hermite import solve_tw_from_yaml
 
-YAML = os.path.join(HERE, "strip_iso_1D.yaml")
+YAML = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "strip_iso_1D.yaml")
 LBL = ["ext", "shear2", "shear3", "twist", "bend2", "bend3"]
 
 

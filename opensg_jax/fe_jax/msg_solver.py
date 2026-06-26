@@ -39,23 +39,17 @@ def compute_element_geometry(nodes, cells):
 # KKT Solver
 # =============================================================================
 
-def solve_fluctuation_field(Dhh_sparse, RHS_dense, Dc_matrix):
-    """Solve KKT system [Dhh  Dc; Dc^T  0][V0; lam] = [RHS; 0].
+def assemble_kkt(Dhh_sparse, Dc_matrix):
+    """Build the augmented KKT matrix [Dhh  Dc; Dc^T  0] (constraints scaled by 1e8).
 
-    Returns
-    -------
-    V0          : (N_primal, n_cases) fluctuation field
-    D1          : (n_cases, n_cases) = -(V0^T @ RHS)
-    A_augmented : scipy CSR of the full KKT system (reused for Timoshenko RHS)
-    """
-    R = np.asarray(RHS_dense)
-    N, n_cases = R.shape
-
+    Returns (A_aug CSR, N primal dofs, n_con, emp) where `emp` are empty rows that were
+    given a unit diagonal (their RHS must be zeroed by the caller)."""
     if not hasattr(Dhh_sparse, 'row'):
         Dhh_sparse = Dhh_sparse.tocoo()
     dhh_data = np.asarray(Dhh_sparse.data)
     dhh_row  = np.asarray(Dhh_sparse.row)
     dhh_col  = np.asarray(Dhh_sparse.col)
+    N = Dhh_sparse.shape[0]
 
     Dc = np.asarray(Dc_matrix)
     if Dc.shape[0] == 4 and Dc.shape[1] == N:
@@ -70,19 +64,32 @@ def solve_fluctuation_field(Dhh_sparse, RHS_dense, Dc_matrix):
     aug_col  = np.concatenate([dhh_col, tr_c, bl_c])
     aug_data = np.concatenate([dhh_data, Dc_sc.T[bl_r-N, bl_c-N],
                                           Dc_sc[tr_r, tr_c-N]])
-
     total = N + n_con
-    R_aug = np.vstack([R, np.zeros((n_con, n_cases))])
-
     cnt = np.bincount(aug_row, minlength=total)
     emp = np.where(cnt == 0)[0]
     if len(emp):
         aug_row  = np.concatenate([aug_row, emp])
         aug_col  = np.concatenate([aug_col, emp])
         aug_data = np.concatenate([aug_data, np.ones(len(emp), dtype=aug_data.dtype)])
-        R_aug[emp] = 0.0
-
     A_aug = csr_matrix((aug_data, (aug_row, aug_col)), shape=(total, total))
+    return A_aug, N, n_con, emp
+
+
+def solve_fluctuation_field(Dhh_sparse, RHS_dense, Dc_matrix):
+    """Solve KKT system [Dhh  Dc; Dc^T  0][V0; lam] = [RHS; 0].
+
+    Returns
+    -------
+    V0          : (N_primal, n_cases) fluctuation field
+    D1          : (n_cases, n_cases) = -(V0^T @ RHS)
+    A_augmented : scipy CSR of the full KKT system (reused for Timoshenko RHS)
+    """
+    R = np.asarray(RHS_dense)
+    N, n_cases = R.shape
+    A_aug, N, n_con, emp = assemble_kkt(Dhh_sparse, Dc_matrix)
+    R_aug = np.vstack([R, np.zeros((n_con, n_cases))])
+    if len(emp):
+        R_aug[emp] = 0.0
     V_aug = pypardiso.spsolve(A_aug, R_aug)
 
     V0 = V_aug[:N, :]

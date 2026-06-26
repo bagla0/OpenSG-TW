@@ -5,13 +5,12 @@ The canonical implementation now lives in the package at
 ``opensg_jax/fe_jax/msg_transverse_shear.py`` so that the plate subroutine
 ``compute_ABD_matrix(..., shear_refined=True)`` can assemble the 8x8 RM plate
 stiffness directly.  This thin module keeps the historical ``rm/`` import path
-(``from transverse_shear import transverse_shear_stiffness``) working; the
+(``from .transverse_shear import transverse_shear_stiffness``) working; the
 ``coupled=True`` (MSG, coupling-aware) form is the default.
 """
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "opensg_jax"))
-from fe_jax.msg_transverse_shear import (   # noqa: E402,F401
+from .msg_transverse_shear import (   # noqa: E402,F401
     _ply_Q_and_G,
     transverse_shear_stiffness,
     plate_8x8,

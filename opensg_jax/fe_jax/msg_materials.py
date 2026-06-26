@@ -225,11 +225,17 @@ def compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1,
     null[2::3, 2] = 1.0
     Q, _ = np.linalg.qr(null)
 
-    alpha = np.max(np.abs(np.diag(K))) * 1e8
-    K_reg = K + alpha * Q @ Q.T
+    # Remove the rigid-body nullspace by PROJECTION, not a giant penalty.  A penalty
+    # K + alpha*Q Q^T leaks alpha onto EVERY node through Q Q^T and swamps the physical
+    # stiffness of a near-zero ply (gelcoat E=10 Pa, ~1e5 vs alpha~1e22) -> numerically
+    # singular.  Projecting keeps the physical block (incl. soft plies) well-scaled; V0 is
+    # the same physical fluctuation, so D_eff is unchanged for all well-conditioned cases.
+    P = np.eye(ndofs) - Q @ Q.T
+    beta = np.max(np.abs(np.diag(K)))
+    K_proj = P @ K @ P + beta * (Q @ Q.T)
 
-    V0 = np.linalg.solve(K_reg, -F_load)
-    V0 -= Q @ (Q.T @ V0)
+    V0 = np.linalg.solve(K_proj, -(P @ F_load))
+    V0 = P @ V0
 
     D_eff = D_ee + V0.T @ F_load
 

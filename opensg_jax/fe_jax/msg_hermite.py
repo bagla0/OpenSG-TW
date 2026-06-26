@@ -164,9 +164,14 @@ def hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
 
 def assemble_system_matrices_hermite(
     corners, hcells, reduced_cells, ABD_elems, k22_elems,
-    L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal
+    L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal, dof_map=None
 ):
-    """Assemble Dhh, Dhe, Dee, Dll, Dhl, Dle with Hermite C1 elements."""
+    """Assemble Dhh, Dhe, Dee, Dll, Dhl, Dle with Hermite C1 elements.
+
+    ``dof_map`` (E x 12, int) optionally overrides the default node->DOF scatter
+    ``6*reduced_cells + arange(6)``.  Used to split the slope (dw/ds) DOFs per
+    element at T-junctions (see junction_kirchhoff) while keeping the value DOFs
+    shared; ``None`` reproduces the original shared-C1 behaviour exactly."""
     E_elem = hcells.shape[0]
     Q_pts = xi_q.shape[0]
 
@@ -194,7 +199,10 @@ def assemble_system_matrices_hermite(
     D_hh_b, D_he_b, D_ee_b, D_ll_b, D_hl_b, D_le_b = out
 
     rc = jnp.array(reduced_cells)
-    dof = (rc.reshape(E_elem, 2, 1) * 6 + jnp.arange(6)).reshape(E_elem, 12)
+    if dof_map is None:
+        dof = (rc.reshape(E_elem, 2, 1) * 6 + jnp.arange(6)).reshape(E_elem, 12)
+    else:
+        dof = jnp.asarray(dof_map, dtype=jnp.int64)
     rs = jnp.repeat(dof, 12, axis=1).ravel(); cs = jnp.tile(dof, (1, 12)).ravel()
     rr = jnp.repeat(dof, 4, axis=1).ravel(); cr = jnp.tile(jnp.arange(4), (E_elem, 12)).ravel()
 
@@ -209,17 +217,26 @@ def assemble_system_matrices_hermite(
 # =============================================================================
 
 def build_constraints_hermite(corners, hcells, reduced_cells, L_elems,
-                              xd2_elems, xd3_elems, xi_q, W_q, n_primal, n_unique):
+                              xd2_elems, xd3_elems, xi_q, W_q, n_primal, n_unique,
+                              dof_map=None):
     """4 x N constraint matrix C and N x 4 rigid kernel Psi (Hermite layout).
 
     Constraints: <w1>=<w2>=<w3>=0 and the DERIVATIVE twist
     INT(dw2/ds*xd3 - dw3/ds*xd2) ds = 0 (matches the quadratic path, keeps the
     V1 RHS orthogonal to Psi so no penalty is needed).  Psi: 3 translations
-    (value DOFs) + twist (value w2=-y3,w3=y2 and slope = nodal-average tangent).
-    """
+    (value DOFs) + twist (value w2=-y3,w3=y2 and slope = tangent).
+
+    ``dof_map`` (E x 12) mirrors :func:`assemble_system_matrices_hermite`: when
+    given, the per-element-corner DOFs come from it (split slope DOFs at
+    junctions) and the twist slope uses each element's own tangent; ``None``
+    reproduces the original shared-C1 layout (nodal-average tangent) exactly."""
     E_elem = hcells.shape[0]
     rc = np.asarray(reduced_cells)
     xd2n = np.asarray(xd2_elems); xd3n = np.asarray(xd3_elems); Ln = np.asarray(L_elems)
+    dm = None if dof_map is None else np.asarray(dof_map)
+
+    def cdofs(e, loc, cn):
+        return [cn * 6 + k for k in range(6)] if dm is None else [int(dm[e, 6 * loc + k]) for k in range(6)]
 
     C = np.zeros((4, n_primal))
     for e in range(E_elem):
@@ -228,28 +245,33 @@ def build_constraints_hermite(corners, hcells, reduced_cells, L_elems,
         iv = np.asarray(jnp.einsum("qn,q->n", val, jnp.array(dV)))    # int phi
         idp = np.asarray(jnp.einsum("qn,q->n", d1, jnp.array(dV)))    # int dphi/ds
         for loc, cn in enumerate(rc[e]):
-            base = cn * 6
-            C[0, base + 0] += iv[2*loc];     C[0, base + 1] += iv[2*loc + 1]
-            C[1, base + 2] += iv[2*loc];     C[1, base + 3] += iv[2*loc + 1]
-            C[2, base + 4] += iv[2*loc];     C[2, base + 5] += iv[2*loc + 1]
-            C[3, base + 2] += xd3n[e]*idp[2*loc];  C[3, base + 3] += xd3n[e]*idp[2*loc + 1]
-            C[3, base + 4] += -xd2n[e]*idp[2*loc]; C[3, base + 5] += -xd2n[e]*idp[2*loc + 1]
+            d = cdofs(e, loc, cn)
+            C[0, d[0]] += iv[2*loc];     C[0, d[1]] += iv[2*loc + 1]
+            C[1, d[2]] += iv[2*loc];     C[1, d[3]] += iv[2*loc + 1]
+            C[2, d[4]] += iv[2*loc];     C[2, d[5]] += iv[2*loc + 1]
+            C[3, d[2]] += xd3n[e]*idp[2*loc];  C[3, d[3]] += xd3n[e]*idp[2*loc + 1]
+            C[3, d[4]] += -xd2n[e]*idp[2*loc]; C[3, d[5]] += -xd2n[e]*idp[2*loc + 1]
 
-    tang = np.zeros((n_unique, 2))
-    for e in range(E_elem):
-        for cn in rc[e]:
-            tang[cn] += [xd2n[e], xd3n[e]]
-    tang /= np.linalg.norm(tang, axis=1, keepdims=True) + 1e-30
-
-    Psi = np.zeros((n_primal, 4))
     cc = np.asarray(corners[:n_unique])
-    for nd in range(n_unique):
-        Psi[nd*6 + 0, 0] = 1.0
-        Psi[nd*6 + 2, 1] = 1.0
-        Psi[nd*6 + 4, 2] = 1.0
-        y2, y3 = cc[nd]
-        Psi[nd*6 + 2, 3] = -y3; Psi[nd*6 + 4, 3] = y2
-        Psi[nd*6 + 3, 3] = -tang[nd, 1]; Psi[nd*6 + 5, 3] = tang[nd, 0]
+    Psi = np.zeros((n_primal, 4))
+    if dm is None:
+        tang = np.zeros((n_unique, 2))
+        for e in range(E_elem):
+            for cn in rc[e]:
+                tang[cn] += [xd2n[e], xd3n[e]]
+        tang /= np.linalg.norm(tang, axis=1, keepdims=True) + 1e-30
+        for nd in range(n_unique):
+            Psi[nd*6 + 0, 0] = 1.0; Psi[nd*6 + 2, 1] = 1.0; Psi[nd*6 + 4, 2] = 1.0
+            y2, y3 = cc[nd]
+            Psi[nd*6 + 2, 3] = -y3; Psi[nd*6 + 4, 3] = y2
+            Psi[nd*6 + 3, 3] = -tang[nd, 1]; Psi[nd*6 + 5, 3] = tang[nd, 0]
+    else:
+        for e in range(E_elem):
+            for loc, cn in enumerate(rc[e]):
+                d = cdofs(e, loc, cn); y2, y3 = cc[cn]
+                Psi[d[0], 0] = 1.0; Psi[d[2], 1] = 1.0; Psi[d[4], 2] = 1.0  # translations (value, shared)
+                Psi[d[2], 3] = -y3; Psi[d[4], 3] = y2                        # twist values (shared)
+                Psi[d[3], 3] = -xd3n[e]; Psi[d[5], 3] = xd2n[e]              # twist slope (per-element tangent)
     return jnp.array(C), jnp.array(Psi)
 
 

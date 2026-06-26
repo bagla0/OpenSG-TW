@@ -1,8 +1,14 @@
-"""windIO v2 blade  ->  OpenSG 1D-shell SG YAML  (+ PreVABS XML)  cross-section converter.
+"""windIO blade  ->  OpenSG 1D-shell SG YAML  (+ PreVABS XML)  cross-section converter.
 
-For a chosen span station r in [0,1] (non-dimensional blade length) this resolves the windIO v2
-blade structure (outer_shape airfoil/chord/twist + structure anchors/layers/webs) into a 2D
-cross-section and emits:
+GENERAL and version-agnostic: reads any windIO file via load_blade() -- v2 (outer_shape / structure /
+anchors, e.g. IEA-22-280-RWT) and v1 (outer_shape_bem / internal_structure_2d_fem, e.g. the NREL BAR
+designs) share one downstream pipeline. No blade-specific assumptions: laminate stacking order = the
+windIO layer order, materials accept scalar (isotropic) or 3-list (orthotropic) E/G/nu (G filled from
+E,nu if absent). Per-blade specifics (source path, stations, mesh sizes, PreVABS exe) live in the
+driver convert_blade.py, not here.
+
+For a chosen span station r in [0,1] (non-dimensional blade length) this resolves the windIO
+blade structure (airfoil/chord/twist + layers/webs) into a 2D cross-section and emits:
   - an OpenSG 1D-shell YAML (nodes, line elements, element sets = distinct laminates, sections, materials)
     consumed by strip_RM.rm_timoshenko_6x6 / gradient_junction_kirchhoff;
   - a PreVABS XML (airfoil .dat baseline + dividing points + webs + layups + materials) for the 2D-solid.
@@ -18,11 +24,7 @@ Conventions:
 import os
 import sys
 import numpy as np
-import windIO
-
-# outer -> inner lamination order (windIO layer-name stems); region layers slot between the shells.
-LAYER_ORDER = ["gelcoat", "shell_triax_outer", "te_reinforcement", "spar_cap", "le_reinforcement",
-               "te_filler", "le_filler", "shell_triax_inner"]
+# windIO is imported lazily inside WindIOBlade (v2 only) so v1 blades (plain yaml) need no windIO package.
 
 
 def interp(spec, r):
@@ -41,6 +43,7 @@ def arc_param(xy):
 
 class WindIOBlade:
     def __init__(self, yaml_path):
+        import windIO                                       # v2 only -- v1 (WindIOBladeV1) needs no windIO
         self.d = windIO.load_yaml(yaml_path)
         self.bl = self.d["components"]["blade"]
         self.osh = self.bl["outer_shape"]
@@ -86,13 +89,13 @@ class WindIOBlade:
 
     def layers_at(self, r, tol=1e-6):
         out = []
-        for L in self.st["layers"]:
+        for idx, L in enumerate(self.st["layers"]):
             t = interp(L.get("thickness"), r)
             if not t or t < tol:
                 continue
             out.append(dict(name=L["name"], material=L["material"],
                             s=self.resolve(L.get("start_nd_arc"), r), e=self.resolve(L.get("end_nd_arc"), r),
-                            t=t, fiber=interp(L.get("fiber_orientation"), r) or 0.0))
+                            t=t, fiber=interp(L.get("fiber_orientation"), r) or 0.0, order=idx))
         return out
 
     def webs_at(self, r, tol=1e-6):
@@ -107,11 +110,77 @@ class WindIOBlade:
         return webs
 
 
-def _order_key(layer_name):
-    for i, stem in enumerate(LAYER_ORDER):
-        if layer_name.startswith(stem):
-            return i
-    return len(LAYER_ORDER)
+class WindIOBladeV1(WindIOBlade):
+    """windIO v1 reader (outer_shape_bem / internal_structure_2d_fem) exposing the SAME interface as
+    WindIOBlade. v1 has no anchors -- layer/web start_nd_arc & end_nd_arc are direct grid/values; web layers
+    are tagged by a `web:` key; airfoils are placed by outer_shape_bem.airfoil_position (grid + labels);
+    laminate stacking order = the layer's index in the yaml list (already outer->inner)."""
+
+    def __init__(self, yaml_path):
+        import yaml as _y
+        self.d = _y.safe_load(open(yaml_path))          # windIO.load_yaml validates the v2 schema -> use raw
+        self.bl = self.d["components"]["blade"]
+        self.osh = self.bl["outer_shape_bem"]
+        self.ist = self.bl["internal_structure_2d_fem"]
+        self.mats = {m["name"]: m for m in self.d["materials"]}
+        self.afs = {a["name"]: a for a in self.d["airfoils"]}
+        self._layers = self.ist["layers"]
+        self._webs = self.ist["webs"]
+
+    def scalar(self, name, r):
+        return interp(self.osh[name], r)                # chord (m), twist (rad -- reporting only, no rotation)
+
+    def resolve(self, spec, r):
+        return interp(spec, r)                          # no anchors in v1
+
+    def airfoil_coords(self, r, n=400):
+        ap = self.osh["airfoil_position"]; grid = ap["grid"]; labels = ap["labels"]
+        i = int(np.clip(np.searchsorted(grid, r) - 1, 0, len(grid) - 2))
+        w = 0.0 if grid[i + 1] == grid[i] else (r - grid[i]) / (grid[i + 1] - grid[i])
+        w = float(np.clip(w, 0, 1))
+
+        def resample(afname):
+            c = self.afs[afname]["coordinates"]
+            xy = np.column_stack([c["x"], c["y"]]).astype(float)
+            s = arc_param(xy); sn = np.linspace(0, 1, n)
+            return np.column_stack([np.interp(sn, s, xy[:, 0]), np.interp(sn, s, xy[:, 1])])
+        return (1 - w) * resample(labels[i]) + w * resample(labels[i + 1])
+
+    def layers_at(self, r, tol=1e-6):
+        out = []
+        for idx, L in enumerate(self._layers):
+            if L.get("web"):                            # web layers -> webs_at
+                continue
+            t = interp(L.get("thickness"), r)
+            if not t or t < tol:
+                continue
+            out.append(dict(name=L["name"], material=L["material"],
+                            s=interp(L.get("start_nd_arc"), r), e=interp(L.get("end_nd_arc"), r),
+                            t=t, fiber=interp(L.get("fiber_orientation"), r) or 0.0, order=idx))
+        return out
+
+    def webs_at(self, r, tol=1e-6):
+        webs = []
+        for w in self._webs:
+            s = interp(w.get("start_nd_arc"), r); e = interp(w.get("end_nd_arc"), r)
+            if s is None or e is None:
+                continue
+            lam = []
+            for idx, L in enumerate(self._layers):      # web laminate = layers tagged web==this web (skin/core/skin)
+                if L.get("web") == w["name"]:
+                    t = interp(L.get("thickness"), r)
+                    if t and t >= tol:
+                        lam.append(dict(name=L["name"], material=L["material"], s=None, e=None,
+                                        t=t, fiber=interp(L.get("fiber_orientation"), r) or 0.0, order=idx))
+            webs.append(dict(name=w["name"], s=s, e=e, layers=lam))
+        return webs
+
+
+def load_blade(path):
+    """Auto-detect windIO v1 (outer_shape_bem) vs v2 (outer_shape) and return the matching reader."""
+    import yaml as _y
+    bl = _y.safe_load(open(path))["components"]["blade"]
+    return WindIOBladeV1(path) if "outer_shape_bem" in bl else WindIOBlade(path)
 
 
 def build_cross_section(blade, r, mesh_size=0.01):
@@ -137,7 +206,7 @@ def build_cross_section(blade, r, mesh_size=0.01):
     def laminate_at(smid):
         cov = [L for L in skin_layers if (L["s"] is not None and L["e"] is not None
                                           and min(L["s"], L["e"]) - 1e-9 <= smid <= max(L["s"], L["e"]) + 1e-9)]
-        cov.sort(key=lambda L: _order_key(L["name"]))
+        cov.sort(key=lambda L: L["order"])              # outer -> inner = windIO layer order (general)
         return tuple((L["material"], round(L["t"], 8), round(L["fiber"], 3)) for L in cov)
 
     def pt(starc):                                          # (x,y) at nd_arc s
@@ -212,8 +281,10 @@ _yaml.add_representer(_Flow, lambda d, data: d.represent_sequence("tag:yaml.org,
 
 def _mat_block(blade, name):
     m = blade.mats[name]
-    E, G, nu = m["E"], m["G"], m["nu"]
-    if not isinstance(E, (list, tuple)):                    # isotropic -> replicate
+    E, G, nu = m.get("E"), m.get("G"), m.get("nu")
+    if not isinstance(E, (list, tuple)):                    # isotropic -> replicate (G from E,nu if absent)
+        nu = 0.3 if nu is None else nu
+        G = E / (2.0 * (1.0 + nu)) if G is None else G
         E = [E, E, E]; G = [G, G, G]; nu = [nu, nu, nu]
     return dict(name=name, density=float(m.get("rho", 1.0)),
                 elastic=dict(E=[float(x) for x in E], G=[float(x) for x in G], nu=[float(x) for x in nu]))
@@ -292,9 +363,11 @@ def emit_opensg_yaml(cs, out_path, web_mesh=None):
 # ---------------------------------------------------------------------------------------------------
 def _mat_xml(blade, name):
     m = blade.mats[name]
-    E, G, nu, rho = m["E"], m["G"], m["nu"], float(m.get("rho", 1.0))
-    if not isinstance(E, (list, tuple)):           # isotropic -> replicate (windIO G == E/2(1+nu), exact);
-        E = [E, E, E]; G = [G, G, G]; nu = [nu, nu, nu]   # uniform orthotropic cards keep the .sg parser happy
+    E, G, nu, rho = m.get("E"), m.get("G"), m.get("nu"), float(m.get("rho", 1.0))
+    if not isinstance(E, (list, tuple)):           # isotropic -> replicate (G == E/2(1+nu) if absent);
+        nu = 0.3 if nu is None else nu             # uniform orthotropic cards keep the .sg parser happy
+        G = E / (2.0 * (1.0 + nu)) if G is None else G
+        E = [E, E, E]; G = [G, G, G]; nu = [nu, nu, nu]
     return ('  <material name="%s" type="orthotropic">\n    <density>%g</density>\n    <elastic>\n'
             '      <e1>%g</e1><e2>%g</e2><e3>%g</e3>\n      <g12>%g</g12><g13>%g</g13><g23>%g</g23>\n'
             '      <nu12>%g</nu12><nu13>%g</nu13><nu23>%g</nu23>\n    </elastic>\n  </material>\n'
@@ -315,7 +388,20 @@ def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
                 used.append(mat)
 
     def ply_t(mat):
-        return float(blade.mats[mat].get("ply_t", 0.001)) or 0.001
+        pt = blade.mats[mat].get("ply_t")
+        return float(pt) if pt else 0.001                   # foam/core layers have no manufacturing ply_t
+
+    # per-(material, thickness) lamina with a CAPPED through-thickness ply count. A thick isotropic core
+    # (e.g. 70 mm foam) divided into 1 mm "plies" makes 70 high-aspect solid layers that crash the PreVABS
+    # mesher; cap at MAX_PLIES and set lamina thickness = t/n so the layer thickness stays exact.
+    MAX_PLIES = 8
+    lam_reg = {}                                            # (mat, round(t,8)) -> (lamina_name, n_plies, lam_thk)
+    for k in range(len(inv)):
+        for (mat, t, a) in inv[k]:
+            key = (mat, round(t, 8))
+            if key not in lam_reg:
+                n = min(max(1, int(round(t / ply_t(mat)))), MAX_PLIES)
+                lam_reg[key] = ("la_%s_%d" % (mat, len(lam_reg)), n, t / n)
 
     # 1. airfoil .dat (normalised: PreVABS <scale> = chord applies the size)
     xyn = cs["xy"] / chord
@@ -324,11 +410,11 @@ def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
         for X, Y in xyn:
             f.write("% .8f % .8f\n" % (X, Y))
 
-    # 2. materials.xml
+    # 2. materials.xml (material cards + one lamina per distinct layer thickness)
     mx = "<materials>\n" + "".join(_mat_xml(blade, m) for m in used)
-    for m in used:
-        mx += ('  <lamina name="la_%s">\n    <material>%s</material>\n    <thickness>%g</thickness>\n  </lamina>\n'
-               % (m, m, ply_t(m)))
+    for (mat, _tr), (lname, _n, lthk) in lam_reg.items():
+        mx += ('  <lamina name="%s">\n    <material>%s</material>\n    <thickness>%g</thickness>\n  </lamina>\n'
+               % (lname, mat, lthk))
     mx += "</materials>\n"
     open(os.path.join(outdir, "materials.xml"), "w").write(mx)
 
@@ -336,14 +422,19 @@ def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
     def layup_xml(k):
         s = '    <layup name="layup_%d">\n' % k
         for (mat, t, a) in inv[k]:
-            s += '      <layer lamina="la_%s">%g:%d</layer>\n' % (mat, a, max(1, int(round(t / ply_t(mat)))))
+            lname, n, _lthk = lam_reg[(mat, round(t, 8))]
+            s += '      <layer lamina="%s">%g:%d</layer>\n' % (lname, a, n)
         return s + '    </layup>\n'
 
     # 4. skin dividing points (by normalised x + side) and baselines between consecutive breakpoints
     s_arc = cs["s_arc"]; xyc = cs["xy"]; segs = cs["segments"]
 
+    LE_XMIN = 0.02      # keep skin dividing points off the degenerate LE nose: PreVABS by-x placement crashes
+    # at x~0 (e.g. BAR LE_reinf straddles the nose at x~0.001). Only shifts the solid-mesh LE-reinf boundary a
+    # fraction of a percent chord; the 1D shell uses exact nodes and is unaffected. (IEA-22 LE points >0.02.)
     def xn(s):
-        return float(np.interp(s, s_arc, xyc[:, 0])) / chord
+        x = float(np.interp(s, s_arc, xyc[:, 0])) / chord
+        return x if x >= LE_XMIN else LE_XMIN
 
     def side(s):
         return "top" if s < 0.5 else "bottom"
@@ -399,17 +490,19 @@ def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
 
 
 if __name__ == "__main__":
-    import windIO as _w
-    src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(_w.__file__), "examples", "turbine", "IEA-22-280-RWT.yaml")
+    # single-station demo for ANY windIO file:  python windio_to_opensg.py <blade.yaml> [r] [mesh_size] [out.yaml]
+    if len(sys.argv) < 2:
+        sys.exit("usage: python windio_to_opensg.py <windio_blade.yaml> [r=0.5] [mesh_size=0.01] [out.yaml]")
+    src = sys.argv[1]
     r = float(sys.argv[2]) if len(sys.argv) > 2 else 0.5
     ms = float(sys.argv[3]) if len(sys.argv) > 3 else 0.01
+    stem = os.path.splitext(os.path.basename(src))[0]
     out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "iea22_r%03d.yaml" % round(r * 100))
-    blade = WindIOBlade(src)
+        os.path.dirname(os.path.abspath(__file__)), "%s_r%03d.yaml" % (stem, round(r * 100)))
+    blade = load_blade(src)                              # auto-detects windIO v1 / v2
     cs = build_cross_section(blade, r, mesh_size=ms)
     info = emit_opensg_yaml(cs, out)
-    print("station r=%.2f  chord=%.3f m  twist=%.2f deg" % (cs["r"], cs["chord"], cs["twist"]))
+    print("%s  station r=%.2f  chord=%.3f m  twist=%.4f (rad)" % (type(blade).__name__, cs["r"], cs["chord"], cs["twist"]))
     print("laminates (element sets):")
     inv = {v: k for k, v in cs["laminates"].items()}
     for k in range(len(inv)):

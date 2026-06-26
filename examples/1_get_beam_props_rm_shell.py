@@ -12,20 +12,20 @@ import sys
 import numpy as np
 
 CC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for p in ("", "rm", "opensg_jax", os.path.join("mh104_9cells", "scripts")):
+for p in ("", "opensg_jax"):
     sys.path.insert(0, os.path.join(CC, p))
 import jax
 jax.config.update("jax_enable_x64", True)
 np.set_printoptions(precision=4, linewidth=150, suppress=True)
 
 from fe_jax.orient_plot import plot_orient
-from strip_RM import rm_timoshenko_6x6
-from gradient_kirchhoff import gradient_junction_kirchhoff
+from opensg_jax.fe_jax.strip_RM import rm_timoshenko_6x6
+from opensg_jax.fe_jax.gradient_kirchhoff import gradient_junction_kirchhoff
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-SHELL = os.path.join(CC, "tube_thesis_314", "data", "shell_center.yaml")
-SOLIDY = os.path.join(CC, "tube_thesis_314", "data", "solid_m45.yaml")
-BENCH = os.path.join(CC, "tube_thesis_314", "data", "C6_solid_314.txt")
+SHELL = os.path.join(CC, "tests", "research", "tube_thesis_314", "data", "shell_center.yaml")
+SOLIDY = os.path.join(CC, "tests", "research", "tube_thesis_314", "data", "solid_m45.yaml")
+BENCH = os.path.join(CC, "tests", "research", "tube_thesis_314", "data", "C6_solid_314.txt")
 
 
 def sym(M):

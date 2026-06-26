@@ -70,3 +70,12 @@ sgmesh.msh
 /debug/
 /tube_45_45_hR/
 
+
+# untracked working data relocated under tests/research/ (kept on disk, not part of the package)
+/tests/research/tube_thesis_314/
+/tests/research/prevabs_mh104/
+/tests/research/multicell_tube/
+/tests/research/multicell_box/
+/tests/research/mh104_center_ref/
+/tests/research/mh104_9cells/
+
