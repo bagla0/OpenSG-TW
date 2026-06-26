@@ -112,23 +112,29 @@ def plot_layup_section(shell_yaml, solid_yaml, reg, out_png, arrow=0.22):
     nd, elems, lay, oris, emid = _station(shell_yaml, sig2idx)
     sg = read_solid_yaml(solid_yaml)
     P, C = np.asarray(sg["points"])[:, :2], sg["cells"]
-    solid_lay = lay[cKDTree(emid).query(np.array([P[c].mean(0) for c in C]))[1]]
-    fig, (axS, axL) = plt.subplots(2, 1, figsize=(11, 6.2))
+    cell_nn = lay[cKDTree(emid).query(np.array([P[c].mean(0) for c in C]))[1]]
+    dom = np.asarray(sg["cell_domain_ids"])              # colour each solid DOMAIN by its majority layup (clean edges)
+    solid_lay = np.empty(len(C), int)
+    for d in np.unique(dom):
+        m = dom == d
+        solid_lay[m] = np.bincount(cell_nn[m]).argmax()
+    fig, (axS, axL) = plt.subplots(2, 1, figsize=(12, 6.2))
     axS.add_collection(PolyCollection([P[c] for c in C], facecolors=[PALETTE[i % len(PALETTE)] for i in solid_lay], edgecolors="none"))
     axS.autoscale_view(); axS.set_aspect("equal"); axS.set_title("2-D solid mesh (%d elements)" % len(C))
     axS.set_ylabel("y3 (m)"); axS.set_xticklabels([])
     axL.add_collection(LineCollection([nd[e[:2]] for e in elems], colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=2.0))
     _region_arrows(axL, elems, lay, oris, emid, arrow)
     axL.autoscale_view(); axL.set_aspect("equal")
-    axL.set_title("1-D shell line mesh (%d elements) + orientation  (e2 = blue, e3 = black)" % len(elems))
+    axL.set_title("1-D shell line mesh (%d elements)" % len(elems))
     axL.set_xlabel("y2 (m)"); axL.set_ylabel("y3 (m)")
-    fig.legend(handles=_handles(set(int(v) for v in lay[lay >= 0]), labels),
-               loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=9, title="layup")
-    fig.tight_layout(rect=[0, 0, 0.84, 1.0]); fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
+    used = sorted(set(int(v) for v in lay[lay >= 0]))
+    fig.legend(handles=_handles(used, labels), loc="lower center", bbox_to_anchor=(0.5, -0.02),
+               ncol=len(used), fontsize=9, title="layup")
+    fig.tight_layout(rect=[0, 0.06, 1, 1]); fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
     return out_png
 
 
-def plot_orientation_montage(shell_yamls, rRs, reg, out_png, title="", arrow=0.22, ncol=2):
+def plot_orientation_montage(shell_yamls, rRs, reg, out_png, title="", arrow=0.06, ncol=2):
     """Grid of line cross-sections, each with one e2/e3 arrow per connected region."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -141,31 +147,38 @@ def plot_orientation_montage(shell_yamls, rRs, reg, out_png, title="", arrow=0.2
         nd, elems, lay, oris, emid = _station(y, sig2idx); used |= set(int(v) for v in lay[lay >= 0])
         ax.add_collection(LineCollection([nd[e[:2]] for e in elems], colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=1.4))
         _region_arrows(ax, elems, lay, oris, emid, arrow)
-        ax.autoscale_view(); ax.set_aspect("equal"); ax.set_title("r/R = %.1f" % r, fontsize=12)
+        ax.autoscale_view(); ax.set_aspect("equal"); ax.set_title("r = %.1f" % r, fontsize=12)
         ax.set_xticks([]); ax.set_yticks([])
     for ax in axes[n:]:
         ax.axis("off")
     fig.legend(handles=_handles(used, labels), loc="center left", bbox_to_anchor=(0.99, 0.5), fontsize=8.5, title="layup")
-    fig.suptitle("line cross-section + orientation  (e2 = blue, e3 = black)   -   %s" % title, fontsize=12)
+    fig.suptitle("line cross-section + material orientation   -   %s" % title, fontsize=12)
     fig.tight_layout(rect=[0, 0, 0.86, 0.95]); fig.savefig(out_png, dpi=135, bbox_inches="tight"); plt.close(fig)
     return out_png
 
 
-def plot_span_loft(shell_yamls, rRs, reg, out_png):
-    """Line cross-sections lofted along the beam axis (3-D), coloured by layup -- the along-the-span view."""
+def plot_span_loft(shell_yamls, rs, reg, out_png):
+    """Isometric loft: the line cross-sections placed at their span station ``r`` along the beam axis (x),
+    coloured by layup, with a black beam axis through each section centre.  Orthographic (isometric)
+    projection, no axes/grid/numbers."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d.art3d import Line3DCollection
     sig2idx, labels = reg
-    fig = plt.figure(figsize=(13, 7)); ax = fig.add_subplot(111, projection="3d"); used = set()
-    for y, r in zip(shell_yamls, rRs):
+    fig = plt.figure(figsize=(13, 5.6)); ax = fig.add_subplot(111, projection="3d")
+    ax.set_proj_type("ortho")
+    used, centers = set(), []
+    for y, r in zip(shell_yamls, rs):
         nd, elems, lay, oris, emid = _station(y, sig2idx); used |= set(int(v) for v in lay[lay >= 0])
-        segs = [[(nd[e[0], 0], r, nd[e[0], 1]), (nd[e[1], 0], r, nd[e[1], 1])] for e in elems]
-        ax.add_collection3d(Line3DCollection(segs, colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=1.7))
-    ax.set_xlim(0, 5); ax.set_ylim(min(rRs) - 0.05, max(rRs) + 0.05); ax.set_zlim(-0.8, 0.8)
-    ax.set_box_aspect((4.5, 6.0, 1.5))
-    ax.set_xlabel("chord  y2 (m)"); ax.set_ylabel("span  r/R"); ax.set_zlabel("y3 (m)")
-    ax.view_init(elev=26, azim=-66)
+        segs = [[(r, nd[e[0], 0], nd[e[0], 1]), (r, nd[e[1], 0], nd[e[1], 1])] for e in elems]  # span = x
+        ax.add_collection3d(Line3DCollection(segs, colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=1.5))
+        c = nd.mean(0); centers.append((r, c[0], c[1]))
+    centers = np.array(centers)
+    ax.plot(centers[:, 0], centers[:, 1], centers[:, 2], color="black", lw=1.8, zorder=10)   # beam axis through centres
+    ax.set_xlim(min(rs) - 0.05, max(rs) + 0.05); ax.set_ylim(0, 5); ax.set_zlim(-0.9, 0.9)
+    ax.set_box_aspect((6.5, 5.0, 1.6))
+    ax.view_init(elev=18, azim=-74)
+    ax.set_axis_off()
     fig.legend(handles=_handles(used, labels), loc="center right", fontsize=9, title="layup")
-    fig.tight_layout(rect=[0, 0, 0.87, 1.0]); fig.savefig(out_png, dpi=140, bbox_inches="tight"); plt.close(fig)
+    fig.tight_layout(); fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
     return out_png
