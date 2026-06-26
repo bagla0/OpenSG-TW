@@ -63,4 +63,7 @@ $[\,EA,\,GA_2,\,GA_3,\,GJ,\,EI_2,\,EI_3\,]$.
 
 .. automodule:: opensg_jax.fe_jax.orient_plot
    :members:
+
+.. automodule:: opensg_jax.fe_jax.blade_viz
+   :members:
 ```
