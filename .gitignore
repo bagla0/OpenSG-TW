@@ -57,3 +57,16 @@ docs/_build/
 SG_mesh.*
 sgmesh.msh
 **/jax_cache/
+
+# research / scratch / output folders -- kept on disk, out of the published package
+/fe_jax_/
+/mh104_thickness_study/
+/oml_mh104/
+/oml_mh104_4way/
+/oml_mh104_jax_vs_solid/
+/st_oml_compare/
+/st15_oml/
+/benchmark_tube/
+/debug/
+/tube_45_45_hR/
+
