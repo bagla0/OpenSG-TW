@@ -82,7 +82,11 @@ def plot_orient(shell_yaml, solid_yaml=None, out_png=None):
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(out_png, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print("[orient_plot] wrote", out_png)
+    try:                                   # show a relocatable path, never the machine-absolute one
+        shown = os.path.relpath(out_png).replace(os.sep, "/")
+    except ValueError:                     # out_png on a different drive than cwd (Windows)
+        shown = os.path.basename(out_png)
+    print("[orient_plot] wrote", shown)
     return out_png
 
 
