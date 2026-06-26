@@ -1,0 +1,19 @@
+/* OpenSG-TW docs — light touch on top of sphinx-book-theme */
+
+:root {
+  --pst-color-primary: #1a6ca8;
+  --pst-color-secondary: #d98c1f;
+}
+
+/* tighten the landing-page hero */
+.sd-fs-2 { letter-spacing: -0.5px; margin-bottom: 0.1rem; }
+
+/* equations breathe a little */
+div.math { margin: 0.8em 0; }
+
+/* make the 6x6 result tables monospace-ish and compact */
+table.docutils td, table.docutils th { padding: 0.3rem 0.6rem; }
+
+/* card hover */
+.sd-card { transition: box-shadow 0.15s ease-in-out; }
+.sd-card:hover { box-shadow: 0 0.4rem 1.1rem rgba(0,0,0,0.12); }
