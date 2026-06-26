@@ -53,7 +53,7 @@ def build_layup_registry(shell_yamls):
         for s in raw["sets"]["element"]:
             sg = _sig(sec[s["name"]])
             if sg not in reg:
-                reg[sg] = len(labels); labels.append(_label(sec[s["name"]]))
+                reg[sg] = len(labels); labels.append("layup %d" % (len(labels) + 1))  # generic laminate id
     return reg, labels
 
 
@@ -194,16 +194,13 @@ def plot_span_loft(shell_yamls, rs, reg, out_png):
     ax.set_box_aspect((6.5, 5.0, 1.6))
     ax.view_init(elev=18, azim=-74)
     # spanwise (r) axis only: hide chord (y) and thickness (z)
-    ax.set_yticks([]); ax.set_zticks([])
     ax.set_xlabel("r  (span station)", labelpad=14)        # span axis, padded clear of the r tick labels
-    ax.set_ylabel("y2", labelpad=2); ax.set_zlabel("y3", labelpad=2)   # chord / thickness on the other two axes
+    ax.set_ylabel("y2 (m)", labelpad=8); ax.set_zlabel("y3 (m)", labelpad=2)   # chord / thickness, with ticks
     ax.grid(False)
-    try:                                                   # fade the panes; keep the three labelled axes
+    try:                                                   # fade the panes; keep the three labelled axes + ticks
         ax.xaxis.set_pane_color((1, 1, 1, 0)); ax.yaxis.set_pane_color((1, 1, 1, 0)); ax.zaxis.set_pane_color((1, 1, 1, 0))
     except Exception:
         pass
-    handles = _layup_handles(used, labels)
-    handles += [Line2D([0], [0], color="black", ls=":", label="beam reference line")]   # red dots stay, not in legend
-    fig.legend(handles=handles, loc="center right", fontsize=9, title="layup")
+    fig.legend(handles=_layup_handles(used, labels), loc="center right", fontsize=9, title="layup")  # layups only
     fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
     return out_png
