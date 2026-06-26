@@ -50,3 +50,10 @@ htmlcov/
 mh104_thickness_study/yaml_solid/*_t1only.yaml
 
 docs/_build/
+
+# run logs and regenerable run artifacts
+*.log
+*_orient_e1e2e3.png        # auto-emitted orientation PNGs next to data YAMLs (regenerable)
+SG_mesh.*
+sgmesh.msh
+**/jax_cache/
