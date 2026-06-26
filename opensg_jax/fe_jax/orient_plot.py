@@ -51,8 +51,11 @@ def _panel(ax, nodes, elems, oris, is_solid, title, stride):
     ax.set_ylabel(r"$y_3$ (m)")
 
 
-def plot_orient(shell_yaml, solid_yaml=None, out_png=None):
-    """Emit the e1/e2/e3 orientation PNG (shell panel always; solid panel if solid_yaml given)."""
+def plot_orient(shell_yaml, solid_yaml=None, out_png=None, side_by_side=False):
+    """Emit the e1/e2/e3 orientation PNG (shell panel always; solid panel if solid_yaml given).
+
+    side_by_side=True lays the Shell SG and Solid SG panels in one row (1x2) instead of the
+    default stacked column (2x1); ignored when no solid panel is drawn."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -60,10 +63,13 @@ def plot_orient(shell_yaml, solid_yaml=None, out_png=None):
         base = os.path.splitext(os.path.abspath(shell_yaml))[0]
         out_png = base + "_orient_e1e2e3.png"
     sn, se, so = _load(shell_yaml)
-    rows = 2 if solid_yaml else 1
-    fig, axes = plt.subplots(rows, 1, figsize=(12, 4.6 * rows))
-    if rows == 1:
-        axes = [axes]
+    if solid_yaml and side_by_side:
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5.8))
+    else:
+        rows = 2 if solid_yaml else 1
+        fig, axes = plt.subplots(rows, 1, figsize=(12, 4.6 * rows))
+        if rows == 1:
+            axes = [axes]
     _panel(axes[0], sn, se, so, False, "Shell SG (1-D)", 1)
     if solid_yaml:
         qn, qe, qo = _load(solid_yaml)
