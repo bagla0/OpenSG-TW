@@ -226,3 +226,7 @@ KL nails the classical stiffnesses on thin sections and is cheap and robust. The
 ```{seealso}
 Run it: {doc}`../tutorials/kl_timo_from_yaml`.
 ```
+
+## References
+
+The Kirchhoff-Love / Hermite-C1 reduction follows the MSG/VABS theory of Yu, Hodges & Ho (2012) and the MSG-TW blueprint of Deo & Yu. Full bibliography with DOIs: {doc}../references.

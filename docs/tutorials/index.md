@@ -1,10 +1,10 @@
 # Tutorials
 
-Six **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
-computes the Timoshenko $6\times6$, and reports the per-term **%-error against a benchmark**. They are
-committed pre-run, so the numbers and figures you see are the real outputs. Every input is bundled in the
-repo under [`examples/data/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data) — clone and run,
-no external paths.
+Seven **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
+prints the **full Timoshenko $6\times6$**, and reports the per-term **%-diff on every non-zero $C_{ij}$**
+(not just the diagonal) against a benchmark. They are committed pre-run, so the numbers and figures you see
+are the real outputs. Every input is bundled in the repo under
+[`examples/data/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data) — clone and run, no external paths.
 
 ::::{grid} 1 1 3 3
 :gutter: 3
@@ -37,16 +37,24 @@ JAX 2-D solid Timoshenko from a 2-D solid YAML — full 6×6 vs VABS. (MH-104 ai
 Real wind-turbine blade: windIO → OpenSG YAML (via OpenSG_io) → full Timoshenko 6×6, matched to VABS.
 :::
 
-:::{grid-item-card} 5 · Two-cell [-45] (ASC)
+:::{grid-item-card} 5 · Two-cell [-45] + R/h convergence
 :link: twocell_m45_asc
 :link-type: doc
-Multi-cell composite tube from the ASC paper — KL vs RM vs JAX-solid across an internal-web junction.
+Multi-cell tube (ASC): RM vs KL vs 2-D solid at thin **and** thick walls, full 6×6, plus the $R/h$
+convergence plot — RM stays <5% on shear where KL collapses.
 :::
 
 :::{grid-item-card} 6 · Station-15 (thick web)
 :link: st15_solid_vs_shell
 :link-type: doc
 A thick-web blade station from both solid and shell — solid exact (quad mesh), shells drift on the web.
+:::
+
+:::{grid-item-card} 7 · IEA-22 full blade
+:link: iea22_full_blade
+:link-type: doc
+Eight span stations regenerated from windIO — RM & KL vs the 2-D solid on the full 6×6, spanwise %-diff
+table and plot.
 :::
 ::::
 

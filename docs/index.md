@@ -1,126 +1,73 @@
----
-sd_hide_title: true
----
-
 # OpenSG-TW
 
-```{div} sd-text-center sd-fs-2 sd-font-weight-bold
-OpenSG-TW
-```
+**JAX Mechanics-of-Structure-Genome beam homogenization** — Kirchhoff–Love & Reissner–Mindlin shell and
+2-D solid cross-sections, from an OpenSG YAML to the Timoshenko $6\times6$.
 
-```{div} sd-text-center sd-fs-5 sd-text-muted
-JAX Mechanics-of-Structure-Genome beam homogenization — Kirchhoff–Love & Reissner–Mindlin shell and 2-D solid cross-sections, from an OpenSG YAML to the Timoshenko 6×6.
-```
+OpenSG-TW is the **thin-walled / pure-JAX extension of [OpenSG](https://github.com/wenbinyugroup/OpenSG)**.
+It computes the $4\times4$ Euler–Bernoulli and $6\times6$ Timoshenko beam stiffness of an arbitrary composite
+cross-section using the **Mechanics of Structure Genome (MSG)**, entirely in **JAX + `pypardiso`** (no
+FEniCSx / MPI). The Timoshenko stiffness is returned in the order $[\,EA,\;GA_2,\;GA_3,\;GJ,\;EI_2,\;EI_3\,]$.
 
----
+## Key features and capabilities
 
-**OpenSG-TW** computes the **4×4 Euler–Bernoulli** and **6×6 Timoshenko** beam stiffness of an arbitrary
-composite cross-section using the **Mechanics of Structure Genome (MSG)**. It runs entirely in **JAX +
-`pypardiso`** (no FEniCSx / MPI), and ships three cross-sectional models that share one solver back-end:
+- **Three cross-sectional models, one solver back-end** — Kirchhoff–Love shell, Reissner–Mindlin shell
+  (MITC transverse shear), and a 2-D solid.
+- **VABS-matched 2-D solid** — reproduces the VABS Timoshenko $6\times6$ (diagonal *and* couplings) to a few
+  parts in $10^6$ on triangle and quad meshes.
+- **RM replaces the 2-D solid for thin walls** — the Reissner–Mindlin shell holds the **full $6\times6$** to
+  within ~5 % of the solid where the cheaper KL shell loses the transverse shear $GA_2,GA_3$.
+- **Pure JAX** — `basix` only tabulates the element basis/quadrature; `pypardiso` does the sparse
+  saddle-point solve.
+- **windIO / PreVABS front-ends** through the bundled [`OpenSG_io`](https://github.com/bagla0/OpenSG_io)
+  converter (`third_party/OpenSG_io`).
 
-```{list-table}
-:header-rows: 1
-:widths: 22 30 48
-
-* - Model
-  - Input
-  - When to use
-* - **Kirchhoff–Love (KL) shell**
-  - 1-D shell SG YAML
-  - thin walls, classical stiffness (EA, EI, GJ); Hermite-$C^1$ arc elements
-* - **Reissner–Mindlin (RM) shell**
-  - 1-D shell SG YAML
-  - thin walls **with transverse shear** ($GA_2,GA_3$); MITC assumed-strain
-* - **2-D solid**
-  - 2-D solid SG YAML
-  - thick / arbitrary sections; full 3-D fidelity, matched to **VABS**
-```
-
-The Timoshenko stiffness is returned in the order $[\,EA,\;GA_2,\;GA_3,\;GJ,\;EI_2,\;EI_3\,]$.
-
-::::{grid} 1 1 3 3
-:gutter: 3
-
-:::{grid-item-card} {octicon}`rocket` Installation
-:link: installation
-:link-type: doc
-Set up the environment and run your first cross-section.
-:::
-
-:::{grid-item-card} {octicon}`book` Theory
-:link: theory/index
-:link-type: doc
-MSG structure genome, KL & RM shell models, and the 2-D solid Timoshenko derivation — in detail.
-:::
-
-:::{grid-item-card} {octicon}`beaker` Tutorials
-:link: tutorials/index
-:link-type: doc
-Executed notebooks: RM, KL, and JAX-solid Timoshenko from a YAML, with orientation plots and %-error.
-:::
-::::
+| Model | Input | When to use |
+|---|---|---|
+| **Kirchhoff–Love (KL) shell** | 1-D shell SG YAML | thin walls, classical stiffness ($EA,EI,GJ$); Hermite-$C^1$ arc elements |
+| **Reissner–Mindlin (RM) shell** | 1-D shell SG YAML | thin walls **with transverse shear** ($GA_2,GA_3$); MITC assumed-strain |
+| **2-D solid** | 2-D solid SG YAML | thick / arbitrary sections; full 3-D fidelity, matched to **VABS** |
 
 ## At a glance
 
-On the single-ply $[-45]$ tube, the three models bracket the 2-D solid reference and show exactly where each
-model lives — KL loses the transverse shear, RM recovers it, the solid matches VABS:
+On the single-ply $[-45]$ tube the three models bracket the 2-D-solid reference and show exactly where each
+lives — KL loses the transverse shear, RM recovers it, the solid matches VABS:
 
-```{list-table}
-:header-rows: 1
-:widths: 18 20 20 20 22
-
-* - term
-  - KL %err
-  - RM %err
-  - solid (mh104) vs VABS
-  - meaning
-* - $EA$
-  - +0.03
-  - −0.02
-  - −0.000%
-  - axial
-* - $GA_2,GA_3$
-  - **−44 / −69**
-  - **−13 / −13**
-  - −0.000%
-  - transverse shear
-* - $EI_2,EI_3$
-  - −16 / −19
-  - −12 / −12
-  - −0.000%
-  - bending
-```
+| term | KL %err | RM %err | 2-D solid vs VABS | meaning |
+|---|---|---|---|---|
+| $EA$ | +0.03 | −0.02 | −0.0002 % | axial |
+| $GA_2,GA_3$ | **−44 / −69** | **−13 / −13** | −0.0002 % | transverse shear |
+| $EI_2,EI_3$ | −16 / −19 | −12 / −12 | −0.0002 % | bending |
 
 ```{toctree}
 :hidden:
-:caption: Getting started
+:caption: Introduction
 
 installation
-```
-
-```{toctree}
-:hidden:
-:caption: Background
-
-theory/index
-```
-
-```{toctree}
-:hidden:
-:caption: Tutorials
-
 tutorials/index
 tutorials/rm_timo_from_yaml
 tutorials/kl_timo_from_yaml
 tutorials/solid_timo_from_yaml
 tutorials/iea22_windio_to_timo
+tutorials/iea22_full_blade
 tutorials/twocell_m45_asc
 tutorials/st15_solid_vs_shell
 ```
 
 ```{toctree}
 :hidden:
-:caption: Reference
+:caption: Usage
 
+architecture
+theory/index
 examples
+references
+api
+```
+
+```{toctree}
+:hidden:
+:caption: Backmatter
+
+citing
+license
 ```

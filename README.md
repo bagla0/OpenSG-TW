@@ -33,8 +33,22 @@ in $10^6$ across triangle and quad meshes:
 | IEA-22 blade r=0.5 | 0.0011 % | 0.014 % |
 | Station-15 (quad mesh) | 0.0010 % | — |
 
-The reduced shells bracket the solid: on the $[-45]$ tube, KL gives $GA_2,GA_3$ errors of −44/−69 % while
-**RM recovers them** to −13 % — the transverse-shear payoff.
+### RM replaces the 2-D solid for thin walls
+
+The point of the RM shell is to **stand in for the much more expensive 2-D solid on thin-walled sections**.
+Benchmarked on the **full 6×6** (every non-zero $C_{ij}$) against the solid as the two-cell $[-45]$ tube wall
+thickens ($h/R$), RM holds the transverse shear to within ~5% where KL collapses:
+
+| $h/R$ ($R/h$) | RM $GA_2$ | KL $GA_2$ | RM worst term | KL worst term |
+|---|---|---|---|---|
+| 0.08 (12.5) | −1.7 % | −14 % | 2.0 % | 14 % |
+| 0.16 (6.25) | −3.5 % | −41 % | 4.3 % | 41 % |
+| 0.25 (4.0) | −5.8 % | −62 % | 7.8 % | 62 % |
+
+Across the **IEA-22 blade** (8 stations, $r/R=0.2\ldots0.9$, regenerated from windIO) RM and KL both stay
+within ~5% of the 2-D solid on the full 6×6 — RM the better of the two on transverse shear. The
+[tutorials](https://bagla0.github.io/OpenSG-TW/tutorials/) show the $R/h$ convergence plot and the spanwise
+per-term tables.
 
 ## Quick start
 

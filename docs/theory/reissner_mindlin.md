@@ -213,6 +213,16 @@ the guardrail `scripts/rm_research/tw_regression_guardrail.py` enforces exactly 
 benchmark before a solver change ships. For thick walls ($t/h\gtrsim8$), soft cores, and the hardest
 junctions, fall back to the 2-D solid (an RM-regime guard, shipped in [OpenSG_io](https://github.com/bagla0/OpenSG_io), flags this per-station).
 
+## References
+
+Every formulation on this page is taken from the published literature — nothing here is original. The RM
+kinematics and section-shear ordering follow the MSG/VABS reduction (Yu, Hodges & Ho 2012; the MSG-TW
+blueprint of Deo & Yu); the transverse-shear treatment follows the assumed-natural-strain / **MITC** family
+(Dvorkin & Bathe 1984, 1985, 1986; Bucalem & Bathe 1993; Lee & Bathe 2010) on the variational basis of
+Simo & Hughes (1986); the tying-point / field-consistency analysis is Barlow (1976) and Prathap & Bhashyam
+(1982); and the soft-core limitations are Pagano (1970), Altenbach et al. (2015) and Tessler et al. (2009).
+Full bibliography with DOIs: {doc}`../references`.
+
 ```{seealso}
 Run it: {doc}`../tutorials/rm_timo_from_yaml`, {doc}`../tutorials/twocell_m45_asc`.
 ```

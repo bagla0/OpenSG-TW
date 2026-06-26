@@ -101,3 +101,7 @@ near-zero couplings (denominator noise). Reproduce with `opensg_jax/fe_jax/bench
 ```{seealso}
 Run it: {doc}`../tutorials/solid_timo_from_yaml`.
 ```
+
+## References
+
+The 2-D-solid Timoshenko reduction follows the MSG/VABS variational-asymptotic theory of Yu, Hodges & Ho (2012) and Yu et al. (2002). Full bibliography with DOIs: {doc}../references.

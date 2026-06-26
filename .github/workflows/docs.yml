@@ -1,8 +1,8 @@
 name: docs
 
 # Build the Sphinx site (docs/) and publish to GitHub Pages.
-# Notebooks are committed pre-executed (nb_execution_mode="off"), so the build does NOT
-# need jax / pypardiso / basix — only the lightweight docs requirements.
+# Notebooks are committed pre-executed (nb_execution_mode="off") so they are not re-run, but the API page
+# (autodoc) imports opensg_jax.fe_jax.*, so docs/requirements.txt also installs the JAX runtime.
 
 on:
   push:

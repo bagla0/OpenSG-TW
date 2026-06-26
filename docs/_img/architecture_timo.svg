@@ -1,0 +1,69 @@
+<svg viewBox="0 0 1240 770" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif" role="img">
+<title>OpenSG-TW Timoshenko 6x6 architecture</title>
+<desc>Three branches - Reissner-Mindlin shell, Kirchhoff-Love shell and 2-D solid - each a driver .py to a key function to its key methods, all returning the Timoshenko 6x6.</desc>
+<defs>
+<marker id="arr" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+<path d="M0,0 L8,3 L0,6 Z" fill="#1f3b57"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="1240" height="770" fill="#ffffff"/>
+
+<rect x="40" y="296" width="206" height="104" rx="12" fill="#ffffff" stroke="#1f3b57" stroke-width="3"/>
+<text x="143" y="334" text-anchor="middle" font-size="25" font-weight="700" fill="#1f3b57">OpenSG-TW</text>
+<text x="143" y="360" text-anchor="middle" font-size="13" fill="#1f3b57">Timoshenko 6×6</text>
+<text x="143" y="382" text-anchor="middle" font-size="12" font-style="italic" fill="#5b6b7a">3 branches</text>
+
+<path d="M246,348 H266" fill="none" stroke="#1f3b57" stroke-width="2.4"/>
+<path d="M266,120 V480" fill="none" stroke="#1f3b57" stroke-width="2.4"/>
+<path d="M266,120 H286" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<path d="M266,300 H286" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<path d="M266,480 H286" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+
+<text x="395" y="82" text-anchor="middle" font-size="11.5" font-style="italic" fill="#5b6b7a">input: 1-D shell SG YAML</text>
+<text x="395" y="262" text-anchor="middle" font-size="11.5" font-style="italic" fill="#5b6b7a">input: 1-D shell SG YAML</text>
+<text x="395" y="442" text-anchor="middle" font-size="11.5" font-style="italic" fill="#5b6b7a">input: 2-D solid SG YAML</text>
+
+<rect x="288" y="92" width="214" height="56" rx="10" fill="#cfe2f3" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="395" y="119" text-anchor="middle" font-size="16.5" fill="#1f3b57">strip_RM.py</text>
+<text x="395" y="137" text-anchor="middle" font-size="11" font-style="italic" fill="#41566a">Reissner–Mindlin shell</text>
+<path d="M502,120 H548" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="550" y="92" width="258" height="56" rx="10" fill="#fbe2d0" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="679" y="125" text-anchor="middle" font-size="15.5" font-style="italic" fill="#1f3b57">rm_timoshenko_6x6()</text>
+<path d="M808,120 H854" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="856" y="78" width="346" height="84" rx="12" fill="#eeeeee" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="872" y="103" font-size="12.5" font-style="italic" fill="#1f3b57">Key methods:</text>
+<text x="872" y="123" font-size="12.5" fill="#27384a">assemble_all · build_C_Psi (kernel + Bredt)</text>
+<text x="872" y="142" font-size="12.5" fill="#27384a">transverse_shear_stiffness — MITC (GA₂,GA₃)</text>
+
+<rect x="288" y="272" width="214" height="56" rx="10" fill="#cfe2f3" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="395" y="299" text-anchor="middle" font-size="16.5" fill="#1f3b57">gradient_kirchhoff.py</text>
+<text x="395" y="317" text-anchor="middle" font-size="11" font-style="italic" fill="#41566a">Kirchhoff–Love shell</text>
+<path d="M502,300 H548" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="550" y="272" width="258" height="56" rx="10" fill="#fbe2d0" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="679" y="305" text-anchor="middle" font-size="14.5" font-style="italic" fill="#1f3b57">gradient_junction_kirchhoff()</text>
+<path d="M808,300 H854" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="856" y="258" width="346" height="84" rx="12" fill="#eeeeee" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="872" y="283" font-size="12.5" font-style="italic" fill="#1f3b57">Key methods:</text>
+<text x="872" y="303" font-size="12.5" fill="#27384a">msg_hermite.solve_tw_from_yaml</text>
+<text x="872" y="322" font-size="12.5" fill="#27384a">Γ_e / Γ_h / Γ_l — Hermite C¹ (no penalty)</text>
+
+<rect x="288" y="452" width="214" height="56" rx="10" fill="#cfe2f3" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="395" y="479" text-anchor="middle" font-size="16.5" fill="#1f3b57">solid_timo.py</text>
+<text x="395" y="497" text-anchor="middle" font-size="11" font-style="italic" fill="#41566a">JAX 2-D solid</text>
+<path d="M502,480 H548" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="550" y="452" width="258" height="56" rx="10" fill="#fbe2d0" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="679" y="485" text-anchor="middle" font-size="15" font-style="italic" fill="#1f3b57">compute_timo_from_yaml()</text>
+<path d="M808,480 H854" fill="none" stroke="#1f3b57" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="856" y="438" width="346" height="84" rx="12" fill="#eeeeee" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="872" y="463" font-size="12.5" font-style="italic" fill="#1f3b57">Key methods:</text>
+<text x="872" y="483" font-size="12.5" fill="#27384a">segment.read_solid_yaml (tri + quad)</text>
+<text x="872" y="502" font-size="12.5" fill="#27384a">get_heterogeneous_C (R_sig) · KKT solve</text>
+
+<rect x="288" y="566" width="914" height="52" rx="10" fill="#eeeeee" stroke="#1f3b57" stroke-width="2.4"/>
+<text x="745" y="589" text-anchor="middle" font-size="13" font-style="italic" fill="#1f3b57">Shared MSG core (used by all three branches)</text>
+<text x="745" y="608" text-anchor="middle" font-size="12.5" fill="#27384a">msg_materials (1-D SG → ABD) · msg_mesh · msg_solver (KKT + Eq.85 projection) · timo_report</text>
+
+<rect x="288" y="640" width="914" height="62" rx="10" fill="#e3efe1" stroke="#1f3b57" stroke-width="3"/>
+<text x="745" y="666" text-anchor="middle" font-size="16" font-weight="700" fill="#1f3b57">All three branches → Timoshenko 6×6</text>
+<text x="745" y="688" text-anchor="middle" font-size="13.5" fill="#27384a">[ EA, GA₂, GA₃, GJ, EI₂, EI₃ ] — full matrix, every Cᵢⱼ benchmarked by timo_report</text>
+</svg>

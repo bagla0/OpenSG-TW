@@ -143,3 +143,7 @@ shared back-end is why all three return the same 6×6 layout.
 ```
 
 See the next three pages for each.
+
+## References
+
+The Mechanics of Structure Genome framework is due to W. Yu (Purdue); the beam reduction follows Yu, Hodges & Ho (2012). Full bibliography with DOIs: {doc}../references.

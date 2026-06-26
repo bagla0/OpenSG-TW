@@ -1,12 +1,14 @@
 """Benchmark / regression test: two-cell [-45] anisotropic tube (ASC paper, bagla2025asc).
 
-A multi-cell composite cross-section with an internal-web junction. Asserts:
-  1. the JAX 2-D solid sits on the FEniCS 2-D-solid reference (every diagonal < 0.5%);
-  2. RM is at least as good as KL on the transverse-shear terms GA2,GA3 (the RM payoff across the junction);
-  3. RM keeps GA2,GA3 within a few % of the solid reference.
+A multi-cell composite tube with an internal shear web. Benchmarked on the FULL 6x6 (every non-zero
+Cij term, not just the diagonal) against the FEniCS 2-D solid:
+  1. the JAX 2-D solid reproduces the FEniCS 2-D-solid reference on every non-zero term;
+  2. RM is within a few % on EVERY non-zero Cij term (full-6x6 accuracy of the reduced shell);
+  3. RM is at least as good as KL on the transverse-shear terms GA2(C22),GA3(C33) -- the web-junction payoff;
+  4. KL really does lose the shear (so the benchmark is discriminating).
 
-Run as a benchmark:   python tests/test_twocell_m45_benchmark.py
 Run as a test:        pytest tests/test_twocell_m45_benchmark.py
+Run as a benchmark:   python tests/test_twocell_m45_benchmark.py
 """
 import os
 import sys
@@ -19,16 +21,12 @@ for p in ("", "opensg_jax"):
     sys.path.insert(0, os.path.join(CC, p))
 import jax
 jax.config.update("jax_enable_x64", True)
+from opensg_jax.fe_jax.timo_report import sym, full_pcterr, nonzero_terms, compare_terms, print_6x6, LBL
 
-LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
 D = os.path.join(CC, "examples", "data")
 SHELL = os.path.join(D, "1d_yaml", "tube2cell_m45_shell.yaml")
 SOLIDY = os.path.join(D, "2d_yaml", "tube2cell_m45_solid.yaml")
 BENCH = os.path.join(D, "benchmark", "tube2cell_m45_solid_ref.txt")
-
-
-def _sym(M):
-    M = np.asarray(M, dtype=float); return 0.5 * (M + M.T)
 
 
 def _wall_t(meshp):
@@ -40,39 +38,40 @@ def _compute():
     from opensg_jax.fe_jax.gradient_kirchhoff import gradient_junction_kirchhoff
     from opensg_jax.fe_jax.solid_timo import compute_timo_from_yaml
     T = _wall_t(SHELL)
-    S = _sym(np.loadtxt(BENCH))
-    KL = _sym(gradient_junction_kirchhoff(SHELL, frac=0.0, dshift=T / 2)[0])
-    RM = _sym(rm_timoshenko_6x6(SHELL, 0.0, dshift=T / 2, curved=True, shear="mitc"))
-    JX = _sym(compute_timo_from_yaml(SOLIDY, verbose=False))
-    return S, KL, RM, JX
-
-
-def _pe(C, S, i):
-    return 100.0 * (C[i, i] - S[i, i]) / S[i, i]
+    S = sym(np.loadtxt(BENCH))
+    RM = sym(rm_timoshenko_6x6(SHELL, 0.0, dshift=T / 2, curved=True, shear="mitc", orient=False))
+    KL = sym(gradient_junction_kirchhoff(SHELL, frac=0.0, dshift=T / 2)[0])
+    JX = sym(compute_timo_from_yaml(SOLIDY, verbose=False))
+    return S, RM, KL, JX
 
 
 @pytest.mark.skipif(not (os.path.exists(SHELL) and os.path.exists(BENCH)),
                     reason="two-cell [-45] data not present")
-def test_twocell_m45():
-    S, KL, RM, JX = _compute()
-    # 1. JAX 2-D solid reproduces the 2-D solid reference
-    for i in range(6):
-        assert abs(_pe(JX, S, i)) < 0.5, "JAX-solid %s off %.3f%%" % (LBL[i], _pe(JX, S, i))
-    # 2. RM <= KL on the transverse-shear terms (the multi-cell junction payoff)
+def test_twocell_m45_full6x6():
+    S, RM, KL, JX = _compute()
+    nz = nonzero_terms(S)                                  # all non-zero Cij (max/1000 cutoff)
+    eJX, eRM, eKL = full_pcterr(JX, S), full_pcterr(RM, S), full_pcterr(KL, S)
+    # 1. JAX 2-D solid == FEniCS 2-D-solid reference on every non-zero term
+    for i, j, tag in nz:
+        assert abs(eJX[i, j]) < 1.0, "JAX-solid %s off %.3f%%" % (tag, eJX[i, j])
+    # 2. RM within a few % on EVERY non-zero Cij term (full-6x6 accuracy)
+    for i, j, tag in nz:
+        assert abs(eRM[i, j]) < 4.0, "RM %s off %.2f%%" % (tag, eRM[i, j])
+    # 3. RM <= KL on the transverse-shear terms (the multi-cell junction payoff)
     for i in (1, 2):
-        assert abs(_pe(RM, S, i)) <= abs(_pe(KL, S, i)) + 1.0, "RM not <= KL on %s" % LBL[i]
-    # 3. RM keeps the shear terms within a few % of the solid
-    for i in (1, 2):
-        assert abs(_pe(RM, S, i)) < 6.0, "RM %s off %.2f%%" % (LBL[i], _pe(RM, S, i))
+        assert abs(eRM[i, i]) <= abs(eKL[i, i]) + 1.0, "RM not <= KL on %s" % LBL[i]
+    # 4. KL really loses the shear here (discriminating benchmark)
+    assert max(abs(eKL[1, 1]), abs(eKL[2, 2])) > 8.0
 
 
 def main():
-    S, KL, RM, JX = _compute()
-    print("Two-cell [-45] anisotropic tube (ASC) -- KL vs RM vs JAX-solid, vs 2-D solid reference\n")
-    print("  %-5s %10s %10s %12s" % ("term", "KL%err", "RM%err", "JAXsol%err"))
-    for i in range(6):
-        print("  %-5s %+9.2f %+9.2f %+11.4f" % (LBL[i], _pe(KL, S, i), _pe(RM, S, i), _pe(JX, S, i)))
-    print("\n  RM recovers GA2,GA3 across the internal-web junction where KL drops them.")
+    S, RM, KL, JX = _compute()
+    print_6x6(S, "FEniCS 2-D solid (reference)"); print()
+    print_6x6(RM, "RM (1-D shell)"); print()
+    print_6x6(KL, "KL (1-D shell)")
+    print("\nRM, KL and the JAX 2-D solid vs the FEniCS 2-D solid -- every non-zero Cij term:")
+    compare_terms(S, {"RM": RM, "KL": KL, "JAXsolid": JX})
+    print("\n  RM recovers GA2,GA3 (and their couplings C13,C25,C36) across the web where KL drops them.")
 
 
 if __name__ == "__main__":

@@ -50,6 +50,8 @@ htmlcov/
 mh104_thickness_study/yaml_solid/*_t1only.yaml
 
 docs/_build/
+# YAMLs generated live by the from-scratch IEA tutorial (regenerable)
+docs/tutorials/_gen/
 
 # run logs and regenerable run artifacts
 *.log

@@ -1,7 +1,17 @@
-# Docs build (GitHub Pages). Notebooks are committed pre-executed (nb_execution_mode="off"),
-# so the heavy compute stack (jax, pypardiso, basix) is NOT needed to build the site.
+# Docs build (GitHub Pages). Notebooks are committed pre-executed (nb_execution_mode="off"), so they are
+# NOT re-run; but the API page (autodoc) imports the package, so the JAX runtime is installed too.
 sphinx>=7.2
-sphinx-book-theme>=1.1
+sphinx-rtd-theme>=3.0
 myst-nb>=1.1
 sphinx-design>=0.5
 sphinx-copybutton>=0.5
+
+# runtime needed only so autodoc can import opensg_jax.fe_jax.* and read real signatures
+numpy
+scipy
+pyyaml
+numba
+matplotlib
+jax[cpu]
+fenics-basix
+pypardiso
