@@ -1,15 +1,10 @@
-"""Blade cross-section visualisation helpers (layup colouring + material orientation).
+"""Blade cross-section visualisation helpers (material distribution + layup + orientation).
 
-Globally-consistent layup colours: every cross-section is coloured by the *ply-stack composition*
-(material + angle per ply, thickness ignored), so the same physical layup -- a carbon spar cap, a
-foam-cored skin panel, a shear web -- gets the same colour in every station and every figure.
-
-Public functions
-----------------
-build_layup_registry(shell_yamls)        -> (sig2idx, labels)   global layup registry
-plot_layup_section(shell, solid, ...)    -> png   2-D solid + 1-D line mesh, coloured by layup, e2/e3 per region
-plot_orientation_montage(shells, rRs...) -> png   grid of line cross-sections + one e2/e3 arrow per region
-plot_span_loft(shells, rRs, ...)         -> png   line cross-sections lofted along the beam axis (3-D)
+- The **2-D solid** mesh is coloured by **material** (the PreVABS mesh resolves every ply, so the through-
+  thickness layers show): each ``cell_domain_ids`` domain is matched to a named material by its E1.
+- The **1-D shell** line mesh is coloured by **layup** (the wall laminate) keyed by ply-stack composition,
+  so the same laminate -- carbon spar cap, foam skin panel, foam shear web, glass-UD edge -- is one colour
+  in every station and figure.
 
 Convention: e2 = blue (in-plane ply direction), e3 = black (wall normal).
 """
@@ -21,8 +16,20 @@ import yaml
 from .orient_plot import _load
 from .segment import read_solid_yaml
 
-# layup colours -- deliberately avoid blue (reserved for the e2 arrow) and black (e3 arrow)
+# layup colours -- avoid blue (e2 arrow) and black (e3 arrow)
 PALETTE = ["#2ca02c", "#ff7f0e", "#d62728", "#8c564b", "#9467bd", "#17becf", "#bcbd22", "#e377c2", "#7f7f7f"]
+# fixed material colours (foam is the light-grey bulk; carbon stands out red)
+MAT_PALETTE = {"medium_density_foam": "#d9d9d9", "gelcoat": "#fdbf6f", "glass_triax": "#a6cee3",
+               "glass_uniax": "#1f78b4", "carbon_uniax": "#e31a1c", "glass_biax": "#33a02c"}
+MAT_ORDER = ["gelcoat", "glass_triax", "glass_biax", "glass_uniax", "medium_density_foam", "carbon_uniax"]
+
+
+def _matcol(name):
+    return MAT_PALETTE.get(name, "#888888")
+
+
+def _matlabel(name):
+    return name.replace("medium_density_foam", "foam").replace("_", "-")
 
 
 def _sig(layup):
@@ -31,7 +38,7 @@ def _sig(layup):
 
 def _label(layup):
     mats = [p[0] for p in layup]
-    dom = max(layup, key=lambda p: float(p[1]))[0]                  # thickest ply = dominant material
+    dom = max(layup, key=lambda p: float(p[1]))[0]
     if "foam" in dom:
         return "foam (web)" if mats and mats[0] == "glass_biax" else "foam (skin)"
     return dom.replace("_", "-")
@@ -63,8 +70,16 @@ def _station(shell_yaml, sig2idx):
     return nd, elems, lay, oris, emid
 
 
+def _solid_materials(solid_yaml, shell_yaml):
+    """per-cell material name of the 2-D solid: each domain's E1 matched to the shell's named materials."""
+    sg = read_solid_yaml(solid_yaml)
+    mp = np.asarray(sg["material_param"]); dom = np.asarray(sg["cell_domain_ids"])
+    shmat = {m["name"]: float(m["elastic"]["E"][0]) for m in yaml.safe_load(open(shell_yaml))["materials"]}
+    dom2name = {d: min(shmat, key=lambda k: abs(shmat[k] - mp[d, 0])) for d in range(mp.shape[0])}
+    return sg, [dom2name[d] for d in dom]
+
+
 def _regions(elems, sub):
-    """connected components (sharing a node) among the element indices in ``sub``."""
     node2e = defaultdict(list)
     for k in sub:
         for n in elems[k][:2]:
@@ -85,7 +100,6 @@ def _regions(elems, sub):
 
 
 def _region_arrows(ax, elems, lay, oris, emid, L):
-    """one e2 (blue) / e3 (black) arrow at the representative element of every connected region."""
     for i in set(int(v) for v in lay[lay >= 0]):
         for comp in _regions(elems, np.where(lay == i)[0]):
             if len(comp) < 2:
@@ -97,88 +111,99 @@ def _region_arrows(ax, elems, lay, oris, emid, L):
             ax.quiver(x, y, e2[0]*L, e2[1]*L, angles="xy", scale_units="xy", scale=1, color="tab:blue", width=0.004, zorder=6)
 
 
-def _handles(used, labels):
+def _layup_handles(used, labels):
     from matplotlib.patches import Patch
     return [Patch(color=PALETTE[i % len(PALETTE)], label=labels[i]) for i in sorted(used)]
 
 
+def _mat_handles(present):
+    from matplotlib.patches import Patch
+    order = [m for m in MAT_ORDER if m in present] + [m for m in present if m not in MAT_ORDER]
+    return [Patch(color=_matcol(m), label=_matlabel(m)) for m in order]
+
+
 def plot_layup_section(shell_yaml, solid_yaml, reg, out_png, arrow=0.22):
-    """2-D solid mesh + 1-D shell LINE mesh, coloured by layup, with one e2/e3 arrow per region."""
+    """2-D solid mesh coloured by MATERIAL (ply layers visible) + 1-D shell LINE mesh coloured by layup,
+    with one e2/e3 arrow per connected region."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.collections import PolyCollection, LineCollection
-    from scipy.spatial import cKDTree
     sig2idx, labels = reg
     nd, elems, lay, oris, emid = _station(shell_yaml, sig2idx)
-    sg = read_solid_yaml(solid_yaml)
+    sg, smat = _solid_materials(solid_yaml, shell_yaml)
     P, C = np.asarray(sg["points"])[:, :2], sg["cells"]
-    cell_nn = lay[cKDTree(emid).query(np.array([P[c].mean(0) for c in C]))[1]]
-    dom = np.asarray(sg["cell_domain_ids"])              # colour each solid DOMAIN by its majority layup (clean edges)
-    solid_lay = np.empty(len(C), int)
-    for d in np.unique(dom):
-        m = dom == d
-        solid_lay[m] = np.bincount(cell_nn[m]).argmax()
-    fig, (axS, axL) = plt.subplots(2, 1, figsize=(12, 6.2))
-    axS.add_collection(PolyCollection([P[c] for c in C], facecolors=[PALETTE[i % len(PALETTE)] for i in solid_lay], edgecolors="none"))
-    axS.autoscale_view(); axS.set_aspect("equal"); axS.set_title("2-D solid mesh (%d elements)" % len(C))
+    fig, (axS, axL) = plt.subplots(2, 1, figsize=(12.5, 6.4))
+    axS.add_collection(PolyCollection([P[c] for c in C], facecolors=[_matcol(m) for m in smat], edgecolors="none"))
+    axS.autoscale_view(); axS.set_aspect("equal"); axS.set_title("2-D solid mesh by material (%d elements)" % len(C))
     axS.set_ylabel("y3 (m)"); axS.set_xticklabels([])
+    axS.legend(handles=_mat_handles(set(smat)), loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8.5, title="material")
     axL.add_collection(LineCollection([nd[e[:2]] for e in elems], colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=2.0))
     _region_arrows(axL, elems, lay, oris, emid, arrow)
     axL.autoscale_view(); axL.set_aspect("equal")
-    axL.set_title("1-D shell line mesh (%d elements)" % len(elems))
+    axL.set_title("1-D shell line mesh by layup (%d elements)" % len(elems))
     axL.set_xlabel("y2 (m)"); axL.set_ylabel("y3 (m)")
-    used = sorted(set(int(v) for v in lay[lay >= 0]))
-    fig.legend(handles=_handles(used, labels), loc="lower center", bbox_to_anchor=(0.5, -0.02),
-               ncol=len(used), fontsize=9, title="layup")
-    fig.tight_layout(rect=[0, 0.06, 1, 1]); fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
+    axL.legend(handles=_layup_handles(set(int(v) for v in lay[lay >= 0]), labels),
+               loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8.5, title="layup")
+    fig.tight_layout(rect=[0, 0, 0.86, 1.0]); fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
     return out_png
 
 
-def plot_orientation_montage(shell_yamls, rRs, reg, out_png, title="", arrow=0.025, ncol=2):
-    """Grid of line cross-sections, each with one e2/e3 arrow per connected region."""
+def plot_orientation_montage(shell_yamls, rRs, reg, out_png, arrow=0.12, ncol=2):
+    """All span stations in ONE image: line cross-section coloured by layup + one e2/e3 arrow per region."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.collections import LineCollection
     sig2idx, labels = reg
     n = len(shell_yamls); nrow = (n + ncol - 1) // ncol
-    fig, axes = plt.subplots(nrow, ncol, figsize=(6.2 * ncol, 2.8 * nrow))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(6.2 * ncol, 2.5 * nrow))
     axes = np.atleast_1d(axes).ravel(); used = set()
     for ax, y, r in zip(axes, shell_yamls, rRs):
         nd, elems, lay, oris, emid = _station(y, sig2idx); used |= set(int(v) for v in lay[lay >= 0])
-        ax.add_collection(LineCollection([nd[e[:2]] for e in elems], colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=1.4))
+        ax.add_collection(LineCollection([nd[e[:2]] for e in elems], colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=1.3))
         _region_arrows(ax, elems, lay, oris, emid, arrow)
         ax.autoscale_view(); ax.set_aspect("equal"); ax.set_title("r = %.1f" % r, fontsize=12)
         ax.set_xticks([]); ax.set_yticks([])
     for ax in axes[n:]:
         ax.axis("off")
-    fig.legend(handles=_handles(used, labels), loc="center left", bbox_to_anchor=(0.99, 0.5), fontsize=8.5, title="layup")
-    fig.suptitle("line cross-section + material orientation   -   %s" % title, fontsize=12)
-    fig.tight_layout(rect=[0, 0, 0.86, 0.95]); fig.savefig(out_png, dpi=135, bbox_inches="tight"); plt.close(fig)
+    fig.legend(handles=_layup_handles(used, labels), loc="center left", bbox_to_anchor=(0.99, 0.5), fontsize=9, title="layup")
+    fig.tight_layout(rect=[0, 0, 0.9, 1.0]); fig.savefig(out_png, dpi=135, bbox_inches="tight"); plt.close(fig)
     return out_png
 
 
 def plot_span_loft(shell_yamls, rs, reg, out_png):
-    """Isometric loft: the line cross-sections placed at their span station ``r`` along the beam axis (x),
-    coloured by layup, with a black beam axis through each section centre.  Orthographic (isometric)
-    projection, no axes/grid/numbers."""
+    """Isometric loft: line cross-sections at their span station ``r`` along the beam axis (x), coloured by
+    layup, with a red dot at each section centre and a dotted black beam reference line through them.
+    Only the spanwise (r) axis is drawn."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
     from mpl_toolkits.mplot3d.art3d import Line3DCollection
     sig2idx, labels = reg
-    fig = plt.figure(figsize=(13, 5.6)); ax = fig.add_subplot(111, projection="3d")
+    fig = plt.figure(figsize=(13, 5.8)); ax = fig.add_subplot(111, projection="3d")
     ax.set_proj_type("ortho")
     used, centers = set(), []
     for y, r in zip(shell_yamls, rs):
         nd, elems, lay, oris, emid = _station(y, sig2idx); used |= set(int(v) for v in lay[lay >= 0])
-        segs = [[(r, nd[e[0], 0], nd[e[0], 1]), (r, nd[e[1], 0], nd[e[1], 1])] for e in elems]  # span = x
+        segs = [[(r, nd[e[0], 0], nd[e[0], 1]), (r, nd[e[1], 0], nd[e[1], 1])] for e in elems]
         ax.add_collection3d(Line3DCollection(segs, colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=1.5))
         c = nd.mean(0); centers.append((r, c[0], c[1]))
     centers = np.array(centers)
-    ax.plot(centers[:, 0], centers[:, 1], centers[:, 2], color="black", lw=1.8, zorder=10)   # beam axis through centres
+    ax.plot(centers[:, 0], centers[:, 1], centers[:, 2], color="black", ls=":", lw=1.6, zorder=10)        # beam ref
+    ax.scatter(centers[:, 0], centers[:, 1], centers[:, 2], color="red", s=26, zorder=11)                 # station origins
     ax.set_xlim(min(rs) - 0.05, max(rs) + 0.05); ax.set_ylim(0, 5); ax.set_zlim(-0.9, 0.9)
     ax.set_box_aspect((6.5, 5.0, 1.6))
     ax.view_init(elev=18, azim=-74)
-    ax.set_axis_off()
-    fig.legend(handles=_handles(used, labels), loc="center right", fontsize=9, title="layup")
-    fig.tight_layout(); fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
+    # spanwise (r) axis only: hide chord (y) and thickness (z)
+    ax.set_yticks([]); ax.set_zticks([]); ax.set_ylabel(""); ax.set_zlabel("")
+    ax.set_xlabel("span station  r")
+    ax.grid(False)
+    try:                                            # fade the chord/thickness panes; keep the span (x) axis
+        ax.xaxis.set_pane_color((1, 1, 1, 0)); ax.yaxis.set_pane_color((1, 1, 1, 0)); ax.zaxis.set_pane_color((1, 1, 1, 0))
+    except Exception:
+        pass
+    handles = _layup_handles(used, labels)
+    handles += [Line2D([0], [0], color="black", ls=":", label="beam reference line"),
+                Line2D([0], [0], color="red", marker="o", ls="", label="station origin")]
+    fig.legend(handles=handles, loc="center right", fontsize=9, title="layup")
+    fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
     return out_png
