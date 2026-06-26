@@ -134,7 +134,7 @@ def plot_layup_section(shell_yaml, solid_yaml, reg, out_png, arrow=0.22):
     return out_png
 
 
-def plot_orientation_montage(shell_yamls, rRs, reg, out_png, title="", arrow=0.06, ncol=2):
+def plot_orientation_montage(shell_yamls, rRs, reg, out_png, title="", arrow=0.025, ncol=2):
     """Grid of line cross-sections, each with one e2/e3 arrow per connected region."""
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
