@@ -4,8 +4,8 @@ Re-export of the laminate transverse-shear stiffness (the RM 8x8 G block).
 The canonical implementation now lives in the package at
 ``opensg_jax/fe_jax/msg_transverse_shear.py`` so that the plate subroutine
 ``compute_ABD_matrix(..., shear_refined=True)`` can assemble the 8x8 RM plate
-stiffness directly.  This thin module keeps the historical ``rm/`` import path
-(``from .transverse_shear import transverse_shear_stiffness``) working; the
+stiffness directly.  This thin module exposes it under the package import path
+(``from opensg_jax.fe_jax.transverse_shear import transverse_shear_stiffness``); the
 ``coupled=True`` (MSG, coupling-aware) form is the default.
 """
 import os

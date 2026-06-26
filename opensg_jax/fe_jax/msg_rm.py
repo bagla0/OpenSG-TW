@@ -13,7 +13,7 @@ recover the beam stiffness), but:
 Beam strains  eb = [gamma11, kappa1(twist), kappa2, kappa3]  (4, Euler-Bernoulli).
 DOF field     q  = [w1,w2,w3, omega1,omega2]  per node.
 
-See rm/RM_DERIVATION.md (sections 4-8) for the strain field and the algorithm.
+See scripts/rm_research/RM_DERIVATION.md (sections 4-8) for the strain field and the algorithm.
 This file validates on the isotropic circular tube (Opensg_MSG Table 3.1) first.
 """
 import numpy as np

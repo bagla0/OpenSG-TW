@@ -69,7 +69,7 @@ A thick-web blade station from both solid and shell — solid exact (quad mesh),
   - `compute_timo_from_yaml`
   - VABS `mh104.sg.K`
 * - IEA-22
-  - `windio_converter/validation/solid_iea22_r050.yaml`
+  - `tests/research/iea22_windio/solid_iea22_r050.yaml`
   - `compute_timo_from_yaml` (+ RM)
   - VABS `iea22_r050.sg.K`
 * - Two-cell [-45]

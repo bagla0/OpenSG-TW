@@ -71,6 +71,10 @@ sgmesh.msh
 /tube_45_45_hR/
 
 
+# windio_converter superseded by the standalone OpenSG_io repo -- removed from the package
+# (the IEA-22 r=0.5 benchmark data it held is preserved under tests/research/iea22_windio/)
+/windio_converter/
+
 # untracked working data relocated under tests/research/ (kept on disk, not part of the package)
 /tests/research/tube_thesis_314/
 /tests/research/prevabs_mh104/

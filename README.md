@@ -45,7 +45,7 @@ pip install "jax[cpu]" pypardiso fenics-basix numpy scipy pyyaml numba matplotli
 ```python
 # 2-D solid Timoshenko 6x6 from a YAML
 from opensg_jax.fe_jax.solid_timo import compute_timo_from_yaml
-C6 = compute_timo_from_yaml("prevabs_mh104/2Dsolid_VABS_mh_104.yaml")
+C6 = compute_timo_from_yaml("tests/research/iea22_windio/solid_iea22_r050.yaml")
 print(C6)   # [EA, GA2, GA3, GJ, EI2, EI3] on the diagonal
 ```
 
@@ -70,11 +70,13 @@ On Windows, prepend the conda env to `PATH` (not just activate it) so the MKL/PA
 opensg_jax/fe_jax/      JAX MSG engine (mirrors the OpenSG_2.0 / fea-in-jax architecture)
   solid_timo.py           2-D solid Timoshenko homogenizer  -> compute_timo_from_yaml()
   segment.py              2-D solid SG YAML reader (tri + quad)
-  msg_*.py                shell ABD, mesh, Hermite-C1 / RM operators, transverse shear
+  msg_*.py / msg_rm*.py   shell ABD, mesh, Hermite-C1 (KL) & Reissner-Mindlin operators
+  transverse_shear.py     MSG plate transverse-shear (RM) block
+  strip_RM.py / strip_Kirchhoff.py / strip_solid.py   RM / KL / solid drivers -> Timoshenko 6x6
   benchmark_vabs.py       full-6x6 JAX-vs-VABS .K comparison
-rm/                     Reissner-Mindlin solver (msg_rm_timo.py) + MITC transverse shear
-strip_RM.py             RM driver  -> rm_timoshenko_6x6(yaml, frac, dshift, curved, shear)
-examples/               1_/2_/3_get_beam_props_*  (RM / KL / solid)
+examples/               1_..5_ unique-feature scripts (RM / KL / solid / airfoil driver / dehom)
+  benchmarks/             OML-stress validation, comparison & report scripts
+scripts/                strip_*.yaml inputs, ABD verifiers, rm_research/ (RM derivation + studies)
 tests/                  pytest regression + the two-cell [-45] multi-cell benchmark
 docs/                   Sphinx site (theory + executed tutorials) -> GitHub Pages
 ```

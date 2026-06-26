@@ -16,7 +16,7 @@
 | `opensg_jax/fe_jax/msg_mesh.py` | YAML loader, CCW mesh ordering, midside-node insertion, curvature computation |
 | `opensg_jax/fe_jax/msg_shell.py` | Full Kirchhoff shell MSG solve — quadratic Lagrange C0 elements, periodic BCs, KKT solve |
 | `opensg_jax/fe_jax/__init__.py` | Exports all msg_* symbols; legacy FEniCSx imports guarded in try/except |
-| `examples/run_airfoil_cross_section.py` | Top-level driver: loads YAML → ABD → mesh → MSG solve → 6×6 stiffness |
+| `examples/4_run_airfoil_cross_section.py` | Top-level driver: loads YAML → ABD → mesh → MSG solve → 6×6 stiffness |
 | `Shell_Hermite.py` | Standalone script (same algorithm, not packaged) |
 | `run_airfoil_cross_section.py` | Standalone script version of the driver |
 
@@ -62,7 +62,7 @@ $env:PYTHONIOENCODING = "utf-8"
 $env:PATH = "C:\conda_envs\opensg_2_0_env;C:\conda_envs\opensg_2_0_env\Library\mingw-w64\bin;C:\conda_envs\opensg_2_0_env\Library\usr\bin;C:\conda_envs\opensg_2_0_env\Library\bin;C:\conda_envs\opensg_2_0_env\Scripts;" + $env:PATH
 
 # Run standalone example
-& "C:\conda_envs\opensg_2_0_env\python.exe" examples/run_airfoil_cross_section.py tests/data/1Dshell_0.yaml
+& "C:\conda_envs\opensg_2_0_env\python.exe" examples/4_run_airfoil_cross_section.py tests/data/1Dshell_0.yaml
 
 # Run tests
 & "C:\conda_envs\opensg_2_0_env\python.exe" -m pytest tests/ -v

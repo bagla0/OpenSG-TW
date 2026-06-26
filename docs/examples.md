@@ -19,11 +19,19 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
 * - `3_get_beam_props_jax_solid.py`
   - 2-D solid
   - {doc}`tutorials/solid_timo_from_yaml`
+* - `4_run_airfoil_cross_section.py`
+  - KL shell (full driver)
+  - end-to-end airfoil cross-section → Timoshenko 6×6 (timing + geometry)
+* - `5_run_dehomogenization.py`
+  - dehomogenization
+  - recover the pointwise 3-D stress/strain across the wall from a beam load
 ```
 
-Each numbered example is a **distinct concept** (build the Timoshenko 6×6 from the RM shell, the KL shell,
-or the 2-D solid). Each emits the `e1/e2/e3` orientation PNG, computes the 6×6, and prints the per-term
-%-error against the benchmark.
+Each numbered example is a **distinct feature** — the Timoshenko 6×6 from the RM shell, the KL shell or the
+2-D solid (1–3), the end-to-end airfoil driver (4), and dehomogenization / local stress recovery (5). The
+homogenization examples emit the `e1/e2/e3` orientation PNG, compute the 6×6, and print the per-term
+%-error against the benchmark. The many validation, OML-stress and report scripts live under
+`examples/benchmarks/`.
 
 ```powershell
 # Windows: prepend the env to PATH first (see Installation)
@@ -64,14 +72,14 @@ pytest  tests\test_twocell_m45_benchmark.py    # regression assertions
   - Use
 * - `opensg_jax/fe_jax/benchmark_vabs.py`
   - full-6×6 (all couplings) JAX-solid vs a VABS `.K`
-* - `rm/tw_regression_guardrail.py`
+* - `scripts/rm_research/tw_regression_guardrail.py`
   - must-pass RM/KL vs 2-D-solid regression on the thin-wall benchmarks
 ```
 
 ```powershell
 python -m opensg_jax.fe_jax.benchmark_vabs `
-  prevabs_mh104\2Dsolid_VABS_mh_104.yaml `
-  "training data\opensg-FEniCS\data\mh104_training\mh104.sg.K"
+  tests\research\iea22_windio\solid_iea22_r050.yaml `
+  tests\research\iea22_windio\prevabs_r050\iea22_r050.sg.K
 ```
 
 ## API

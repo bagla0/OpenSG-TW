@@ -17,7 +17,7 @@ The **Reissner–Mindlin (RM)** shell adds an **independent director rotation**:
 rotate relative to the mid-surface. That extra freedom *is* the transverse-shear kinematics. The
 curvature strains then contain only **first** derivatives of the fluctuations (vs second for KL), so the
 element is a plain **$C^0$ Lagrange** line with **no penalty** — at the cost of **shear locking**, which
-§4 handles with MITC. (Source: `rm/RM_DERIVATION.md`, `rm/RM_FORMULATION.md`, Opensg_MSG §3.3.)
+§4 handles with MITC. (Source: `scripts/rm_research/RM_DERIVATION.md`, `scripts/rm_research/RM_FORMULATION.md`, Opensg_MSG §3.3.)
 
 ## 2. Kinematics: five d.o.f. per node and the drilling elimination
 
@@ -87,7 +87,7 @@ statically condensed; Simo–Hughes 1986). Tying points (Barlow 1976):
 - $p{=}1$ (linear): one tying point $\xi=0$ → assumed shear **constant**;
 - $p{=}2$ (quadratic): two tying points $\xi=\pm1/\sqrt3$ → assumed shear **linear** between them.
 
-OpenSG-TW uses a **selective** scheme (`rm/msg_rm_timo.py::assemble_all`, `shear="mitc"`, the default):
+OpenSG-TW uses a **selective** scheme (`opensg_jax/fe_jax/msg_rm_timo.py::assemble_all`, `shear="mitc"`, the default):
 
 ```{list-table}
 :header-rows: 1
@@ -110,7 +110,7 @@ For the **2-node linear** element the assumed-*constant* $\gamma_{23}$ integrate
 identical* to 1-point reduced integration (Prathap–Bhashyam 1982) — so at $p{=}1$ MITC is a provably
 anti-locking **refactor** that reproduces the validated `reduced` answer (guardrail drift ≤ 0.01% on every
 TW case) and only diverges from reduced at $p{=}2$. Across the entire `tube_thesis_314` $R/h$ sweep
-(`rm/debug_sweep_lock.py`) `full == reduced` to 0.00%, i.e. **no locking was ever actually triggered** in a
+(`scripts/rm_research/debug_sweep_lock.py`) `full == reduced` to 0.00%, i.e. **no locking was ever actually triggered** in a
 validated case; the reduced rule only ever *under-integrated the soft core*.
 ```
 
@@ -125,7 +125,7 @@ director to share.
 ## 5. The RM rigid kernel and constraints (the nullspace, derived)
 
 $D_{hh}$ is singular: rigid-body modes cost no energy. RM's kernel and the conjugate constraints
-(`rm/msg_rm_timo.py::build_C_Psi`) are:
+(`opensg_jax/fe_jax/msg_rm_timo.py::build_C_Psi`) are:
 
 $$
 \Psi=\Big[\underbrace{[1,0,0,0,0]}_{w_1},\;\underbrace{[0,1,0,0,0]}_{w_2},\;\underbrace{[0,0,1,0,0]}_{w_3},\;
@@ -209,9 +209,9 @@ the extension–bending (C13) coupling at the OML.
 
 On the $[-45]$ tube (vs 2-D solid): KL $GA_2,GA_3 = -44.5\%,-68.7\%$ → RM $= -12.9\%,-12.9\%$; on the
 two-cell composite KL $-13.8\%,-11.2\%$ → RM $-1.1\%,-0.15\%$. RM is **never worse than KL** on any term —
-the guardrail `rm/tw_regression_guardrail.py` enforces exactly that (RM ≤ KL on $GA_2,GA_3$) on every TW
+the guardrail `scripts/rm_research/tw_regression_guardrail.py` enforces exactly that (RM ≤ KL on $GA_2,GA_3$) on every TW
 benchmark before a solver change ships. For thick walls ($t/h\gtrsim8$), soft cores, and the hardest
-junctions, fall back to the 2-D solid (`rm/…rm_regime_guard` flags per-station).
+junctions, fall back to the 2-D solid (an RM-regime guard, shipped in [OpenSG_io](https://github.com/bagla0/OpenSG_io), flags this per-station).
 
 ```{seealso}
 Run it: {doc}`../tutorials/rm_timo_from_yaml`, {doc}`../tutorials/twocell_m45_asc`.

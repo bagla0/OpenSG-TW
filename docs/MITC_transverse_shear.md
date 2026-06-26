@@ -1,14 +1,14 @@
 # MITC / Assumed-Strain Transverse Shear in the RM Thin-Walled Solver
 
-**Status:** stage-1 implemented (`rm/msg_rm_timo.py:assemble_all`, `shear="mitc"` default).
+**Status:** stage-1 implemented (`opensg_jax/fe_jax/msg_rm_timo.py:assemble_all`, `shear="mitc"` default).
 **Living document** — update the *Change log* (bottom) on every transverse-shear change.
-**Owner test:** `rm/tw_regression_guardrail.py` (must PASS before any solver change ships).
+**Owner test:** `scripts/rm_research/tw_regression_guardrail.py` (must PASS before any solver change ships).
 
 ---
 
 ## 1. Why this exists
 
-The RM thin-walled cross-section element (`rm/msg_rm.py`, `rm/msg_rm_timo.py`) is a C0 Lagrange
+The RM thin-walled cross-section element (`opensg_jax/fe_jax/msg_rm.py`, `opensg_jax/fe_jax/msg_rm_timo.py`) is a C0 Lagrange
 line element, 5 DOF/node `[w1,w2,w3,omega1,omega2]`, with two transverse-shear strains
 
 ```
@@ -54,7 +54,7 @@ for each FULL Gauss point xi_g:
 
 ## 3. What is implemented here (stage 1)
 
-`rm/msg_rm_timo.py::assemble_all(..., shear="mitc")` — **selective** treatment:
+`opensg_jax/fe_jax/msg_rm_timo.py::assemble_all(..., shear="mitc")` — **selective** treatment:
 - `gamma13 = omega2` (BGq row 0): **FULL** integration (it is algebraic, does not lock; reduced-int
   would leave the omega2 antisymmetric mode under-penalised).
 - `gamma23 = n.dw/ds - omega1` (BGq row 1): **assumed-strain** — sampled at the tying point(s),
@@ -76,7 +76,7 @@ Measured (mh104 composite thin, GA2 %err vs solid): reduced -20.8%, mitc -20.8%,
 solid target ~ -0.5% (KL membrane-only gives -0.5%). `full` "helps" only by adding shear stiffness
 (the locking direction) and is still far from the solid; and `full == reduced` on every thin TW case
 (no locking observed) -- confirmed to 0.00% across the ENTIRE tube_thesis_314 R/h sweep
-(t = 0.0715 .. 0.00715, `rm/debug_sweep_lock.py`), so the reduced scheme never actually prevented
+(t = 0.0715 .. 0.00715, `scripts/rm_research/debug_sweep_lock.py`), so the reduced scheme never actually prevented
 locking in any validated case; it only under-integrated the soft core. => The soft-core GA2 error is **not** an integration artifact. It is the wall
 transverse-shear **G leaking into the membrane-carried section shear** (the single-RM-strip cannot
 represent the sandwich zig-zag). The real fix is **stage 2**: confine the wall G to its O(zeta^2)
@@ -85,7 +85,7 @@ correction so a soft core cannot soften the leading membrane GA2 (see opensg-msg
 
 ## 4. TW regression guardrail (must pass for EVERY change)
 
-`rm/tw_regression_guardrail.py` — single-cell AND multi-cell TW benchmarks vs the FEniCS 2D-solid:
+`scripts/rm_research/tw_regression_guardrail.py` — single-cell AND multi-cell TW benchmarks vs the FEniCS 2D-solid:
 SINGLE box 1-cell, SINGLE [-45] tube, MULTI box 2-cell (thin+thick), MULTI curved tube 2-cell
 (thin+thick). PASS iff MITC stays within 1.5% of the validated `reduced` result on every diagonal
 AND RM is still <= KL on the shear terms (GA2,GA3). Current status: **ALL PASS**.
