@@ -11,13 +11,20 @@ The Kirchhoff–Love model ties the wall rotation to the slope of the displaceme
 ($C^1$/Hermite), so it carries **no independent transverse-shear strain**. For composite walls, short
 beams, and dynamics that is too stiff: the two **transverse-shear stiffnesses** $GA_2,GA_3$ are
 under-predicted — by tens of percent on the $[-45]$ tube and the two-cell composite
-({doc}`../tutorials/kl_timo_from_yaml`, {doc}`../tutorials/twocell_m45_asc`).
+({doc}`../tutorials/rm_timo_from_yaml`, {doc}`../tutorials/twocell_m45_asc`).
 
 The **Reissner–Mindlin (RM)** shell adds an **independent director rotation**: the wall normal may
 rotate relative to the mid-surface. That extra freedom *is* the transverse-shear kinematics. The
 curvature strains then contain only **first** derivatives of the fluctuations (vs second for KL), so the
 element is a plain **$C^0$ Lagrange** line with **no penalty** — at the cost of **shear locking**, which
 §4 handles with MITC. (Source: `scripts/rm_research/RM_DERIVATION.md`, `scripts/rm_research/RM_FORMULATION.md`, Opensg_MSG §3.3.)
+
+```{note}
+**Material orientation convention** (the axes drawn by `orient_plot` and used by every solver): $e_2$
+(blue) is the in-plane ply-flow direction, $e_3$ (green) is the wall normal taken **OML → IML** — from the
+outer mould line toward the inner mould line, i.e. into the section interior — and $e_1$ is the out-of-plane
+beam axis. The same convention applies to the 1-D shell and the 2-D solid meshes.
+```
 
 ## 2. Kinematics: five d.o.f. per node and the drilling elimination
 

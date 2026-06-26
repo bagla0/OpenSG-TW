@@ -45,7 +45,6 @@ lives — KL loses the transverse shear, RM recovers it, the solid matches VABS:
 installation
 tutorials/index
 tutorials/rm_timo_from_yaml
-tutorials/kl_timo_from_yaml
 tutorials/solid_timo_from_yaml
 tutorials/iea22_windio_to_timo
 tutorials/iea22_full_blade

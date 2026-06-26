@@ -53,17 +53,13 @@ def nonzero_terms(S, neglect=1000.0):
 
 
 def term_table(name, C, S, ref="benchmark", neglect=1000.0):
-    """Full per-non-zero-term table (Cij notation) of model C vs reference S. Returns the worst |%err|.
+    """Full per-non-zero-term table (Cij notation) of model C vs reference S.
     Drop-in for the old diagonal-only diag_table(name, C, S) but covers couplings too."""
     C, S = sym(C), sym(S)
     print("  %-11s %15s %15s %10s" % ("term", name, ref, "%err"))
-    worst = 0.0
     for i, j, tag in nonzero_terms(S, neglect):
         e = 100.0 * (C[i, j] - S[i, j]) / S[i, j]
         print("  %-11s %15.5e %15.5e %+9.2f" % (tag, C[i, j], S[i, j], e))
-        worst = max(worst, abs(e))
-    print("  -> worst non-zero term: %.2f %%" % worst)
-    return worst
 
 
 def compare_terms(S, models, neglect=1000.0):
@@ -76,16 +72,12 @@ def compare_terms(S, models, neglect=1000.0):
     for k in names:
         hdr += " %14s %9s" % (k, k + "%d")
     print(hdr)
-    worst = {k: 0.0 for k in names}
     for i, j, tag in nonzero_terms(S, neglect):
         row = "  %-11s %14.4e" % (tag, S[i, j])
         for k in names:
             e = 100.0 * (Ms[k][i, j] - S[i, j]) / S[i, j]
             row += " %14.4e %+8.2f" % (Ms[k][i, j], e)
-            worst[k] = max(worst[k], abs(e))
         print(row)
-    print("  -> worst non-zero term: " + ", ".join("%s %.2f%%" % (k, worst[k]) for k in names))
-    return worst
 
 
 def diag_table(name, C, S):

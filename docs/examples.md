@@ -15,7 +15,7 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
   - {doc}`tutorials/rm_timo_from_yaml`
 * - `2_get_beam_props_kl_shell.py`
   - KL shell
-  - {doc}`tutorials/kl_timo_from_yaml`
+  - {doc}`tutorials/rm_timo_from_yaml` (KL subsection)
 * - `3_get_beam_props_jax_solid.py`
   - 2-D solid
   - {doc}`tutorials/solid_timo_from_yaml`
