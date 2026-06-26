@@ -194,16 +194,16 @@ def plot_span_loft(shell_yamls, rs, reg, out_png):
     ax.set_box_aspect((6.5, 5.0, 1.6))
     ax.view_init(elev=18, azim=-74)
     # spanwise (r) axis only: hide chord (y) and thickness (z)
-    ax.set_yticks([]); ax.set_zticks([]); ax.set_ylabel(""); ax.set_zlabel("")
-    ax.set_xlabel("span station  r")
+    ax.set_yticks([]); ax.set_zticks([])
+    ax.set_xlabel("r  (span station)", labelpad=14)        # span axis, padded clear of the r tick labels
+    ax.set_ylabel("y2", labelpad=2); ax.set_zlabel("y3", labelpad=2)   # chord / thickness on the other two axes
     ax.grid(False)
-    try:                                            # fade the chord/thickness panes; keep the span (x) axis
+    try:                                                   # fade the panes; keep the three labelled axes
         ax.xaxis.set_pane_color((1, 1, 1, 0)); ax.yaxis.set_pane_color((1, 1, 1, 0)); ax.zaxis.set_pane_color((1, 1, 1, 0))
     except Exception:
         pass
     handles = _layup_handles(used, labels)
-    handles += [Line2D([0], [0], color="black", ls=":", label="beam reference line"),
-                Line2D([0], [0], color="red", marker="o", ls="", label="station origin")]
+    handles += [Line2D([0], [0], color="black", ls=":", label="beam reference line")]   # red dots stay, not in legend
     fig.legend(handles=handles, loc="center right", fontsize=9, title="layup")
     fig.savefig(out_png, dpi=145, bbox_inches="tight"); plt.close(fig)
     return out_png
