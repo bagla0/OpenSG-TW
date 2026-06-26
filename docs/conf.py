@@ -83,4 +83,6 @@ autodoc_mock_imports = ["dolfinx", "ufl", "mpi4py", "petsc4py", "opensg"]
 autodoc_default_options = {"members": True, "undoc-members": False, "show-inheritance": False}
 # The free-form source docstrings use plain-text math bars (|S_ij|) and indented blocks that the RST
 # parser flags; these are cosmetic in the rendered API page, so don't let them fail the -W build.
-suppress_warnings = ["docutils", "myst.substitution"]
+# docutils/myst: free-form docstring math bars; autodoc: if an optional dep (e.g. libigl) is missing on a
+# given runner, skip that module's autodoc rather than failing the whole -W build.
+suppress_warnings = ["docutils", "myst.substitution", "autodoc"]
