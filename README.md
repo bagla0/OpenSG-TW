@@ -43,16 +43,16 @@ pip install "jax[cpu]" pypardiso fenics-basix numpy scipy pyyaml numba matplotli
 ```
 
 ```python
-# 2-D solid Timoshenko 6x6 from a YAML
+# 2-D solid Timoshenko 6x6 from a YAML (all inputs are bundled under examples/data/)
 from opensg_jax.fe_jax.solid_timo import compute_timo_from_yaml
-C6 = compute_timo_from_yaml("tests/research/iea22_windio/solid_iea22_r050.yaml")
+C6 = compute_timo_from_yaml("examples/data/2d_yaml/mh104_solid.yaml")
 print(C6)   # [EA, GA2, GA3, GJ, EI2, EI3] on the diagonal
 ```
 
 Benchmark the full 6×6 against a VABS `.K`:
 
 ```bash
-python -m opensg_jax.fe_jax.benchmark_vabs <solid_yaml> <vabs.sg.K>
+python -m opensg_jax.fe_jax.benchmark_vabs examples/data/2d_yaml/mh104_solid.yaml examples/data/benchmark/mh104.sg.K
 ```
 
 The runnable [`examples/`](examples) (`1_/2_/3_get_beam_props_*`) reproduce the RM, KL and solid paths from
@@ -75,9 +75,10 @@ opensg_jax/fe_jax/      JAX MSG engine (mirrors the OpenSG_2.0 / fea-in-jax arch
   strip_RM.py / strip_Kirchhoff.py / strip_solid.py   RM / KL / solid drivers -> Timoshenko 6x6
   benchmark_vabs.py       full-6x6 JAX-vs-VABS .K comparison
 examples/               1_..5_ unique-feature scripts (RM / KL / solid / airfoil driver / dehom)
+  data/                   bundled inputs: 1d_yaml/ 2d_yaml/ benchmark/ xml/ windio/ (all tutorials & tests read here)
   benchmarks/             OML-stress validation, comparison & report scripts
 scripts/                strip_*.yaml inputs, ABD verifiers, rm_research/ (RM derivation + studies)
-tests/                  pytest regression + the two-cell [-45] multi-cell benchmark
+tests/                  pytest regression: st12 / st15 / two-cell [-45] RM-vs-KL benchmarks
 docs/                   Sphinx site (theory + executed tutorials) -> GitHub Pages
 ```
 

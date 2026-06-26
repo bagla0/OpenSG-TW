@@ -57,9 +57,12 @@ Two further cross-sections are demonstrations rather than core concepts, so they
   - KL vs RM vs solid across an internal-web junction (the ASC multi-cell benchmark)
 ```
 
+The **RM-vs-KL benchmark regression tests** all read from `examples/data/` and assert the shell models
+against the station's VABS / 2-D-solid reference:
+
 ```powershell
-python tests\test_twocell_m45_benchmark.py     # benchmark table
-pytest  tests\test_twocell_m45_benchmark.py    # regression assertions
+pytest tests\test_st12_benchmark.py tests\test_st15_benchmark.py tests\test_twocell_m45_benchmark.py
+python tests\test_twocell_m45_benchmark.py     # also runnable directly to print the KL/RM/solid table
 ```
 
 ## Benchmark utilities
@@ -78,8 +81,8 @@ pytest  tests\test_twocell_m45_benchmark.py    # regression assertions
 
 ```powershell
 python -m opensg_jax.fe_jax.benchmark_vabs `
-  tests\research\iea22_windio\solid_iea22_r050.yaml `
-  tests\research\iea22_windio\prevabs_r050\iea22_r050.sg.K
+  examples\data\2d_yaml\mh104_solid.yaml `
+  examples\data\benchmark\mh104.sg.K
 ```
 
 ## API

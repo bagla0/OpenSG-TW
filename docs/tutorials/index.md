@@ -1,8 +1,10 @@
 # Tutorials
 
-Three **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
+Six **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
 computes the Timoshenko $6\times6$, and reports the per-term **%-error against a benchmark**. They are
-committed pre-run, so the numbers and figures you see are the real outputs.
+committed pre-run, so the numbers and figures you see are the real outputs. Every input is bundled in the
+repo under [`examples/data/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data) — clone and run,
+no external paths.
 
 ::::{grid} 1 1 3 3
 :gutter: 3
@@ -57,30 +59,32 @@ A thick-web blade station from both solid and shell — solid exact (quad mesh),
   - Driver
   - Benchmark
 * - RM
-  - `tube_thesis_314/.../shell_center.yaml`
+  - `data/1d_yaml/tube_m45_shell.yaml`
   - `rm_timoshenko_6x6`
-  - 2-D solid `C6_solid_314.txt`
+  - 2-D solid `data/benchmark/tube_m45_solid_ref.txt`
 * - KL
-  - `tube_thesis_314/.../shell_center.yaml`
+  - `data/1d_yaml/tube_m45_shell.yaml`
   - `gradient_junction_kirchhoff`
-  - 2-D solid `C6_solid_314.txt`
+  - 2-D solid `data/benchmark/tube_m45_solid_ref.txt`
 * - Solid
-  - `prevabs_mh104/2Dsolid_VABS_mh_104.yaml`
+  - `data/2d_yaml/mh104_solid.yaml`
   - `compute_timo_from_yaml`
-  - VABS `mh104.sg.K`
+  - VABS `data/benchmark/mh104.sg.K`
 * - IEA-22
-  - `tests/research/iea22_windio/solid_iea22_r050.yaml`
+  - `data/2d_yaml/iea22_r050_solid.yaml`
   - `compute_timo_from_yaml` (+ RM)
-  - VABS `iea22_r050.sg.K`
+  - VABS `data/benchmark/iea22_r050.sg.K`
 * - Two-cell [-45]
-  - `multicell_tube/data/tube2cell_aniso_thin.yaml`
+  - `data/1d_yaml/tube2cell_m45_shell.yaml`
   - KL + RM + `compute_timo_from_yaml`
-  - 2-D solid `C6_solid_tube2cell_aniso_thin.txt`
+  - 2-D solid `data/benchmark/tube2cell_m45_solid_ref.txt`
 * - Station-15
-  - `…/1Dshell_15.yaml` + `…/2Dsolid_VABS_15.yaml` (quad)
+  - `data/1d_yaml/st15_shell.yaml` + `data/2d_yaml/st15_solid.yaml` (quad)
   - KL + RM + `compute_timo_from_yaml`
-  - VABS `.K` (station 15)
+  - VABS `data/benchmark/st15_vabs.K`
 ```
+
+All paths are relative to [`examples/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples).
 
 Each notebook can be reproduced from the command line by the matching numbered script in `examples/`
 (see {doc}`../examples`).

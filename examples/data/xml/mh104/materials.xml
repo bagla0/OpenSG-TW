@@ -1,0 +1,103 @@
+<materials>
+  <material name="ud_frp" type="orthotropic">
+    <density>1.86E+03</density>
+    <elastic>
+      <e1>3.70E+10</e1>
+      <e2>9.00E+09</e2>
+      <e3>9.00E+09</e3>
+      <g12>4.00E+09</g12>
+      <g13>4.00E+09</g13>
+      <g23>4.00E+09</g23>
+      <nu12>0.28</nu12>
+      <nu13>0.28</nu13>
+      <nu23>0.28</nu23>
+    </elastic>
+  </material>
+  <material name="db_frp" type="orthotropic">
+    <density>1.83E+03</density>
+    <elastic>
+      <e1>1.03E+10</e1>
+      <e2>1.03E+10</e2>
+      <e3>1.03E+10</e3>
+      <g12>8.00E+09</g12>
+      <g13>8.00E+09</g13>
+      <g23>8.00E+09</g23>
+      <nu12>0.30</nu12>
+      <nu13>0.30</nu13>
+      <nu23>0.30</nu23>
+    </elastic>
+  </material>
+  <material name="gelcoat" type="orthotropic">
+    <density>1.83E+03</density>
+    <elastic>
+      <e1>1.00E+01</e1>
+      <e2>1.00E+01</e2>
+      <e3>1.00E+01</e3>
+      <g12>1.00E+00</g12>
+      <g13>1.00E+00</g13>
+      <g23>1.00E+00</g23>
+      <nu12>0.30</nu12>
+      <nu13>0.30</nu13>
+      <nu23>0.30</nu23>
+    </elastic>
+  </material>
+  <material name="nexus" type="orthotropic">
+    <density>1.664E+03</density>
+    <elastic>
+      <e1>1.03E+10</e1>
+      <e2>1.03E+10</e2>
+      <e3>1.03E+10</e3>
+      <g12>8.00E+09</g12>
+      <g13>8.00E+09</g13>
+      <g23>8.00E+09</g23>
+      <nu12>0.30</nu12>
+      <nu13>0.30</nu13>
+      <nu23>0.30</nu23>
+    </elastic>
+  </material>
+  <material name="balsa" type="orthotropic">
+    <density>1.28E+02</density>
+    <elastic>
+      <e1>1.00E+07</e1>
+      <e2>1.00E+07</e2>
+      <e3>1.00E+07</e3>
+      <g12>2.00E+05</g12>
+      <g13>2.00E+05</g13>
+      <g23>2.00E+05</g23>
+      <nu12>0.30</nu12>
+      <nu13>0.30</nu13>
+      <nu23>0.30</nu23>
+    </elastic>
+  </material>
+  <material name="foam" type="isotropic">
+    <density>160</density>
+    <elastic>
+      <e>72.400E+09</e>
+      <nu>0.3</nu>
+    </elastic>
+  </material>
+  <lamina name="la_ud_frp_000053">
+    <material>ud_frp</material>
+    <thickness>0.00053</thickness>
+  </lamina>
+  <lamina name="la_db_frp_000053">
+    <material>db_frp</material>
+    <thickness>0.00053</thickness>
+  </lamina>
+  <lamina name="la_gelcoat_0000381">
+    <material>gelcoat</material>
+    <thickness>0.000381</thickness>
+  </lamina>
+  <lamina name="la_nexus_000051">
+    <material>nexus</material>
+    <thickness>0.00051</thickness>
+  </lamina>
+  <lamina name="la_balsa_0003125">
+    <material>balsa</material>
+    <thickness>0.003125</thickness>
+  </lamina>
+  <lamina name="la_foam">
+    <material>foam</material>
+    <thickness></thickness>
+  </lamina>
+</materials>

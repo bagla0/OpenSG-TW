@@ -53,7 +53,8 @@ docs/_build/
 
 # run logs and regenerable run artifacts
 *.log
-*_orient_e1e2e3.png        # auto-emitted orientation PNGs next to data YAMLs (regenerable)
+# auto-emitted orientation PNGs next to data YAMLs (regenerable)
+*_orient_e1e2e3.png
 SG_mesh.*
 sgmesh.msh
 **/jax_cache/

@@ -21,10 +21,10 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-D = os.path.join(CC, "tests", "research", "multicell_tube", "data")
-SHELL = os.path.join(D, "tube2cell_aniso_thin.yaml")
-SOLIDY = os.path.join(D, "solid_tube2cell_aniso_thin.yaml")
-BENCH = os.path.join(D, "C6_solid_tube2cell_aniso_thin.txt")
+D = os.path.join(CC, "examples", "data")
+SHELL = os.path.join(D, "1d_yaml", "tube2cell_m45_shell.yaml")
+SOLIDY = os.path.join(D, "2d_yaml", "tube2cell_m45_solid.yaml")
+BENCH = os.path.join(D, "benchmark", "tube2cell_m45_solid_ref.txt")
 
 
 def _sym(M):

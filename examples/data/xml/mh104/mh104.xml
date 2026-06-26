@@ -1,0 +1,70 @@
+<cross_section name="mh104">
+
+
+  <include>
+    <baseline>baselines</baseline>
+    <layup>layups</layup>
+    <material>materials</material>
+  </include>
+
+
+  <analysis>
+    <model>1</model>
+  </analysis>
+
+
+  <general>
+    <translate>-0.25  0</translate>
+    <scale>1.9</scale>
+    <mesh_size>0.005</mesh_size>
+    <element_type>linear</element_type>
+  </general>
+
+
+  <component name="surface">
+    <segment name="sg_lps_1">
+      <baseline>bl_lps_1</baseline>
+      <layup direction="right">layup1</layup>
+    </segment>
+    <segment name="sg_lps_2">
+      <baseline>bl_lps_2</baseline>
+      <layup direction="right">layup2</layup>
+    </segment>
+    <segment name="sg_lps_3">
+      <baseline>bl_lps_3</baseline>
+      <layup direction="right">layup3</layup>
+    </segment>
+    <segment name="sg_te">
+      <baseline>bl_te</baseline>
+      <layup direction="right">layup4</layup>
+    </segment>
+    <segment name="sg_hps_3">
+      <baseline>bl_hps_3</baseline>
+      <layup direction="right">layup3</layup>
+    </segment>
+    <segment name="sg_hps_2">
+      <baseline>bl_hps_2</baseline>
+      <layup direction="right">layup2</layup>
+    </segment>
+    <segment name="sg_hps_1">
+      <baseline>bl_hps_1</baseline>
+      <layup direction="right">layup1</layup>
+    </segment>
+  </component>
+
+  <component name="web1" depend="surface">
+    <segment name="sg_web_1">
+      <baseline>bl_web_1</baseline>
+      <layup>layup_web</layup>
+    </segment>
+  </component>
+
+  <component name="web2" depend="surface">
+    <segment name="sg_web_2">
+      <baseline>bl_web_2</baseline>
+      <layup>layup_web</layup>
+    </segment>
+  </component>
+
+
+</cross_section>
