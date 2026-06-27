@@ -1,6 +1,6 @@
 # Tutorials
 
-Six **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
+Three **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
 prints the **full Timoshenko $6\times6$**, and reports the per-term **%-diff on every non-zero $C_{ij}$**
 (not just the diagonal) against a benchmark. They are committed pre-run, so the numbers and figures you see
 are the real outputs. Every input is bundled in the repo under
@@ -16,35 +16,16 @@ Reissner–Mindlin Timoshenko on the two-cell $[-45]$ tube, with a Kirchhoff–L
 RM / KL / 2-D-solid full-6×6 comparison.
 :::
 
-:::{grid-item-card} 2 · 2-D solid
-:link: solid_timo_from_yaml
+:::{grid-item-card} 2 · IEA-22 full blade
+:link: iea22_full_blade
 :link-type: doc
-JAX 2-D solid Timoshenko from a 2-D solid YAML — full 6×6 vs VABS. (MH-104 airfoil)
+Eight span stations regenerated from windIO — RM & KL vs the 2-D solid on the full 6×6, spanwise plots.
 :::
 
-:::{grid-item-card} 3 · IEA-22 windIO → full 6×6
-:link: iea22_windio_to_timo
-:link-type: doc
-Real wind-turbine blade: windIO → OpenSG YAML (via OpenSG_io, run live) → full Timoshenko 6×6, vs VABS.
-:::
-
-:::{grid-item-card} 4 · Two-cell [-45] + R/h convergence
-:link: twocell_m45_asc
-:link-type: doc
-RM vs KL vs 2-D solid at thin **and** thick walls, full 6×6, plus the $R/h$ convergence plot — RM stays
-<5% on shear where KL collapses.
-:::
-
-:::{grid-item-card} 5 · Station-15 (thick web)
+:::{grid-item-card} 3 · BAR-URC blade (thick web)
 :link: st15_solid_vs_shell
 :link-type: doc
 A thick-web blade station from both solid and shell — solid exact (quad mesh), shells drift on the web.
-:::
-
-:::{grid-item-card} 6 · IEA-22 full blade
-:link: iea22_full_blade
-:link-type: doc
-Eight span stations regenerated from windIO — RM & KL vs the 2-D solid on the full 6×6, spanwise plot.
 :::
 ::::
 
@@ -60,19 +41,11 @@ Eight span stations regenerated from windIO — RM & KL vs the 2-D solid on the 
   - `data/1d_yaml/tube2cell_m45_shell.yaml`
   - `rm_timoshenko_6x6` + `gradient_junction_kirchhoff`
   - 2-D solid `data/benchmark/tube2cell_m45_solid_ref.txt`
-* - Solid
-  - `data/2d_yaml/mh104_solid.yaml`
-  - `compute_timo_from_yaml`
-  - VABS `data/benchmark/mh104.sg.K`
-* - IEA-22
-  - `data/2d_yaml/iea22_r050_solid.yaml`
-  - `compute_timo_from_yaml` (+ RM)
-  - VABS `data/benchmark/iea22_r050.sg.K`
-* - Two-cell [-45]
-  - `data/1d_yaml/tube2cell_m45_shell.yaml`
-  - KL + RM + `compute_timo_from_yaml`
-  - 2-D solid `data/benchmark/tube2cell_m45_solid_ref.txt`
-* - Station-15
+* - IEA-22 full blade
+  - `data/iea_blade/shell_*.yaml` + `data/2d_yaml/iea22_r050_solid.yaml`
+  - RM + KL + `compute_timo_from_yaml`
+  - 2-D solid `data/iea_blade/C6_solid_*.txt`
+* - BAR-URC blade
   - `data/1d_yaml/st15_shell.yaml` + `data/2d_yaml/st15_solid.yaml` (quad)
   - KL + RM + `compute_timo_from_yaml`
   - VABS `data/benchmark/st15_vabs.K`

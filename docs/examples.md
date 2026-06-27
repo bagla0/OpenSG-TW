@@ -18,7 +18,7 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
   - {doc}`tutorials/rm_timo_from_yaml` (KL subsection)
 * - `3_get_beam_props_jax_solid.py`
   - 2-D solid
-  - {doc}`tutorials/solid_timo_from_yaml`
+  - 2-D solid Timoshenko 6×6 vs VABS (MH-104 airfoil)
 * - `4_run_airfoil_cross_section.py`
   - KL shell (full driver)
   - end-to-end airfoil cross-section → Timoshenko 6×6 (timing + geometry)
@@ -50,10 +50,10 @@ Two further cross-sections are demonstrations rather than core concepts, so they
   - Where
   - What it shows
 * - IEA-22 windIO blade
-  - tutorial {doc}`tutorials/iea22_windio_to_timo`
-  - windIO → OpenSG YAML → full 6×6 vs VABS (uses the solid concept on a real blade)
+  - tutorial {doc}`tutorials/iea22_full_blade`
+  - windIO → OpenSG YAML → full 6×6 across the span (vs the 2-D solid)
 * - Two-cell [-45] (multi-cell)
-  - **test** `tests/test_twocell_m45_benchmark.py` + tutorial {doc}`tutorials/twocell_m45_asc`
+  - tutorial {doc}`tutorials/rm_timo_from_yaml` + **test** `tests/test_twocell_m45_benchmark.py`
   - KL vs RM vs solid across an internal-web junction (the ASC multi-cell benchmark)
 ```
 

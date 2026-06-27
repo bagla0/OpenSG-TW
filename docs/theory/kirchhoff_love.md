@@ -224,7 +224,7 @@ KL nails the classical stiffnesses on thin sections and is cheap and robust. The
 {doc}`reissner_mindlin`; for thick walls / soft cores / the full 3-D response use {doc}`jax_solid`.
 
 ```{seealso}
-Run it: {doc}`../tutorials/rm_timo_from_yaml` (the KL subsection), {doc}`../tutorials/twocell_m45_asc`.
+Run it: {doc}`../tutorials/rm_timo_from_yaml` (the KL subsection).
 ```
 
 ## References

@@ -11,7 +11,7 @@ The Kirchhoff–Love model ties the wall rotation to the slope of the displaceme
 ($C^1$/Hermite), so it carries **no independent transverse-shear strain**. For composite walls, short
 beams, and dynamics that is too stiff: the two **transverse-shear stiffnesses** $GA_2,GA_3$ are
 under-predicted — by tens of percent on the $[-45]$ tube and the two-cell composite
-({doc}`../tutorials/rm_timo_from_yaml`, {doc}`../tutorials/twocell_m45_asc`).
+({doc}`../tutorials/rm_timo_from_yaml`).
 
 The **Reissner–Mindlin (RM)** shell adds an **independent director rotation**: the wall normal may
 rotate relative to the mid-surface. That extra freedom *is* the transverse-shear kinematics. The
@@ -122,7 +122,7 @@ validated case; the reduced rule only ever *under-integrated the soft core*.
 ```
 
 **Junctions (multi-cell / web–skin).** Where several walls meet (the internal web of the
-{doc}`../tutorials/twocell_m45_asc` two-cell tube, or a blade spar–skin T-junction), each wall is its own
+{doc}`../tutorials/rm_timo_from_yaml` two-cell tube, or a blade spar–skin T-junction), each wall is its own
 $C^0$ strip with its own tying-point assumed $\gamma_{23}$; the strips share the junction node's
 $[w_1,w_2,w_3,\omega_1,\omega_2]$. MITC is applied **per element**, so the junction inherits a
 field-consistent shear from every incident wall without a penalty — this is why RM holds GA2/GA3 across the
@@ -231,5 +231,5 @@ Simo & Hughes (1986); the tying-point / field-consistency analysis is Barlow (19
 Full bibliography with DOIs: {doc}`../references`.
 
 ```{seealso}
-Run it: {doc}`../tutorials/rm_timo_from_yaml`, {doc}`../tutorials/twocell_m45_asc`.
+Run it: {doc}`../tutorials/rm_timo_from_yaml`.
 ```

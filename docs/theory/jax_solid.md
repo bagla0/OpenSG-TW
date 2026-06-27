@@ -99,7 +99,7 @@ $^\dagger$ over terms with $|\text{VABS}|\ge 10^{6}$; the larger relative values
 near-zero couplings (denominator noise). Reproduce with `opensg_jax/fe_jax/benchmark_vabs.py`.
 
 ```{seealso}
-Run it: {doc}`../tutorials/solid_timo_from_yaml`.
+Run it: {doc}`../tutorials/iea22_full_blade` (the 2-D solid at the mid-span station).
 ```
 
 ## References
