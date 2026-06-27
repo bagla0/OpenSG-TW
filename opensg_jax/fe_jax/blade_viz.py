@@ -134,13 +134,13 @@ def plot_layup_section(shell_yaml, solid_yaml, reg, out_png, arrow=0.22):
     P, C = np.asarray(sg["points"])[:, :2], sg["cells"]
     fig, (axS, axL) = plt.subplots(2, 1, figsize=(12.5, 6.4))
     axS.add_collection(PolyCollection([P[c] for c in C], facecolors=[_matcol(m) for m in smat], edgecolors="none"))
-    axS.autoscale_view(); axS.set_aspect("equal"); axS.set_title("2-D solid mesh by material (%d elements)" % len(C))
+    axS.autoscale_view(); axS.set_aspect("equal"); axS.set_title("2-D solid mesh (%d elements)" % len(C))
     axS.set_ylabel("y3 (m)"); axS.set_xticklabels([])
     axS.legend(handles=_mat_handles(set(smat)), loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8.5, title="material")
     axL.add_collection(LineCollection([nd[e[:2]] for e in elems], colors=[PALETTE[i % len(PALETTE)] for i in lay], linewidths=2.0))
     _region_arrows(axL, elems, lay, oris, emid, arrow)
     axL.autoscale_view(); axL.set_aspect("equal")
-    axL.set_title("1-D shell line mesh by layup (%d elements)" % len(elems))
+    axL.set_title("1-D shell line mesh (%d elements)" % len(elems))
     axL.set_xlabel("y2 (m)"); axL.set_ylabel("y3 (m)")
     axL.legend(handles=_layup_handles(set(int(v) for v in lay[lay >= 0]), labels),
                loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8.5, title="layup")
@@ -194,8 +194,9 @@ def plot_span_loft(shell_yamls, rs, reg, out_png):
     ax.set_box_aspect((6.5, 5.0, 1.6))
     ax.view_init(elev=18, azim=-74)
     # spanwise (r) axis only: hide chord (y) and thickness (z)
+    ax.set_yticks([0, 2, 4]); ax.set_zticks([-0.5, 0.0, 0.5])   # few, well-spaced ticks (y3 was crowded)
     ax.set_xlabel("r  (span station)", labelpad=14)        # span axis, padded clear of the r tick labels
-    ax.set_ylabel("y2 (m)", labelpad=8); ax.set_zlabel("y3 (m)", labelpad=2)   # chord / thickness, with ticks
+    ax.set_ylabel("y2 (m)", labelpad=8); ax.set_zlabel("y3 (m)", labelpad=4)   # chord / thickness
     ax.grid(False)
     try:                                                   # fade the panes; keep the three labelled axes + ticks
         ax.xaxis.set_pane_color((1, 1, 1, 0)); ax.yaxis.set_pane_color((1, 1, 1, 0)); ax.zaxis.set_pane_color((1, 1, 1, 0))
