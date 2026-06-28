@@ -164,7 +164,7 @@ def hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
 
 def assemble_system_matrices_hermite(
     corners, hcells, reduced_cells, ABD_elems, k22_elems,
-    L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal, dof_map=None
+    L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal, dof_map=None, return_blocks=False
 ):
     """Assemble Dhh, Dhe, Dee, Dll, Dhl, Dle with Hermite C1 elements.
 
@@ -197,6 +197,8 @@ def assemble_system_matrices_hermite(
         jnp.array(corners[hcells[:, 0]]), jnp.array(corners[hcells[:, 1]]),
         ABD_elems, k22_elems, L_elems, xd2_elems, xd3_elems))
     D_hh_b, D_he_b, D_ee_b, D_ll_b, D_hl_b, D_le_b = out
+    if return_blocks:                                 # per-element (E,12,12)/(E,12,4)/(E,4,4) blocks
+        return D_hh_b, D_he_b, D_ee_b, D_ll_b, D_hl_b, D_le_b
 
     rc = jnp.array(reduced_cells)
     if dof_map is None:
