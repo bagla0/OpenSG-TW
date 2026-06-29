@@ -57,7 +57,7 @@ def rm_kl_solid(tag):
     shell = os.path.join(IB, "shell_%s.yaml" % tag)
     S = sym(np.loadtxt(os.path.join(IB, "C6_solid_%s.txt" % tag)))
     T = wall_t(shell)
-    RM = sym(rm_timoshenko_6x6(shell, 0.0, dshift=T / 2, curved=False, shear="mitc", orient=False))
+    RM = sym(rm_timoshenko_6x6(shell, 0.0, dshift=T / 2, curved=False, shear="mitc_both", orient=False))
     KL = sym(gradient_junction_kirchhoff(shell, frac=0.0, dshift=T / 2, orient=False)[0])
     return S, RM, KL
 print("ready | jax", jax.__version__, "| stations:", [t for t, _ in STATIONS], "| layups:", REG[1])'''
@@ -74,7 +74,7 @@ LOFT = '''png = plot_span_loft(SHELLS, RR, REG, os.path.join(IMG, "iea_span_loft
 Image(filename=png)'''
 
 MID = '''shell = os.path.join(IB, "shell_r050.yaml"); T = wall_t(shell)
-RM = sym(rm_timoshenko_6x6(shell, 0.0, dshift=T / 2, curved=False, shear="mitc", orient=False))
+RM = sym(rm_timoshenko_6x6(shell, 0.0, dshift=T / 2, curved=False, shear="mitc_both", orient=False))
 KL = sym(gradient_junction_kirchhoff(shell, frac=0.0, dshift=T / 2, orient=False)[0])
 t0 = time.perf_counter()
 SOL = sym(compute_timo_from_yaml(os.path.join(D2, "iea22_r050_solid.yaml"), verbose=False))
@@ -94,7 +94,7 @@ Cs_rm, Cs_kl, Cs_s, rm_times, kl_times = [], [], [], [], []
 for tag, r in STATIONS:
     shell = os.path.join(IB, "shell_%s.yaml" % tag); T = wall_t(shell)
     S = sym(np.loadtxt(os.path.join(IB, "C6_solid_%s.txt" % tag)))
-    t0 = time.perf_counter(); RM = sym(rm_timoshenko_6x6(shell, 0.0, dshift=T / 2, curved=False, shear="mitc", orient=False)); rm_times.append(time.perf_counter() - t0)
+    t0 = time.perf_counter(); RM = sym(rm_timoshenko_6x6(shell, 0.0, dshift=T / 2, curved=False, shear="mitc_both", orient=False)); rm_times.append(time.perf_counter() - t0)
     t0 = time.perf_counter(); KL = sym(gradient_junction_kirchhoff(shell, frac=0.0, dshift=T / 2, orient=False)[0]); kl_times.append(time.perf_counter() - t0)
     Cs_rm.append(RM); Cs_kl.append(KL); Cs_s.append(S)
 MARK = ["o", "s", "^", "D", "v", "P"]; COL = ["tab:blue", "tab:orange", "tab:green", "tab:purple", "tab:red", "tab:brown"]
