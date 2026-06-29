@@ -36,7 +36,7 @@ LBL = ["ext", "shear2", "shear3", "twist", "bend2", "bend3"]
 
 
 def rm_timoshenko_6x6(yaml_path, frac, p=1, reduced=True, dshift=None, curved=False,
-                      shear="mitc", v1shear="full", w2null=False, orient=True, solid_yaml=None):
+                      shear="mitc_both", v1shear="mitc_both", w2null=False, orient=True, solid_yaml=None):
     """Full RM MSG-TW solve for the Timoshenko 6x6 at reference `frac`
     (0.0 = OML, 0.5 = wall mid-surface / centre).  p=1 linear C0; p=2 quadratic C0
     (one midside node inserted per element).  `reduced`=True keeps the selective
