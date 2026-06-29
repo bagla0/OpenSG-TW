@@ -20,11 +20,18 @@ from .msg_solver import (solve_fluctuation_field, prepare_v1_rhs,
 from .msg_rm import _lagrange, _shape, _macro_BD, _macro_BG
 
 
-def _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p):
-    """Return BDq(6,5n), BGq(2,5n), BLq(6,5n) and geometry at xi."""
+def _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p, g13mode="omega"):
+    """Return BDq(6,5n), BGq(2,5n), BLq(6,5n) and geometry at xi.
+
+    g13mode controls the 2*eps13 (BGq row 0) operator:
+      'omega' (default) -- 2*eps13 = omega2 (algebraic; the validated baseline).
+      'eq12'            -- 2*eps13 = -wdot1*xdot3/(2 xdot2) + omega2/xdot2  (the full Eq.12
+                           warping-derivative form, for the tie-both 'mitc_both' scheme).
+    """
     N, dNr = _shape(nodes_xi, xi)
     dxds = dNr @ X; Jac = np.hypot(*dxds); dN = dNr / Jac
     x2, x3 = N @ X; t2, t3 = dxds / Jac; n2, n3 = t3, -t2
+    t2f = t2 if abs(t2) > 1e-3 else (1e-3 if t2 >= 0 else -1e-3)   # floor 1/xdot2 (vertical walls)
     npn = p + 1
     BDq = np.zeros((6, 5*npn)); BGq = np.zeros((2, 5*npn)); BLq = np.zeros((6, 5*npn))
     for a in range(npn):
@@ -35,7 +42,11 @@ def _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p):
         BDq[4, o+3] += dN[a]   # kappa22 = +dN(omega1): curvature of the rotation fluctuation
         # (was -dN; the wrong sign made the closed-tube shear-bend coupling over-count +66%)
         BDq[5, o+4] += dN[a]; BDq[5, o+0] += 0.5*k22*dN[a]
-        BGq[0, o+4] += N[a]
+        if g13mode == "omega":
+            BGq[0, o+4] += N[a]                                   # 2 eps13 = omega2 (baseline)
+        else:                                                    # 'eq12': add the warping-derivative term
+            BGq[0, o+0] += -(t3/(2.0*t2f))*dN[a]                  # -wdot1 * xdot3/(2 xdot2)
+            BGq[0, o+4] += N[a]/t2f                               # + omega2/xdot2
         BGq[1, o+1] += n2*dN[a]; BGq[1, o+2] += n3*dN[a]; BGq[1, o+3] += -N[a]
         # shear-warping operator (eps_l), Kirchhoff-style on the w DOFs
         BLq[0, o+0] += N[a]                                   # eps11 = w1
@@ -57,6 +68,9 @@ def assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=T
       'full'    -- full integration of the whole G-energy (locks thin walls)."""
     Nn = len(nodes); ndof = 5*Nn
     nodes_xi = _lagrange(p)
+    g13mode = "eq12" if shear == "mitc_both" else "omega"   # mitc_both: eps13 carries the Eq.12 deriv
+    tie_both = (shear == "mitc_both")                       # and is tied too (both shear rows assumed)
+    is_mitc = shear in ("mitc", "mitc_both")
     Dhh = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 4)); Dee = np.zeros((4, 4))
     Dhl = np.zeros((ndof, ndof)); Dll = np.zeros((ndof, ndof)); Dle = np.zeros((ndof, 4))
     Dhh_mem = np.zeros((ndof, ndof))   # membrane/bending-only fluctuation stiffness (NO transverse-shear G)
@@ -80,7 +94,7 @@ def assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=T
             Dll[np.ix_(g, g)] += BLq.T @ D @ BLq * dl
             Dle[g] += BLq.T @ D @ BDe * dl
         # ---- G-energy: transverse shear ----
-        if shear == "mitc":
+        if is_mitc:
             # SELECTIVE assumed-strain. gamma13 = omega2 (BGq row 0) is algebraic in the DOF and
             # does NOT lock -> integrate it FULLY (reduced int leaves the omega2 antisymmetric mode
             # unpenalised -> the soft-core hourglass). gamma23 = n.dw/ds - omega1 (BGq row 1) IS
@@ -91,16 +105,20 @@ def assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=T
             else:
                 aa = 1.0/np.sqrt(3.0); ty = [-aa, aa]
                 Nas = lambda xi: ((1.0 - np.sqrt(3.0)*xi)/2.0, (1.0 + np.sqrt(3.0)*xi)/2.0)
-            BG23 = []
+            BG13 = []; BG23 = []
             for xt in ty:
-                _, BGq_t, _, _ = _elem_BD_BG_BL(nodes_xi, xt, X, None, k22, p)
-                BG23.append(BGq_t[1:2, :].copy())                        # gamma23 operator at tying pt
+                _, BGq_t, _, _ = _elem_BD_BG_BL(nodes_xi, xt, X, None, k22, p, g13mode)
+                BG13.append(BGq_t[0:1, :].copy()); BG23.append(BGq_t[1:2, :].copy())   # both rows at tying pt
             for xi, w in zip(xgD, wgD):                                   # FULL integration
-                BDq, BGq, BLq, geo = _elem_BD_BG_BL(nodes_xi, xi, X, None, k22, p)
+                BDq, BGq, BLq, geo = _elem_BD_BG_BL(nodes_xi, xi, X, None, k22, p, g13mode)
                 x2, x3, t2, t3, Jac = geo; dl = Jac*w
                 Nk = Nas(xi)
                 BG23bar = sum(Nk[k]*BG23[k] for k in range(len(ty)))     # assumed gamma23
-                BGb = np.vstack([BGq[0:1, :], BG23bar])                   # row0 full, row1 assumed
+                if tie_both:                                             # mitc_both: tie gamma13 too
+                    BG13bar = sum(Nk[k]*BG13[k] for k in range(len(ty)))
+                    BGb = np.vstack([BG13bar, BG23bar])                  # both rows assumed
+                else:
+                    BGb = np.vstack([BGq[0:1, :], BG23bar])              # row0 full, row1 assumed
                 BGe = _macro_BG(x2, x3, t2, t3)
                 Dhh[np.ix_(g, g)] += BGb.T @ G @ BGb * dl
                 Dhe[g] += BGb.T @ G @ BGe * dl
