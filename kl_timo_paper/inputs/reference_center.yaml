@@ -1,0 +1,10 @@
+# Reference-surface definition (separate from the mesh geometry).
+# The mesh YAML defines ONLY the geometry (fixed nodes); this file selects which
+# through-thickness surface the plate ABD is referenced to.  The reference is
+# applied PURELY in the ABD computation via compute_ABD_matrix(z_ref=frac*h) --
+# NO node shift, NO parallel-axis transform of the assembled ABD.
+#   frac = 0.0  -> OML (outer mold line, bottom face)
+#   frac = 0.5  -> center / mid-surface
+#   frac = 1.0  -> IML (inner mold line, top face)
+reference: center
+frac: 0.5

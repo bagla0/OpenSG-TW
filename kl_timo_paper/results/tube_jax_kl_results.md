@@ -41,7 +41,33 @@ Diagnostic (N=180) — no single reference matches all four terms:
 | report (center)                  | 47.785 | −0.93755 | 0.14896 | 0.10710 |
 
 → center-ref reproduces C12 + GJ but EI is 14% high; OML reproduces EA + EI but
-C12/GJ wrong. The `shift_abd_reference` ⊕ exact-curvature (k22=-1/R) interaction is
-not self-consistent across bending vs torsion vs coupling for the off-axis curved
-wall. The isotropic tube is unaffected (B=0 makes the shift trivial). TO INVESTIGATE
-before publishing the anisotropic bending column.
+C12/GJ wrong. The isotropic tube is unaffected (B=0 makes the reference trivial).
+
+### Refined diagnosis (2026-06-30) — it is NOT the reference architecture
+Per user direction, the reference was moved to be applied ONLY in the ABD
+(`compute_ABD_matrix(z_ref=frac*h)`, the "preferred" mesh-based route) with nodes
+FIXED and NO `shift_abd_reference` and NO node-radius shift — see
+`kl_timo_paper/jax/homog_ref.py` + `inputs/reference_center.yaml`. This is cleaner
+and reproduces the ISO tube exactly, but the aniso EI is unchanged (still 0.122).
+
+Node-radius × ABD-reference sweep (mid-wall nodes reproduce the report EA=47.785, so
+nodes ARE mid-wall), values ×10^6 — report: EA 47.785 | C12 −0.93755 | GJ 0.14896 | EI 0.10710:
+
+| nodes | frac(z_ref) | EA | C12 | GJ | EI2 | EI3 |
+|-------|-------------|-----|-----|-----|------|------|
+| mid-wall | 0.0 (OML)    | 47.838 | −1.0729 | 0.1970 | 0.1371 | 0.1359 |
+| mid-wall | 0.5 (center) | 47.839 | **−0.9316** | **0.1489** | 0.1220 | 0.1203 |
+| mid-wall | 1.0 (IML)    | 47.838 | −0.7901 | 0.1075 | **0.1074** | 0.1064 |
+
+**The bending EI wants frac=1.0 (IML) while torsion + coupling want frac=0.5 (center)**
+— no single reference is self-consistent, AND EI2≠EI3 (~1.4%) for a geometrically
+circular section. → The bug is in the **curved-anisotropic bending assembly** (the
+κ11 row of the Kirchhoff Γ operators in `msg_hermite` picks up the reference/curvature
+differently than the membrane/torsion rows), NOT the reference architecture. The iso
+tube is immune because its ABD B-block vanishes. TASK task_9cea4b43.
+
+**CONSTRAINT (user, 2026-06-30): the tube analysis is CENTER REFERENCE ONLY.** OML/IML
+are not analysis options for the tube — the rows above are diagnostic only. The IML
+row matching EI is a CLUE, not a resolution; the fix must make EI correct AT the center
+reference (frac=0.5), where C12 and GJ are already correct. Do not work around by
+selecting a different reference.
