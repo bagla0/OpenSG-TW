@@ -1,0 +1,24 @@
+\begin{table}[t]
+\centering
+\caption{Single-cell $[-45^\circ]$ circular tube ($R=0.0715$~m): percentage error of the JAX Kirchhoff (KL) and Reissner--Mindlin (RM) Timoshenko stiffnesses versus the FEniCS 2-D solid, at a thick ($R/h=2$) and a thin ($R/h=10$) wall. \textbf{RM} in bold.}
+\label{tab:aniso_tube_sweep}
+\renewcommand{\arraystretch}{1.45}\setlength{\tabcolsep}{8pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+ & \multicolumn{2}{c}{thick ($R/h = 2$)} & \multicolumn{2}{c}{thin ($R/h = 10$)} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Term & KL & RM & KL & RM \\
+\midrule
+$C_{11}$ (EA) & $-0.4$ & $\mathbf{-0.4}$ & $-0.0$ & $\mathbf{-0.0}$ \\
+$C_{22}$ (GA$_2$) & $-37.7$ & $\mathbf{-8.0}$ & $-2.5$ & $\mathbf{-0.4}$ \\
+$C_{33}$ (GA$_3$) & $-38.1$ & $\mathbf{-8.0}$ & $-2.5$ & $\mathbf{-0.4}$ \\
+$C_{44}$ (GJ) & $+6.6$ & $\mathbf{+7.2}$ & $+0.3$ & $\mathbf{+0.3}$ \\
+$C_{55}$ (EI$_2$) & $-8.7$ & $\mathbf{-5.0}$ & $-0.4$ & $\mathbf{-0.2}$ \\
+$C_{66}$ (EI$_3$) & $-8.8$ & $\mathbf{-5.0}$ & $-0.4$ & $\mathbf{-0.2}$ \\
+$C_{14}$ (ext--twist) & $-5.4$ & $\mathbf{-5.4}$ & $-0.2$ & $\mathbf{-0.2}$ \\
+$C_{25}$ (GA$_2$--EI$_2$) & $-35.5$ & $\mathbf{-4.9}$ & $-2.3$ & $\mathbf{-0.2}$ \\
+$C_{36}$ (GA$_3$--EI$_3$) & $-35.9$ & $\mathbf{-4.9}$ & $-2.3$ & $\mathbf{-0.2}$ \\
+\bottomrule
+\end{tabular}}
+\end{table}

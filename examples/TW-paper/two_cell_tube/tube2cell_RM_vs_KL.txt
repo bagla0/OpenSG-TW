@@ -1,0 +1,24 @@
+====================================================================================
+2-CELL CURVED TUBE (isotropic, R=5cm, web)  --  %-error vs FEniCS-2D-solid (centric)
+JAX-KL = gradient-junction Kirchhoff ;  JAX-RM = curved RM.  No node shifting.
+====================================================================================
+
+--- THIN  (h/R = 0.08, 2 junctions) ---
+term        FE-solid   JAX-KL %   JAX-RM %
+EA        1.1300e+08      +1.0      +1.0
+GA2       1.6474e+07      -4.8      -1.0
+GA3       2.5815e+07      -4.4      -0.2
+GJ        8.1864e+04      -0.3      -0.3
+EI2       1.2862e+05      +2.0      +2.0
+EI3       1.0852e+05      -0.2      -0.2
+  max|shear(GA2,GA3)|:  KL 4.8 / RM 1.0  -> RM better ;  max|all|: KL 4.8 / RM 2.0
+
+--- THICK  (h/R = 0.32, 2 junctions) ---
+term        FE-solid   JAX-KL %   JAX-RM %
+EA        4.3661e+08      +4.6      +4.6
+GA2       7.1037e+07     -39.3      -5.8
+GA3       1.0698e+08     -38.4      -2.4
+GJ        3.4057e+05      -0.2      -0.2
+EI2       4.9450e+05      +7.0      +6.9
+EI3       4.5148e+05      -2.7      -2.8
+  max|shear(GA2,GA3)|:  KL 39.3 / RM 5.8  -> RM better ;  max|all|: KL 39.3 / RM 6.9

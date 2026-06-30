@@ -1,0 +1,88 @@
+================================================================================
+Section 3.1.4 Circular Tube  --  Timoshenko 6x6 Homogenization
+JAX-RM (Reissner-Mindlin)  vs  JAX-KL (Kirchhoff-Love)  vs  FEniCS-2D-solid
+================================================================================
+
+BENCHMARK  (thesis "Constitutive Modeling of Thin-Walled ...", Section 3.1.4)
+  Geometry          : circular tube, mean radius R = 7.15 cm = 0.0715 m
+                      wall thickness t = 8.682 mm = 0.008682 m
+                      h/R = 0.1214   (moderately thick shell)
+  Layup             : single ply [-45 deg]
+  Material (ud_frp) : E1 = 37 GPa,  E2 = E3 = 9 GPa
+                      G12 = G13 = G23 = 4 GPa,  nu12 = nu13 = nu23 = 0.28
+  Reference surface : centric (mid-wall)   [thesis "MSG-TW (Centric)"]
+
+METHODS
+  FEniCS-2D-solid : full 2D continuum, 8800 triangles (PreVABS mesh). REFERENCE.
+                    Its Euler-Bernoulli reduction matches the thesis Table 3.4
+                    (MSG-solid) to 0.01%, so the solid reference is validated.
+  JAX-RM          : Reissner-Mindlin MSG thin-walled shell, refined N = 3200 seg.
+  JAX-KL          : Kirchhoff-Love (C1-Hermite) MSG shell,   refined N = 3200 seg.
+  Hoop curvature  : k22 = -1/R   (exact value for the smooth circle).
+
+  Timoshenko order [EA, GA2, GA3, GJ, EI2, EI3];  units  EA,GA [N]   GJ,EI [N.m^2].
+
+--------------------------------------------------------------------------------
+TIMOSHENKO 6x6  --  value and %-error vs FEniCS-2D-solid   (k22 = -1/R, N = 3200)
+--------------------------------------------------------------------------------
+term              FE-solid          JAX-KL       KL %         JAX-RM       RM %
+EA              4.7738e+07      4.7729e+07     -0.02      4.7729e+07     -0.02
+GA2             1.4661e+07      1.4126e+07     -3.65      1.4568e+07     -0.63
+GA3             1.4661e+07      1.4133e+07     -3.60      1.4568e+07     -0.63
+GJ              1.4933e+05      1.5004e+05     +0.48      1.5005e+05     +0.48
+EI2             1.2253e+05      1.2171e+05     -0.67      1.2216e+05     -0.30
+EI3             1.2253e+05      1.2172e+05     -0.67      1.2216e+05     -0.30
+C14  EA-GJ     -9.3912e+05     -9.3607e+05     -0.33     -9.3607e+05     -0.33
+C25  GA2-EI2    4.7080e+05      4.5499e+05     -3.36      4.6917e+05     -0.34
+C36  GA3-EI3    4.7080e+05      4.5523e+05     -3.31      4.6917e+05     -0.34
+
+  max |error| over the 6 diagonal terms :   KL = 3.65 %      RM = 0.63 %
+  axisymmetry check (GA2-GA3)/GA2       :   KL = -0.05 %     RM = 0.00 %
+                                            (refined mesh -> node-on-axis artifact removed)
+
+--------------------------------------------------------------------------------
+CONCLUSION  --  RM is BETTER than KL for h/R = 0.12
+--------------------------------------------------------------------------------
+1. Classical (Euler-Bernoulli) terms -- extension EA, torsion GJ, bending
+   EI2/EI3, and the extension-twist coupling C14 -- are matched by BOTH shell
+   models to < 1 % (0.0 - 0.7 %). At zeroth order Kirchhoff-Love and
+   Reissner-Mindlin coincide, so they agree with the solid and with each other.
+
+2. Transverse-shear terms -- GA2, GA3, and the shear-bending couplings C25, C36
+   -- are where the models separate:
+        JAX-RM :  <= 0.63 %   (reproduces the solid)
+        JAX-KL :  3.3 - 3.7 % low  (with exact curvature k22 = -1/R;
+                                    with k22 = 0 the KL shear error grows to ~11 %)
+   Kirchhoff-Love has NO transverse-shear degree of freedom; it recovers GA only
+   through a second-order warping condensation that underpredicts the shear
+   stiffness of a moderately thick (h/R = 0.12) wall and is sensitive to the
+   curvature treatment. Reissner-Mindlin carries transverse shear directly and
+   is both accurate and robust (curvature-insensitive: 0.5 % with k22 = 0 too).
+
+3. The earlier GA2 != GA3 asymmetry (~13 % at the coarse N = 200 mesh) was a
+   NODE-ON-AXIS DISCRETIZATION ARTIFACT, not model physics: a mesh-rotation test
+   showed the KL split move with the mesh while the solid and RM stayed
+   invariant. Refining to N = 3200 removes it (split -0.05 %). The residual
+   3.6 % KL shear error is therefore genuine Kirchhoff physics, not mesh error.
+
+4. BOTTOM LINE: for the h/R = 0.12 tube, JAX-RM reproduces the full 2D-solid
+   Timoshenko 6x6 to < 1 % on EVERY term, whereas JAX-KL is accurate only on the
+   classical terms and underpredicts transverse shear by 3.6 % (k22 = -1/R) to
+   11 % (k22 = 0). RM is the better shell model at this thickness.
+
+--------------------------------------------------------------------------------
+DATA / SCRIPTS  (folder  Claude_code/tube_thesis_314/)
+  cases/tube_m45.xml                       PreVABS cross-section ([-45], R_oml=0.075841)
+  cases/tube_m45.sg                        PreVABS solid mesh + fiber orientations
+  data/solid_m45.yaml                      2D-solid mesh, 8800 tris  -> FEniCS-solid
+  data/C6_solid_314.txt                    FEniCS-2D-solid Timoshenko 6x6 (reference)
+  data/C6_jax_kirch_center_k22exact.txt    JAX-KL 6x6  (N=3200, k22 = -1/R)
+  data/C6_jax_rm_center_k22exact.txt       JAX-RM 6x6  (N=3200, k22 = -1/R)
+  data/timo_k22exact_N3200.txt             raw KL/RM comparison table (k22 = -1/R)
+  data/timo_k22zero_N3200.txt              same with k22 = 0 (KL shear ~ -11 %)
+  data/comparison_314.txt                  EB 4x4 vs thesis Table 3.4 (OML/center/IML)
+  scripts/run_solid_314.py                 (WSL) FEniCS-2D-solid solver
+  scripts/compare_k22zero.py               KL vs RM (k22 = zero|exact, N = 3200)
+  scripts/rot_test.py                      mesh-rotation covariance test (artifact proof)
+  scripts/run_314.py                       JAX KL+RM at OML/center/IML
+================================================================================

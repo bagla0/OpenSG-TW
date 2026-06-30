@@ -1,0 +1,98 @@
+================================================================================
+ TWO-CELL CURVED TUBE -- WEB-CENTERED (CORRECTED) SOLID BENCHMARK
+ Generated 2026-06-23
+================================================================================
+
+WHAT WAS WRONG
+--------------
+The 1-D SHELL model placed the diametral web on the cross-section diameter
+(x = 0) -- the intended symmetric 2-cell geometry -- with the centric reference
+applied via dshift = t/2.  This was CORRECT.
+
+The 2-D SOLID benchmark (PreVABS) was NOT: with no <layup direction> on the web,
+PreVABS grew the web's full thickness t to one side of its baseline, so the SOLID
+web sat at x in [-t, 0] (center x = -t/2) instead of on the diameter.  The shell
+(web on diameter) was therefore compared against a solid whose web was offset by
+t/2 -- a geometry mismatch.
+
+THE FIX (this run)
+------------------
+Re-meshed ONLY the solid (the shell is untouched): moved the web baseline point
+from "0 0" to "+t/2 0" in each XML so PreVABS's inward growth lands the web
+symmetric, x in [-t/2, +t/2], centered on the diameter.
+  Pipeline: cases/tube2cell_*_wc.xml -> PreVABS (--vabs --hm) -> *_wc.sg
+            -> convert_sg_to_yaml.py -> data/solid_tube2cell_*_wc.yaml
+            -> FEniCS-2D-solid (WSL, opensg_env_v8) -> C6_solid_*_wc.txt
+  Shell unchanged: KL = gradient_junction_kirchhoff(mesh, dshift=t/2),
+                   RM = rm_timoshenko_6x6(mesh, dshift=t/2, curved=True).
+
+GEOMETRY VERIFICATION (web x-extent at the equator)
+---------------------------------------------------
+  case          t       ORIGINAL solid web        CORRECTED solid web
+  thin          0.004   [-0.0040, 0.0000] c=-0.002 [-0.0020,+0.0020] c=0.000  OK
+  thick         0.016   [-0.0160, 0.0000] c=-0.008 [-0.0080,+0.0080] c=0.000  OK
+  aniso_thin    0.004   [-0.0040, 0.0000] c=-0.002 [-0.0020,+0.0020] c=0.000  OK
+  aniso_thick   0.016   [-0.0160, 0.0000] c=-0.008 [-0.0080,+0.0080] c=0.000  OK
+  => all 4 corrected solids are the centered, symmetric 2-cell section.
+
+CORRECTED SOLID (VABS-equivalent) TIMOSHENKO DIAGONAL  [EA GA2 GA3 GJ EI2 EI3]
+-----------------------------------------------------------------------------
+  iso  thin :  1.1303e8  1.6481e7  2.5824e7  8.183e4  1.2868e5  1.0841e5
+  iso  thick:  4.3834e8  7.1800e7  1.0783e8  3.3883e5 4.9738e5  4.4588e5
+  aniso thin:  2.0012e7  4.5128e6  7.3360e6  2.3558e4 2.2524e4  1.9206e4   C14=-2.1143e5
+  aniso thick: 7.7731e7  2.2423e7  3.1235e7  1.0052e5 8.9584e4  7.9529e4   C14=-8.7578e5
+
+CORRECTED PERCENTAGE ERROR vs SOLID   (KL = Kirchhoff-Love, RM = Reissner-Mindlin)
+---------------------------------------------------------------------------------
+  ISO, THIN (R/h=12.5)        ISO, THICK (R/h=3.1)
+  term     KL      RM          term     KL      RM
+  C11(EA) +1.0    +1.0         C11(EA) +4.2    +4.2
+  C22(GA2)-4.8    -1.1         C22(GA2)-40.0   -6.8
+  C33(GA3)-4.5    -0.2         C33(GA3)-38.9   -3.2
+  C44(GJ) -0.3    -0.3         C44(GJ) +0.4    +0.3
+  C55(EI2)+2.0    +2.0         C55(EI2)+6.3    +6.2
+  C66(EI3)-0.1    -0.1         C66(EI3)-1.4    -1.6
+
+  ANISO, THIN (R/h=12.5)      ANISO, THICK (R/h=3.1)
+  term     KL      RM          term     KL      RM
+  C11(EA) +0.9    +1.0         C11(EA) +3.6    +4.0
+  C22(GA2)-14.3   -2.0         C22(GA2)-71.9   -7.6
+  C33(GA3)-11.2   -0.2         C33(GA3)-63.0   -3.3
+  C44(GJ) -0.3    -0.3         C44(GJ) -1.3    -0.2
+  C55(EI2)+0.2    +1.5         C55(EI2)-4.2    +4.3
+  C66(EI3)-0.9    -0.2         C66(EI3)-6.5    -2.2
+  C14     -0.3    -0.3         C14     -4.2    -3.6
+
+WHAT CHANGED vs the OLD (web-offset) tables
+-------------------------------------------
+  * THIN cases barely change (web offset t/2 = 0.002 m is negligible vs R=0.05) -- correct.
+  * THICK cases change visibly: EI3 (C66) agreement IMPROVES
+        iso thick   C66: -2.7/-2.8  ->  -1.4/-1.6
+        aniso thick C66: -7.6/-3.3  ->  -6.5/-2.2
+    (centering the web removes its spurious off-axis contribution to the solid EI3).
+  * ANISO C14 (extension-twist) shifts, because the web's position genuinely changes
+    the coupling; both shells track it together (real solid change, not a model artifact):
+        aniso thin  C14: +0.8/+0.8 -> -0.3/-0.3
+        aniso thick C14: -1.1/-0.5 -> -4.2/-3.6
+  * TRANSVERSE SHEAR (GA2/GA3) essentially unchanged -- the headline holds.
+
+CONCLUSION (UNCHANGED)
+----------------------
+Reissner-Mindlin beats Kirchhoff-Love decisively on the transverse-shear
+stiffnesses; both agree on the shear-free terms (EA, GJ, EI) and the ext-twist
+coupling C14.  Thick aniso wall: KL GA2/GA3 = -72%/-63% vs RM = -7.6%/-3.3%.
+RM stays within ~10% even for the thick wall.  The correction only tightens EI3
+and refines the C14 coupling; the comparison is now geometrically self-consistent
+(symmetric web in BOTH shell and solid).
+
+GENERATED FILES (multicell_tube/)
+---------------------------------
+  cases/tube2cell_{thin,thick,aniso_thin,aniso_thick}_wc.xml    corrected XMLs (web baseline +t/2)
+  cases/tube2cell_*_wc.sg                                        PreVABS meshes (web centered)
+  data/solid_tube2cell_*_wc.yaml                                 2-D solid meshes (web centered)
+  data/C6_solid_tube2cell_*_wc.txt                               corrected solid 6x6
+  tex/tab_mc2corr_{iso,aniso}_{thin,thick}.tex                   4 corrected LaTeX tables
+  tube2cell_solid_wc.py          (WSL FEniCS runner, corrected)
+  make_corrected_tables.py       (recompute % errors vs corrected solid)
+  _verify_webc.py                (web-centering check)
+================================================================================

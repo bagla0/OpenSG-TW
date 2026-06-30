@@ -1,0 +1,17 @@
+<cross_section name="tube_rh05">
+  <analysis><model>1</model></analysis>
+  <general><mesh_size>0.0017875</mesh_size><element_type>linear</element_type></general>
+  <component><segment><baseline>blcircle</baseline><layup direction="left">layup1</layup></segment></component>
+  <baselines>
+    <point name="ct">0 0</point>
+    <line name="blcircle" type="circle"><center>ct</center><radius>0.0786500</radius><discrete by="angle">1.8</discrete><direction>ccw</direction></line>
+  </baselines>
+  <materials>
+    <material name="ud_frp" type="orthotropic"><density>1.86E+03</density><elastic>
+      <e1>3.70E+10</e1><e2>9.00E+09</e2><e3>9.00E+09</e3>
+      <g12>4.00E+09</g12><g13>4.00E+09</g13><g23>4.00E+09</g23>
+      <nu12>0.28</nu12><nu13>0.28</nu13><nu23>0.28</nu23></elastic></material>
+    <lamina name="la_full"><material>ud_frp</material><thickness>0.0143000</thickness></lamina>
+  </materials>
+  <layups><layup name="layup1" method="stack sequence"><lamina>la_full</lamina><code>[-45]</code></layup></layups>
+</cross_section>

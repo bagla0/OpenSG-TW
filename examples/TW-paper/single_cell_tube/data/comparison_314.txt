@@ -1,0 +1,21 @@
+Section 3.1.4 circular tube : R=7.15cm  t=8.682mm  single ply [-45]  h/R=0.1214
+Euler-Bernoulli 4x4 reduced from the JAX Timoshenko 6x6.  Units: EA[N] ext[N.m] GJ,EI[N.m^2]
+
+THESIS MSG-solid (Table 3.4, reference):
+   EA =   4.7738e+07   ext-twist =  -9.3906e+05   GJ =   1.4932e+05   EI =   1.0741e+05
+
+=== reference surface = OML ===
+model             EA    ext-twist           GJ           EI |      EA%     ext%      GJ%      EI%
+JAX-KL    5.0625e+07  -9.0233e+05   1.3174e+05   1.1353e+05 |   +6.05   -3.91  -11.77   +5.70
+JAX-RM    5.0625e+07  -9.0231e+05   1.3174e+05   1.1353e+05 |   +6.05   -3.91  -11.77   +5.70
+
+=== reference surface = center ===  <-- thesis MSG-TW Centric
+model             EA    ext-twist           GJ           EI |      EA%     ext%      GJ%      EI%
+JAX-KL    4.7728e+07  -9.3598e+05   1.5001e+05   1.0703e+05 |   -0.02   -0.33   +0.46   -0.35
+JAX-RM    4.7727e+07  -9.3591e+05   1.5001e+05   1.0704e+05 |   -0.02   -0.34   +0.46   -0.35
+
+=== reference surface = IML ===
+model             EA    ext-twist           GJ           EI |      EA%     ext%      GJ%      EI%
+JAX-KL    4.4830e+07  -9.5918e+05   1.6745e+05   1.0053e+05 |   -6.09   +2.14  +12.14   -6.40
+JAX-RM    4.4829e+07  -9.5916e+05   1.6745e+05   1.0054e+05 |   -6.09   +2.14  +12.14   -6.40
+

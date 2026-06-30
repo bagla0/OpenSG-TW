@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{Single-cell $[-45^\circ]$ tube, thin wall ($R/h = 10$): Timoshenko $6\times6$ stiffness from the FEniCS 2-D solid (absolute) and the percentage error of the JAX Kirchhoff (KL) and Reissner--Mindlin (RM) shells. Centric reference, exact hoop curvature $k_{22}=-1/R$. Units: $EA,GA$ in N, $GJ,EI$ in N\,m$^2$, couplings in N\,m.}
+\label{tab:aniso_tube_thin}
+\renewcommand{\arraystretch}{1.4}\setlength{\tabcolsep}{10pt}
+\begin{tabular}{lrrr}
+\toprule
+Term & FE-solid & JAX-KL & JAX-RM \\
+\midrule
+$EA$ & $3.9311{\times}10^{7}$ & $-0.01\%$ & $-0.01\%$ \\
+$GA_2$ & $1.2036{\times}10^{7}$ & $-2.47\%$ & $-0.43\%$ \\
+$GA_3$ & $1.2036{\times}10^{7}$ & $-2.46\%$ & $-0.43\%$ \\
+$GJ$ & $1.2274{\times}10^{5}$ & $+0.33\%$ & $+0.33\%$ \\
+$EI_2$ & $1.0076{\times}10^{5}$ & $-0.45\%$ & $-0.20\%$ \\
+$EI_3$ & $1.0076{\times}10^{5}$ & $-0.45\%$ & $-0.20\%$ \\
+$C_{14}$ & $-7.7255{\times}10^{5}$ & $-0.21\%$ & $-0.21\%$ \\
+$C_{25}$ & $3.8697{\times}10^{5}$ & $-2.27\%$ & $-0.23\%$ \\
+$C_{36}$ & $3.8697{\times}10^{5}$ & $-2.25\%$ & $-0.23\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}

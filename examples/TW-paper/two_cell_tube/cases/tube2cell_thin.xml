@@ -1,0 +1,38 @@
+<cross_section name="tube2cell_thin" format="1">
+  <analysis><model>1</model></analysis>
+  <general>
+    <mesh_size>0.0007</mesh_size>
+    <element_type>1</element_type>
+  </general>
+  <baselines>
+    <point name="ct">0 0</point>
+    <line name="blcircle" type="circle">
+      <center>ct</center>
+      <radius>0.052</radius>
+      <discrete by="angle">1.8</discrete>
+      <direction>ccw</direction>
+    </line>
+    <point name="pt_web">0 0</point>
+    <line name="ln_web"><point>pt_web</point><angle>90</angle></line>
+  </baselines>
+  <materials>
+    <material name="iso" type="orthotropic">
+      <density>2700.0</density>
+      <elastic>
+        <e1>68.9e9</e1><e2>68.9e9</e2><e3>68.9e9</e3>
+        <g12>25.9015e9</g12><g13>25.9015e9</g13><g23>25.9015e9</g23>
+        <nu12>0.33</nu12><nu13>0.33</nu13><nu23>0.33</nu23>
+      </elastic>
+    </material>
+    <lamina name="la_iso"><material>iso</material><thickness>0.004</thickness></lamina>
+  </materials>
+  <layups>
+    <layup name="lay"><layer lamina="la_iso">0:1</layer></layup>
+  </layups>
+  <component name="main">
+    <segment><baseline>blcircle</baseline><layup direction="left">lay</layup></segment>
+  </component>
+  <component name="web" depend="main">
+    <segment><baseline>ln_web</baseline><layup>lay</layup></segment>
+  </component>
+</cross_section>

@@ -1,0 +1,26 @@
+======================================================================================
+2-CELL CURVED TUBE, ANISOTROPIC [-45] ud_frp  --  %-error vs FEniCS-2D-solid (centric)
+JAX-KL = gradient-junction Kirchhoff ;  JAX-RM = curved RM.  No node shifting.
+======================================================================================
+
+--- ANISO_THIN  (h/R = 0.08) ---
+term        FE-solid   JAX-KL %   JAX-RM %
+EA        2.0008e+07      +0.9      +1.0
+GA2       4.4880e+06     -13.8      -1.5
+GA3       7.3348e+06     -11.2      -0.2
+GJ        2.3570e+04      -0.4      -0.3
+EI2       2.2482e+04      +0.4      +1.7
+EI3       1.9222e+04      -1.0      -0.2
+C14      -2.0915e+05      +0.8      +0.8
+  max|shear(GA2,GA3)|:  KL 13.8 / RM 1.5  -> RM better
+
+--- ANISO_THICK  (h/R = 0.32) ---
+term        FE-solid   JAX-KL %   JAX-RM %
+EA        7.7417e+07      +4.0      +4.4
+GA2       2.2078e+07     -71.4      -6.2
+GA3       3.1215e+07     -63.0      -3.3
+GJ        1.0140e+05      -2.2      -1.1
+EI2       8.8785e+04      -3.4      +5.2
+EI3       8.0472e+04      -7.6      -3.3
+C14      -8.4832e+05      -1.1      -0.5
+  max|shear(GA2,GA3)|:  KL 71.4 / RM 6.2  -> RM better

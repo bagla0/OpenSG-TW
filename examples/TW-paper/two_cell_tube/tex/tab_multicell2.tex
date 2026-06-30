@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\caption{Two-cell curved tube: JAX Kirchhoff (KL) and Reissner--Mindlin (RM) percentage error vs.\ the 2D-solid, for the isotropic and $[-45^\circ]$ laminate, thin ($h/R{=}0.08$) and thick ($h/R{=}0.32$).}
+\label{tab:multicell2}
+\renewcommand{\arraystretch}{1.45}\setlength{\tabcolsep}{8pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrrr}
+\toprule
+ & \multicolumn{2}{c}{iso, thin} & \multicolumn{2}{c}{iso, thick} & \multicolumn{2}{c}{$[-45]$, thin} & \multicolumn{2}{c}{$[-45]$, thick} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+Term & KL & RM & KL & RM & KL & RM & KL & RM \\
+\midrule
+$C_{11}$ (EA) & $+1.0$ & $\mathbf{+1.0}$ & $+4.6$ & $\mathbf{+4.6}$ & $+0.9$ & $\mathbf{+1.0}$ & $+4.0$ & $\mathbf{+4.4}$ \\
+$C_{22}$ (GA$_2$) & $-4.8$ & $\mathbf{-1.0}$ & $-39.3$ & $\mathbf{-5.8}$ & $-13.8$ & $\mathbf{-1.5}$ & $-71.4$ & $\mathbf{-6.2}$ \\
+$C_{33}$ (GA$_3$) & $-4.4$ & $\mathbf{-0.2}$ & $-38.4$ & $\mathbf{-2.4}$ & $-11.2$ & $\mathbf{-0.2}$ & $-63.0$ & $\mathbf{-3.3}$ \\
+$C_{44}$ (GJ) & $-0.3$ & $\mathbf{-0.3}$ & $-0.2$ & $\mathbf{-0.2}$ & $-0.4$ & $\mathbf{-0.3}$ & $-2.2$ & $\mathbf{-1.1}$ \\
+$C_{55}$ (EI$_2$) & $+2.0$ & $\mathbf{+2.0}$ & $+7.0$ & $\mathbf{+6.9}$ & $+0.4$ & $\mathbf{+1.7}$ & $-3.4$ & $\mathbf{+5.2}$ \\
+$C_{66}$ (EI$_3$) & $-0.2$ & $\mathbf{-0.2}$ & $-2.7$ & $\mathbf{-2.8}$ & $-1.0$ & $\mathbf{-0.2}$ & $-7.6$ & $\mathbf{-3.3}$ \\
+$C_{14}$ (ext-twist) & \multicolumn{2}{c}{$-$} & \multicolumn{2}{c}{$-$} & $+0.8$ & $\mathbf{+0.8}$ & $-1.1$ & $\mathbf{-0.5}$ \\
+\bottomrule
+\end{tabular}}
+\\[2pt]\footnotesize Percentage error vs.\ the FEniCS-2D-solid; \textbf{RM} in bold. KL = JAX Kirchhoff (gradient-junction), RM = JAX Reissner--Mindlin (curved). Centric reference.
+\end{table}
