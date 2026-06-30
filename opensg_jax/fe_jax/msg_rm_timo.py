@@ -171,7 +171,7 @@ def build_C_Psi(nodes, elems, p=1, w2null=False):
 
 
 def timoshenko_rm(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True,
-                  return_warp=False, shear="mitc"):
+                  return_warp=False, shear="mitc_both"):
     Dhh, Dhe, Dee, Dhl, Dll, Dle, Dhh_mem = assemble_all(
         nodes, elems, layup_per_elem, D_by, G_by, k22_e, p, reduced, shear=shear)
     C, Psi = build_C_Psi(nodes, elems, p)
