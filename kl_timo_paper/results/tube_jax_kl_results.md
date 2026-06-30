@@ -71,3 +71,28 @@ are not analysis options for the tube — the rows above are diagnostic only. Th
 row matching EI is a CLUE, not a resolution; the fix must make EI correct AT the center
 reference (frac=0.5), where C12 and GJ are already correct. Do not work around by
 selecting a different reference.
+
+### ROOT CAUSE LOCALIZED (2026-06-30) — A16 shear-flow relief missing in BENDING
+Ruled out, in order: reference architecture (z_ref vs shift_abd identical), curvature
+(EI≈0.121 at BOTH k22=0 and k22=exact — JAX curvature reduces EI only ~0.5%, not the
+~12% needed), the ABD (compute_ABD_matrix matches CLT EXACTLY incl. A16/D16, B=0 at
+center), and the eps_h[5]=(k22/2)dw1 sign (flipping it barely moves EI).
+
+**Quantitative smoking gun** (R=0.0715, [-45], center; effective modulus E* backed out):
+- Extension: EA 47.785e6 → E*=EA/(2πR)=**1.064e8** = hoop-only `A11 - A12^2/A22` (1.065e8).
+  CORRECT — axisymmetric extension excites NO shear flow, so A16 must NOT relieve it.
+- Bending (report): EI 0.10710e6 → E*=EI/(πR^3)=**0.933e8** = FULL condensation (eps22 AND
+  gamma12 free) `A11 - [A12,A16] inv([[A22,A26],[A26,A66]]) [A12,A16]^T` = 0.934e8.
+  Bending DOES excite a shear flow, so A16 relieves it.
+- JAX bending: EI 0.122e6 → E*=**1.062e8 ≈ hoop-only**. → JAX relieves A12 (hoop) but NOT
+  A16 (shear-flow) for bending; ratio 1.062/0.933 = +13.8% = the observed gap.
+
+So the **V0 (zeroth-order EB) warping does not develop the A16 transverse-shear-flow
+relief under bending** (it correctly omits it for extension). The gamma12 warping is
+w1-only (eps_h[2]=dw1, matches report Γh), and the closed-loop ∮dw1=0 constraint plus the
+bending field is where the relief should arise. The EI2≠EI3 asymmetry (sign-dependent on
+±45) is the same mechanism (shear-flow sign vs fiber). FEniCSx-KL gets 0.107 → the relief
+IS achievable; JAX's V0 solve misses it. NEXT: dump the V0 warping (w1 bending mode) for
+the [-45] tube from JAX vs FEniCSx-TW and compare the gamma12 field; do NOT patch the
+shared `msg_hermite` until the FEniCSx field comparison pins the exact term (msg_hermite
+is used by the whole validated suite + the elsevier paper). TASK task_9cea4b43.
