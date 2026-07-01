@@ -109,6 +109,33 @@ def solve_ring(ring_x, D, G, shear="mitc_both"):
             "perm": perm, "R": R, "nodes2d": nodes2d, "elems": elems}
 
 
+def solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc"):
+    """Solve a boundary ring from its standalone 1-D cross-section YAML file.
+
+    Reads the YAML directly (node order preserved == node2seg order), builds the
+    centre-ref ABD + transverse-shear G, and solves the RM/MITC cross-section for
+    V0 (4 EB modes) and V1 (Timoshenko).  shear='mitc' is the discretization the
+    2-D MITC4 element reduces to at span-invariance (gamma23 tied at hoop-centre,
+    gamma13=omega2 full).  V0[5*i:5*i+5] maps to segment node node2seg[i].
+    """
+    import yaml as _yaml
+    d = _yaml.safe_load(open(yaml_path))
+    nd2 = np.array(d["nodes"], float)[:, :2]                 # (m,2) cross-section (y,z)
+    elems = np.array(d["elements"], int) - 1                 # (m,2) 0-based, closed loop
+    matmap = {mm["name"]: {"E": mm["elastic"]["E"], "G": mm["elastic"]["G"], "nu": mm["elastic"]["nu"]}
+              for mm in d["materials"]}
+    layup = d["sections"][0]["layup"]
+    mat_names = [p[0] for p in layup]; thick = [float(p[1]) for p in layup]; angles = [float(p[2]) for p in layup]
+    abd = np.asarray(compute_ABD_matrix(thick, angles, mat_names, matmap)[0])
+    if center_ref:
+        abd = shift_abd_reference(abd, 0.5 * sum(thick))
+    Gm = np.asarray(transverse_shear_stiffness(thick, angles, mat_names, matmap)[0])
+    R = float(np.mean(np.hypot(nd2[:, 0], nd2[:, 1]))); k22 = np.full(len(elems), -1.0 / R)
+    C6, Deff, V0, V1 = timoshenko_rm(nd2, elems, np.zeros(len(elems), int), {0: abd}, {0: Gm},
+                                     k22, p=1, return_warp=True, shear=shear)
+    return {"C6": np.asarray(C6), "V0": np.asarray(V0), "V1": np.asarray(V1), "R": R, "m": len(nd2)}
+
+
 def analytic_iso_tube(R, t, E, nu):
     """Closed-form thin isotropic-tube Timoshenko diagonal (mid-wall reference)."""
     Gs = E / (2.0 * (1.0 + nu))
