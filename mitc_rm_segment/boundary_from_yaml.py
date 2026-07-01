@@ -170,9 +170,9 @@ def extract(seg_yaml, out_npz, write_yaml=False):
             print("    (+ wrote 1-D YAML %s)" % os.path.basename(byaml))
         rx = nodes[comp]                                      # (m,3) full 3-D ring coords
         rcells = np.array([[loc[a], loc[b]] for (a, b) in oedges], dtype=np.int64)
-        re1 = np.array([[1.0, 0.0, 0.0]] * len(oedges))
-        re2 = np.array([[0.0, e2s[q, 1], e2s[q, 2]] for q in oq])
-        re3 = np.array([[0.0, e3s[q, 1], e3s[q, 2]] for q in oq])
+        re1 = np.array([e1s[q] for q in oq])                  # full 3-D parent frame (axis-agnostic;
+        re2 = np.array([e2s[q] for q in oq])                  # for axis=x the x-comp of e2/e3 is ~0,
+        re3 = np.array([e3s[q] for q in oq])                  # so this is unchanged for the cylinder)
         okr, txtr = frame_report(rx, rcells, re1, re2, re3); print("  %s-ring %s" % (side, txtr))
         orientation_png_ring(rx, rcells, re2, re3, os.path.join(out_dir, "orient_%s_ring_%s.png" % (tag, side)),
                              title="%s %s-ring e2/e3" % (tag, side))

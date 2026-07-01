@@ -152,7 +152,7 @@ def _material_by_section(sections, materials, center_ref=True):
     return D_by, G_by
 
 
-def solve_boundary_bundle(b, side, center_ref=True, shear="mitc"):
+def solve_boundary_bundle(b, side, center_ref=True, shear="mitc", k22=None):
     """Solve a boundary ring IN-MEMORY straight from the extraction bundle -- no
     boundary-YAML write/read round-trip (the fast path; pass write_yaml=True to
     boundary_from_yaml.extract only if you also want the 1-D YAML for inspection).
@@ -167,8 +167,10 @@ def solve_boundary_bundle(b, side, center_ref=True, shear="mitc"):
     sections = json.loads(str(b["sections"])); materials = json.loads(str(b["materials"]))
     D_by, G_by = _material_by_section(sections, materials, center_ref)
     c = nd2.mean(0); R = float(np.mean(np.hypot(nd2[:, 0] - c[0], nd2[:, 1] - c[1])))
-    k22 = np.full(len(elems), -1.0 / R)
-    C6, Deff, V0, V1 = timoshenko_rm(nd2, elems, lpe, D_by, G_by, k22, p=1, return_warp=True, shear=shear)
+    if k22 is None:                                          # circular cross-section default
+        k22 = np.full(len(elems), -1.0 / R)
+    C6, Deff, V0, V1 = timoshenko_rm(nd2, elems, lpe, D_by, G_by, np.asarray(k22),
+                                     p=1, return_warp=True, shear=shear)
     return {"C6": np.asarray(C6), "V0": np.asarray(V0), "V1": np.asarray(V1), "R": R}
 
 

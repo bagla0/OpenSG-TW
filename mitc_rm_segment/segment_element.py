@@ -26,7 +26,74 @@ acceptance gate you asked for.
 """
 
 import numpy as np
+from collections import defaultdict
 from opensg_jax.fe_jax.msg_rm import _macro_BD
+
+
+def compute_curvatures(centroids, e1s, e2s, e3s, elems):
+    """Full initial-curvature tensor per element, Yu thesis eq 5.10, by finite-
+    differencing the flat-facet frame across neighbours (0 on flat facets):
+      k_ab = b3,a . b_b / A_a  and geodesic k_a3 = b1,a . b2 / A_a, discretely
+      axial  (neighbour along e1):  k11=de3.e1/dx1, k12=de3.e2/dx1, k13=de1.e2/dx1
+      hoop   (neighbour along e2):  k21=de3.e1/ds,  k22=de3.e2/ds,  k23=de1.e2/ds
+    Returns dict {k11,k12,k21,k22,k13,k23} of per-element arrays (Ne,).
+    For a prismatic circle -> (0,0,0,-1/R,0,0)."""
+    node2el = defaultdict(list)
+    for ei, el in enumerate(elems):
+        for n in el:
+            node2el[int(n)].append(ei)
+    centroids = np.asarray(centroids); e1s = np.asarray(e1s); e2s = np.asarray(e2s); e3s = np.asarray(e3s)
+    ne = len(elems)
+    K = {k: np.zeros(ne) for k in ("k11", "k12", "k21", "k22", "k13", "k23")}
+    for ei in range(ne):
+        neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
+        ax, hp = [], []
+        for ej in neigh:
+            disp = centroids[ej] - centroids[ei]; nd = float(np.linalg.norm(disp))
+            if nd < 1e-12:
+                continue
+            d1 = float(np.dot(disp, e1s[ei])); d2 = float(np.dot(disp, e2s[ei]))
+            de3, de1 = e3s[ej] - e3s[ei], e1s[ej] - e1s[ei]
+            rec = (float(np.dot(de3, e1s[ei])), float(np.dot(de3, e2s[ei])), float(np.dot(de1, e2s[ei])))
+            if abs(d1) > 0.5 * nd:                             # axial-direction neighbour
+                ax.append((d1,) + rec)
+            elif abs(d2) > 0.5 * nd:                           # hoop-direction neighbour
+                hp.append((d2,) + rec)
+        if ax:
+            K["k11"][ei] = np.mean([a[1] / a[0] for a in ax])
+            K["k12"][ei] = np.mean([a[2] / a[0] for a in ax])
+            K["k13"][ei] = np.mean([a[3] / a[0] for a in ax])
+        if hp:
+            K["k21"][ei] = np.mean([h[1] / h[0] for h in hp])
+            K["k22"][ei] = np.mean([h[2] / h[0] for h in hp])
+            K["k23"][ei] = np.mean([h[3] / h[0] for h in hp])
+    return K
+
+
+def compute_k22(centroids, e2s, e3s, elems):
+    """Per-element hoop curvature k22 = d e3/ds . e2 (== -1/R for a circle with inward
+    e3), estimated from hoop-aligned neighbours -- elements sharing a node whose
+    centroid displacement is mostly along e2.  Works for the 1-D boundary contour
+    (line elements) and the 2-D segment (quads); junction/isolated elements -> 0."""
+    node2el = defaultdict(list)
+    for ei, el in enumerate(elems):
+        for n in el:
+            node2el[int(n)].append(ei)
+    centroids = np.asarray(centroids); e2s = np.asarray(e2s); e3s = np.asarray(e3s)
+    k22 = np.zeros(len(elems))
+    for ei in range(len(elems)):
+        neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
+        ks = []
+        for ej in neigh:
+            disp = centroids[ej] - centroids[ei]; nd = float(np.linalg.norm(disp))
+            if nd < 1e-12:
+                continue
+            ds = float(np.dot(disp, e2s[ei]))
+            if abs(ds) < 0.5 * nd:                         # keep only hoop-direction neighbours
+                continue
+            ks.append(float(np.dot(e3s[ej] - e3s[ei], e2s[ei])) / ds)
+        k22[ei] = float(np.mean(ks)) if ks else 0.0
+    return k22
 
 
 # --------------------------------------------------------------- quad kinematics
@@ -41,8 +108,10 @@ def _bilinear(xi, eta):
     return N, dNx, dNe
 
 
-def _quad_ops(X, e1, e2, e3, xi, eta, k22):
+def _quad_ops(X, e1, e2, e3, xi, eta, k22, cross=(1, 2)):
     """Return BDq(6,20), BGq(2,20), BLq(6,20) and geometry at (xi,eta).
+    `cross` = the two cross-section coordinate indices (beam axis is the third):
+    (1,2) for axis=x (cylinder), (0,1) for axis=z (BAR-URC).
 
     X (4,3) node coords; e1/e2/e3 unit frame.  In-frame derivatives d/dx1 (axial,
     along e1) and d/ds (hoop, along e2) are obtained from the 2x2 metric
@@ -61,8 +130,8 @@ def _quad_ops(X, e1, e2, e3, xi, eta, k22):
     d = (np.linalg.inv(G.T) @ np.vstack([dNx, dNe])).T   # (4,2): d[a,0]=dNa/dx1, d[a,1]=dNa/ds
     dA = np.linalg.norm(np.cross(Jxi, Jeta))
     x = N @ X
-    x2, x3 = x[1], x[2]                            # cross-section coords (y,z)
-    t2, t3 = e2[1], e2[2]                          # hoop tangent (y,z) -- as in 1-D
+    x2, x3 = x[cross[0]], x[cross[1]]              # cross-section coords
+    t2, t3 = e2[cross[0]], e2[cross[1]]            # hoop tangent (in-plane) -- as in 1-D
     n2, n3 = t3, -t2                               # 1-D in-plane normal convention
 
     BDq = np.zeros((6, 20)); BGq = np.zeros((2, 20)); BLq = np.zeros((6, 20))
@@ -96,22 +165,23 @@ def _quad_ops(X, e1, e2, e3, xi, eta, k22):
 _TIE = {"g23": [(0.0, -1.0), (0.0, 1.0)], "g13": [(-1.0, 0.0), (1.0, 0.0)]}
 
 
-def _mitc_shear(X, e1, e2, e3, xi, eta, k22):
+def _mitc_shear(X, e1, e2, e3, xi, eta, k22, cross=(1, 2)):
     """Assumed (tied) transverse-shear 2x20 operator BGb at (xi,eta)."""
-    (A23), (B23) = [_quad_ops(X, e1, e2, e3, tx, te, k22)[1][1:2, :] for (tx, te) in _TIE["g23"]]
-    (A13), (B13) = [_quad_ops(X, e1, e2, e3, tx, te, k22)[1][0:1, :] for (tx, te) in _TIE["g13"]]
+    (A23), (B23) = [_quad_ops(X, e1, e2, e3, tx, te, k22, cross)[1][1:2, :] for (tx, te) in _TIE["g23"]]
+    (A13), (B13) = [_quad_ops(X, e1, e2, e3, tx, te, k22, cross)[1][0:1, :] for (tx, te) in _TIE["g13"]]
     g23 = 0.5*(1.0 - eta)*A23 + 0.5*(1.0 + eta)*B23      # linear in eta
     g13 = 0.5*(1.0 - xi)*A13 + 0.5*(1.0 + xi)*B13        # linear in xi
     return np.vstack([g13, g23])
 
 
 # ------------------------------------------------------------------- assembly
-def assemble_segment(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_by):
+def assemble_segment(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_e, cross=(1, 2)):
     """Assemble Dhh, Dhe, Dee, Dhl, Dll, Dle for the 2-D quad segment.
 
     nodes (Nn,3), quads (Ne,4) 0-based, subdom (Ne,), e{1,2,3}s (Ne,3),
-    D_by/G_by/k22_by keyed by subdomain id.  2x2 Gauss on the D/Gamma_l energy;
-    the transverse-shear G-energy uses MITC4-tied BGb at the same points.
+    D_by/G_by keyed by subdomain (layup) id, k22_e = per-QUAD hoop curvature (Ne,),
+    cross = cross-section coord indices.  2x2 Gauss on the D/Gamma_l energy; the
+    transverse-shear G-energy uses MITC4-tied BGb at the same points.
     """
     Nn = len(nodes); ndof = 5 * Nn
     Dhh = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 4)); Dee = np.zeros((4, 4))
@@ -121,12 +191,12 @@ def assemble_segment(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_by):
     for e, quad in enumerate(quads):
         X = nodes[quad]                                     # (4,3)
         e1, e2, e3 = e1s[e], e2s[e], e3s[e]
-        D = D_by[int(subdom[e])]; G = G_by[int(subdom[e])]; k22 = float(k22_by[int(subdom[e])])
+        D = D_by[int(subdom[e])]; G = G_by[int(subdom[e])]; k22 = float(k22_e[e])
         g = np.concatenate([[5*n, 5*n+1, 5*n+2, 5*n+3, 5*n+4] for n in quad])
         for (xi, eta) in quad_pts:
-            BDq, BGq, BLq, geo = _quad_ops(X, e1, e2, e3, xi, eta, k22)
+            BDq, BGq, BLq, geo = _quad_ops(X, e1, e2, e3, xi, eta, k22, cross)
             x2, x3, t2, t3, dA = geo
-            BGb = _mitc_shear(X, e1, e2, e3, xi, eta, k22)
+            BGb = _mitc_shear(X, e1, e2, e3, xi, eta, k22, cross)
             BDe = _macro_BD(x2, x3, t2, t3, k22)
             BGe = np.zeros((2, 4))
             Dhh[np.ix_(g, g)] += (BDq.T @ D @ BDq + BGb.T @ G @ BGb) * dA
@@ -139,7 +209,7 @@ def assemble_segment(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_by):
 
 
 # --------------------------------------- rigid kernel + constraints (segment EB)
-def build_C_Psi_segment(nodes, quads):
+def build_C_Psi_segment(nodes, quads, cross=(1, 2)):
     """4 rigid-body modes (3 translations + twist) and the conjugate <.>=0
     constraints, integrated over the 2-D segment area -- the 2-D analogue of
     msg_rm_timo.build_C_Psi, so the element-agnostic msg_solver KKT solve applies
@@ -157,7 +227,7 @@ def build_C_Psi_segment(nodes, quads):
                 for c in range(4):                    # <w1>=<w2>=<w3>=<omega1>=0
                     C[c, 5 * nd + c] += N[a] * dA
     for nd in range(Nn):
-        y2, y3 = nodes[nd, 1], nodes[nd, 2]
+        y2, y3 = nodes[nd, cross[0]], nodes[nd, cross[1]]
         Psi[5*nd+0, 0] = 1.0                          # w1 translation
         Psi[5*nd+1, 1] = 1.0                          # w2 translation
         Psi[5*nd+2, 2] = 1.0                          # w3 translation

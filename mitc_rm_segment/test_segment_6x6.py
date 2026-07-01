@@ -28,7 +28,8 @@ L = float(nodes[:, 0].max() - nodes[:, 0].min())
 resL = solve_boundary_bundle(b, "L", shear="mitc")           # in-memory (no YAML round-trip)
 resR = solve_boundary_bundle(b, "R", shear="mitc")
 Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment(
-    nodes, quads, subdom, b["seg_e1"], b["seg_e2"], b["seg_e3"], {0: D}, {0: G}, {0: k22})
+    nodes, quads, subdom, b["seg_e1"], b["seg_e2"], b["seg_e3"], {0: D}, {0: G},
+    np.full(len(quads), k22))
 Dhe = np.asarray(Dhe); Dle = np.asarray(Dle)
 
 
