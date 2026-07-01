@@ -11,7 +11,7 @@ import os, sys, json
 import numpy as np
 import jax.numpy as jnp
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from solve_segment_jax import build_material, solve_boundary_yaml, analytic_iso_tube
+from solve_segment_jax import build_material, solve_boundary_bundle, analytic_iso_tube
 from segment_element import assemble_segment, dirichlet_solve, build_C_Psi_segment
 from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
@@ -25,8 +25,8 @@ R = float(np.mean(np.hypot(nodes[:, 1], nodes[:, 2]))); k22 = -1.0 / R
 NC = len(b["L_x"]); Nn = len(nodes); NL = Nn // NC - 1
 L = float(nodes[:, 0].max() - nodes[:, 0].min())
 
-resL = solve_boundary_yaml(os.path.join(out_dir, "boundary_%s_L.yaml" % tag), shear="mitc")
-resR = solve_boundary_yaml(os.path.join(out_dir, "boundary_%s_R.yaml" % tag), shear="mitc")
+resL = solve_boundary_bundle(b, "L", shear="mitc")           # in-memory (no YAML round-trip)
+resR = solve_boundary_bundle(b, "R", shear="mitc")
 Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment(
     nodes, quads, subdom, b["seg_e1"], b["seg_e2"], b["seg_e3"], {0: D}, {0: G}, {0: k22})
 Dhe = np.asarray(Dhe); Dle = np.asarray(Dle)

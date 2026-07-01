@@ -136,6 +136,42 @@ def solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc"):
     return {"C6": np.asarray(C6), "V0": np.asarray(V0), "V1": np.asarray(V1), "R": R, "m": len(nd2)}
 
 
+def _material_by_section(sections, materials, center_ref=True):
+    """ABD (centre-ref) + transverse-shear G per layup section (keyed by section index)."""
+    matmap = {mm["name"]: {"E": mm["elastic"]["E"], "G": mm["elastic"]["G"], "nu": mm["elastic"]["nu"]}
+              for mm in materials}
+    D_by, G_by = {}, {}
+    for si, sec in enumerate(sections):
+        layup = sec["layup"]
+        mn = [p[0] for p in layup]; th = [float(p[1]) for p in layup]; an = [float(p[2]) for p in layup]
+        abd = np.asarray(compute_ABD_matrix(th, an, mn, matmap)[0])
+        if center_ref:
+            abd = shift_abd_reference(abd, 0.5 * sum(th))
+        D_by[si] = abd
+        G_by[si] = np.asarray(transverse_shear_stiffness(th, an, mn, matmap)[0])
+    return D_by, G_by
+
+
+def solve_boundary_bundle(b, side, center_ref=True, shear="mitc"):
+    """Solve a boundary ring IN-MEMORY straight from the extraction bundle -- no
+    boundary-YAML write/read round-trip (the fast path; pass write_yaml=True to
+    boundary_from_yaml.extract only if you also want the 1-D YAML for inspection).
+
+    Multi-material: ABD/G computed once per layup section, keyed by section index;
+    per-edge section id = bundle['<side>_subdom'].  k22 = -1/R (circular cross-
+    section); a general per-edge contour curvature is used for the airfoil taper.
+    """
+    ax = int(b["axis"]); cross = [j for j in range(3) if j != ax]
+    nd2 = np.asarray(b["%s_x" % side])[:, cross]                 # (m,2) cross-section coords
+    elems = np.asarray(b["%s_cells" % side]); lpe = np.asarray(b["%s_subdom" % side])
+    sections = json.loads(str(b["sections"])); materials = json.loads(str(b["materials"]))
+    D_by, G_by = _material_by_section(sections, materials, center_ref)
+    c = nd2.mean(0); R = float(np.mean(np.hypot(nd2[:, 0] - c[0], nd2[:, 1] - c[1])))
+    k22 = np.full(len(elems), -1.0 / R)
+    C6, Deff, V0, V1 = timoshenko_rm(nd2, elems, lpe, D_by, G_by, k22, p=1, return_warp=True, shear=shear)
+    return {"C6": np.asarray(C6), "V0": np.asarray(V0), "V1": np.asarray(V1), "R": R}
+
+
 def analytic_iso_tube(R, t, E, nu):
     """Closed-form thin isotropic-tube Timoshenko diagonal (mid-wall reference)."""
     Gs = E / (2.0 * (1.0 + nu))

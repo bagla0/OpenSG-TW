@@ -1,26 +1,23 @@
 """
-boundary_from_yaml.py    [ pure numpy, NO dolfinx -> NO renumbering ]
+boundary_from_yaml.py   [ pure numpy / JAX-native -- the PRIMARY boundary path ]
 ========================================================================
-Reliable, renumber-free boundary extraction for a STRUCTURED surface-quad
-segment -- the alternative to the dolfinx `create_submesh` path.
+General TOPOLOGICAL boundary extraction for a shell segment (circle, airfoil,
+airfoil-with-webs -- any cross-section).  No dolfinx / meshio / .msh.
+(extract_boundaries_dolfinx.py is kept only as a reference prototype.)
 
-Because we generate the mesh ourselves, we already KNOW which nodes are the two
-end cross-sections (x = x_min / x_max).  Slicing them here keeps the ORIGINAL
-YAML node ids, so:
-   * NO node/cell renumbering ever happens;
-   * a ring node IS a segment node  ->  the ring<->segment DOF match is the
-     identity (L_node2seg = the ring's own YAML node ids) -- nothing to renumber.
+Method: a mesh edge used by exactly ONE quad is a FREE edge; the connected
+components of the free-edge graph are the segment's END CROSS-SECTIONS.  Web
+junctions are simply degree>2 nodes -- no special treatment (RM is C0).
 
-Each ring edge inherits its material frame from its PARENT boundary quad
-(e1 = axial, e2/e3 = the quad's in-plane hoop/normal), exactly as the dolfinx
-path does, but without the permutation.
-
-ALWAYS emits the e1/e2/e3 orientation precheck PNGs (segment + both rings) and a
-numeric frame report, so orientation consistency is verified every run.
-
-Exports the SAME .npz schema as extract_boundaries_dolfinx.py, so stage 3
-(solve_segment_jax.py) is path-agnostic.  This file is also the ground-truth the
-dolfinx path is cross-checked against (it must renumber back to match).
+Each end is written as a 1-D cross-section YAML matching OpenSG's FEniCS
+ShellSegmentMesh._create_1Dyaml:
+  nodes  = [cross1, cross2, axial]     (the two in-plane coords + the axial coord)
+  elements = 1-indexed line pairs
+  sections/sets = all layups, edges grouped by subdomain
+  elementOrientations = the PARENT quad's full 9-component orientation per edge
+  materials
+plus the e1/e2/e3 orientation PNG precheck and an .npz bundle (same schema the
+solver consumes) with node2seg = the boundary node's own segment id (identity).
 """
 
 import os
@@ -28,126 +25,172 @@ import sys
 import json
 import numpy as np
 import yaml
+from collections import Counter, defaultdict
 
 from orient_check import frame_report, orientation_png, orientation_png_ring
 
 
 def load_segment_yaml(path):
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+    try:
+        return yaml.load(open(path), Loader=yaml.CLoader)
+    except AttributeError:
+        return yaml.safe_load(open(path))
 
 
 def subdomain_ids(seg):
-    """layup/subdomain index per element from the element sets (0-based)."""
     ne = len(seg["elements"])
     subdom = np.zeros(ne, dtype=np.int32)
     for i, es in enumerate(seg["sets"]["element"]):
-        for lab in es["labels"]:               # labels are 1-indexed element ids
+        for lab in es["labels"]:                       # 1-indexed element ids
             subdom[lab - 1] = i
     return subdom
 
 
-def write_boundary_yaml(order, nodes, re2, re3, sections, materials, path):
-    """Write one end ring as a standalone 1-D OpenSG cross-section YAML.
+def _free_edges(quads):
+    """free edge = used by exactly one quad; returns (free list, edge->owner-quad)."""
+    cnt = Counter(); owner = {}
+    for qi, q in enumerate(quads):
+        m = len(q)
+        for a in range(m):
+            e = tuple(sorted((int(q[a]), int(q[(a + 1) % m]))))
+            cnt[e] += 1; owner.setdefault(e, qi)
+    free = [e for e, c in cnt.items() if c == 1]
+    return free, owner
 
-    Cross-section stored as (y, z, 0) so the axial x collapses to the dummy 3rd
-    coord; the frame is written in that convention (e1 = axial = (0,0,1), e2/e3
-    the in-plane hoop/normal).  Node order = `order` (theta-sorted segment node
-    ids) so the boundary solution maps back to the segment by node2seg = order.
-    """
-    m = len(order)
+
+def _components(free):
+    """connected components (node lists) of the free-edge graph."""
+    adj = defaultdict(list)
+    for a, b in free:
+        adj[a].append(b); adj[b].append(a)
+    seen, comps = set(), []
+    for n in adj:
+        if n in seen:
+            continue
+        st, comp = [n], []
+        while st:
+            u = st.pop()
+            if u in seen:
+                continue
+            seen.add(u); comp.append(u)
+            st += [v for v in adj[u] if v not in seen]
+        comps.append(comp)
+    return comps, adj
+
+
+def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx, materials, path):
+    """Write one end cross-section as a 1-D YAML in the FEniCS _create_1Dyaml layout.
+    `oedges` = oriented (tangent~e2) edges; `oq` = parent quad per edge."""
+    loc = {n: i for i, n in enumerate(comp)}
+    cross = [j for j in range(3) if j != ax_idx]
+    d_nodes = [[float(nodes[n, cross[0]]), float(nodes[n, cross[1]]), float(nodes[n, ax_idx])] for n in comp]
+    d_elems = [[loc[a] + 1, loc[b] + 1] for (a, b) in oedges]
+    edge_sub = [int(subdom[q]) for q in oq]
+    edge_ori = [[float(v) for v in ori[q]] for q in oq]                    # parent quad 9-comp
+    # sets: 1-indexed edge labels grouped by layup name
+    lay_names = [s["elementSet"] for s in sections]
+    sets = []
+    for si, name in enumerate(lay_names):
+        labs = [i + 1 for i, sd in enumerate(edge_sub) if sd == si]
+        sets.append({"name": name, "labels": labs})
     d = {
-        "nodes": [[float(nodes[nd, 1]), float(nodes[nd, 2]), 0.0] for nd in order],
-        "elements": [[i + 1, (i + 1) % m + 1] for i in range(m)],           # closed loop
+        "nodes": d_nodes,
+        "elements": d_elems,
+        "sets": {"element": sets},
         "sections": sections,
-        "sets": {"element": [{"name": sections[0]["elementSet"], "labels": list(range(1, m + 1))}]},
+        "elementOrientations": edge_ori,
         "materials": materials,
-        "elementOrientations": [[0.0, 0.0, 1.0,
-                                 float(re2[i][1]), float(re2[i][2]), 0.0,
-                                 float(re3[i][1]), float(re3[i][2]), 0.0] for i in range(m)],
     }
     with open(path, "w") as f:
         yaml.safe_dump(d, f, default_flow_style=None, sort_keys=False)
-    return path
+    return len(comp), len(comp_edges)
 
 
-def extract(seg_yaml, out_npz, tol=1e-6):
+def extract(seg_yaml, out_npz, write_yaml=False):
+    """Extract the two end cross-sections into an .npz bundle (the solver runs the
+    boundary Timoshenko IN-MEMORY from this bundle -- see solve_boundary_bundle).
+    write_yaml=True additionally writes each end as a 1-D cross-section YAML
+    (FEniCS _create_1Dyaml layout) -- only needed for inspection / FEniCS diff."""
     seg = load_segment_yaml(seg_yaml)
-    nodes = np.array(seg["nodes"], dtype=float)              # (Nn,3), YAML order
-    quads = np.array(seg["elements"], dtype=np.int64) - 1    # (Ne,4), 0-based
-    ori = np.array(seg["elementOrientations"], dtype=float)  # (Ne,9)
+    nodes = np.array(seg["nodes"], dtype=float)
+    quads = [list(map(int, e)) for e in seg["elements"]]
+    if min(min(q) for q in quads) == 1:                    # 1-indexed YAML (our cylinder) -> 0-indexed (OpenSG)
+        quads = [[n - 1 for n in q] for q in quads]
+    ori = np.array(seg["elementOrientations"], dtype=float)     # (Ne,9)
     e1s, e2s, e3s = ori[:, 0:3], ori[:, 3:6], ori[:, 6:9]
     subdom = subdomain_ids(seg)
-    out_dir = os.path.dirname(out_npz) or "."
-    os.makedirs(out_dir, exist_ok=True)
+    sections = seg["sections"]; materials = seg["materials"]
+    out_dir = os.path.dirname(out_npz) or "."; os.makedirs(out_dir, exist_ok=True)
     tag = os.path.splitext(os.path.basename(out_npz))[0]
 
-    # --- orientation PRECHECK on the full segment (mandatory byproduct) ----------
-    ok, txt = frame_report(nodes, quads, e1s, e2s, e3s)
-    print("segment " + txt)
-    orientation_png(nodes, quads, e1s, e2s, e3s,
-                    os.path.join(out_dir, "orient_%s_segment.png" % tag),
-                    title="%s  segment e1/e2/e3" % tag, step=2)
+    ok, txt = frame_report(nodes, quads, e1s, e2s, e3s); print("segment " + txt)
+    orientation_png(nodes, quads, e1s, e2s, e3s, os.path.join(out_dir, "orient_%s_segment.png" % tag),
+                    title="%s segment e1/e2/e3" % tag, step=max(1, len(quads) // 300))
 
-    # node -> incident quads (to find each ring edge's parent boundary quad)
-    node_to_quads = [[] for _ in range(len(nodes))]
-    for q, quad in enumerate(quads):
-        for nd in quad:
-            node_to_quads[nd].append(q)
+    free, owner = _free_edges(quads)
+    comps, adj = _components(free)
+    comps = [c for c in comps if len(c) >= 3]
+    print("free edges %d -> %d end cross-section(s)" % (len(free), len(comps)))
+    if len(comps) < 2:
+        raise RuntimeError("expected 2 end cross-sections, found %d" % len(comps))
+    # axis = direction between the two extreme-position components
+    cent = np.array([nodes[c].mean(0) for c in comps])
+    pair = max(((i, j) for i in range(len(comps)) for j in range(i + 1, len(comps))),
+               key=lambda ij: np.linalg.norm(cent[ij[0]] - cent[ij[1]]))
+    axis_vec = cent[pair[1]] - cent[pair[0]]; ax_idx = int(np.argmax(np.abs(axis_vec)))
+    # left = smaller axial coord, right = larger
+    order = sorted(pair, key=lambda i: cent[i, ax_idx])
+    ends = {"L": comps[order[0]], "R": comps[order[1]]}
+    print("beam axis = %s ; %d/%d nodes on L/R cross-section"
+          % ("xyz"[ax_idx], len(ends["L"]), len(ends["R"])))
 
-    x = nodes[:, 0]
-    x_min, x_max = float(x.min()), float(x.max())
-    bundle = dict(seg_x=nodes, seg_cells=quads, seg_subdom=subdom,
+    freeset = set(free)
+    bundle = dict(seg_x=nodes, seg_cells=np.array([q for q in quads], dtype=np.int64), seg_subdom=subdom,
                   seg_e1=e1s, seg_e2=e2s, seg_e3=e3s,
-                  materials=json.dumps(seg["materials"]),
-                  sections=json.dumps(seg["sections"]),
-                  x_min=x_min, x_max=x_max)
-
-    for side, xt in [("L", x_min), ("R", x_max)]:
-        ring = np.where(np.isclose(x, xt, atol=tol))[0]      # YAML node ids on this end
-        th = np.arctan2(nodes[ring, 2], nodes[ring, 1])
-        order = ring[np.argsort(th)]                          # ordered CCW by hoop angle
-        m = len(order)
-        cells = np.array([[i, (i + 1) % m] for i in range(m)], dtype=np.int64)  # closed loop (local)
-
-        # per-edge frame from the parent boundary quad (unique quad holding both nodes)
-        re1 = np.zeros((m, 3)); re2 = np.zeros((m, 3)); re3 = np.zeros((m, 3)); rsub = np.zeros(m, np.int32)
-        for i in range(m):
-            a, bb = order[i], order[(i + 1) % m]
-            common = set(node_to_quads[a]) & set(node_to_quads[bb])
-            q = min(common)                                   # boundary hoop edge -> exactly one quad
-            re1[i] = (1.0, 0.0, 0.0)                           # e1 on the cross-section = axial normal
-            re2[i] = (0.0, e2s[q, 1], e2s[q, 2])              # in-plane hoop
-            re3[i] = (0.0, e3s[q, 1], e3s[q, 2])              # in-plane inward normal
-            rsub[i] = subdom[q]
-
-        ring_x = nodes[order]                                 # ring node coords (ordered)
-        okr, txtr = frame_report(ring_x, cells, re1, re2, re3)
-        print("%s-ring %s" % (side, txtr))
-        orientation_png_ring(ring_x, cells, re2, re3,
-                             os.path.join(out_dir, "orient_%s_ring_%s.png" % (tag, side)),
-                             title="%s  %s-ring e2/e3" % (tag, side))
-
-        byaml = os.path.join(out_dir, "boundary_%s_%s.yaml" % (tag, side))
-        write_boundary_yaml(order, nodes, re2, re3, seg["sections"], seg["materials"], byaml)
-        print("  wrote boundary YAML -> %s" % os.path.basename(byaml))
-
-        bundle["%s_x" % side] = ring_x
-        bundle["%s_cells" % side] = cells
-        bundle["%s_subdom" % side] = rsub
-        bundle["%s_e1" % side] = re1
-        bundle["%s_e2" % side] = re2
-        bundle["%s_e3" % side] = re3
-        bundle["%s_node2seg" % side] = order                  # IDENTITY: ring node = YAML segment node
-        print("  %s ring: %d nodes at x=%.4f (YAML ids, no renumbering)" % (side, m, xt))
-
+                  materials=json.dumps(materials), sections=json.dumps(sections),
+                  axis=ax_idx)
+    for side in ("L", "R"):
+        comp = ends[side]; cset = set(comp)
+        loc = {n: i for i, n in enumerate(comp)}
+        # ORIENT each free edge so its tangent aligns with the parent quad's e2
+        # (hoop tangent) -- otherwise the sorted-tuple direction is arbitrary and the
+        # curvature-coupling terms (k22, macro Rn) flip inconsistently per element.
+        oedges, oq = [], []
+        for e in free:
+            if e[0] in cset and e[1] in cset:
+                q = owner[e]
+                tv = nodes[e[1]] - nodes[e[0]]
+                oedges.append((e[1], e[0]) if float(np.dot(tv, e2s[q])) < 0 else (e[0], e[1]))
+                oq.append(q)
+        njunc = sum(len(adj[n]) > 2 for n in comp)
+        print("  %s cross-section: %d nodes, %d edges, %d junctions(deg>2)" % (side, len(comp), len(oedges), njunc))
+        if write_yaml:
+            byaml = os.path.join(out_dir, "boundary_%s_%s.yaml" % (tag, side))
+            _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx, materials, byaml)
+            print("    (+ wrote 1-D YAML %s)" % os.path.basename(byaml))
+        rx = nodes[comp]                                      # (m,3) full 3-D ring coords
+        rcells = np.array([[loc[a], loc[b]] for (a, b) in oedges], dtype=np.int64)
+        re1 = np.array([[1.0, 0.0, 0.0]] * len(oedges))
+        re2 = np.array([[0.0, e2s[q, 1], e2s[q, 2]] for q in oq])
+        re3 = np.array([[0.0, e3s[q, 1], e3s[q, 2]] for q in oq])
+        okr, txtr = frame_report(rx, rcells, re1, re2, re3); print("  %s-ring %s" % (side, txtr))
+        orientation_png_ring(rx, rcells, re2, re3, os.path.join(out_dir, "orient_%s_ring_%s.png" % (tag, side)),
+                             title="%s %s-ring e2/e3" % (tag, side))
+        bundle["%s_x" % side] = rx
+        bundle["%s_cells" % side] = rcells
+        bundle["%s_subdom" % side] = np.array([int(subdom[q]) for q in oq], np.int32)
+        bundle["%s_e1" % side] = re1; bundle["%s_e2" % side] = re2; bundle["%s_e3" % side] = re3
+        bundle["%s_node2seg" % side] = np.array(comp, dtype=np.int64)
     np.savez(out_npz, **bundle)
-    print("wrote", out_npz, "| orientation PNGs in", out_dir)
+    print("wrote", out_npz)
     return out_npz
 
 
 if __name__ == "__main__":
-    seg_yaml = sys.argv[1] if len(sys.argv) > 1 else "meshes/seg_iso_hR0.1.yaml"
-    out_npz = sys.argv[2] if len(sys.argv) > 2 else os.path.join(
+    # usage: boundary_from_yaml.py <segment.yaml> [out.npz] [--yaml]
+    #   --yaml : also write the 1-D boundary YAML files (default: in-memory bundle only)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    seg_yaml = args[0] if len(args) > 0 else "meshes/seg_iso_hR0.1.yaml"
+    out_npz = args[1] if len(args) > 1 else os.path.join(
         "out", os.path.splitext(os.path.basename(seg_yaml))[0] + "_direct.npz")
-    extract(seg_yaml, out_npz)
+    extract(seg_yaml, out_npz, write_yaml="--yaml" in sys.argv)
