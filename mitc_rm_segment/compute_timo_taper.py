@@ -39,7 +39,7 @@ def _seg_k22(nodes, quads, e2s, e3s, cross, mode, R=None):
 
 
 def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
-                       return_timo=False, verbose=False):
+                       return_timo=False, full_curvature=False, verbose=False):
     b = bundle
     ax = int(b["axis"]); cross = tuple(j for j in range(3) if j != ax)
     nodes = np.asarray(b["seg_x"]); quads = np.asarray(b["seg_cells"]); subdom = np.asarray(b["seg_subdom"])
@@ -49,7 +49,7 @@ def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
     k22_e, R = _seg_k22(nodes, quads, e2s, e3s, cross, k22_mode)
 
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment(
-        nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_e, cross)
+        nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_e, cross, full_curvature)
 
     # boundary rings -> V0 (4 EB modes), scattered as Dirichlet BCs
     resL = solve_boundary_bundle(b, "L", center_ref, shear)
