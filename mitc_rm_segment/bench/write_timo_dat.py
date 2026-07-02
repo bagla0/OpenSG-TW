@@ -39,6 +39,10 @@ def do_segment(segid, full_curvature=False):
     shell = np.asarray(r["C6"]); sh_org = r["origin"]
     so_org = float(open(os.path.join(CACHE, "solid_seg%d_origin.txt" % segid)).read().strip()) \
         if os.path.exists(os.path.join(CACHE, "solid_seg%d_origin.txt" % segid)) else float("nan")
+    if abs(sh_org - so_org) > 0.1:
+        print("  !! ORIGIN MISMATCH segment %d: shell %.3f vs solid %.3f -- NOT the same "
+              "station, comparison INVALID (match by origin, not index)" % (segid, sh_org, so_org))
+        return
 
     thr = np.max(np.abs(solid)) / 1000.0                       # non-zero-term cutoff
     lines = []

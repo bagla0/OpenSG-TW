@@ -118,14 +118,16 @@ def _quad_ops(X, e1, e2, e3, xi, eta, k22, cross=(1, 2), full_curvature=False):
     G = [[e1.Jxi, e1.Jeta],[e2.Jxi, e2.Jeta]] :  [d/dx1; d/ds] = G^-1 [dN/dxi; dN/deta].
     dA = |Jxi x Jeta|.
 
-    full_curvature: if True, add the drilling-rotation (omega_3) contribution to the
-    2k12 curvature -- the REPRESENTABLE part of the appendix Lambda_alpha (omega_3
-    elimination): k12 += t3 * Lambda_2 with Lambda_2 = d(omega_3)/ds and the drilling
-    omega_3 = 1/2 (t.dw/dx1 - dw1/ds).  Only the MIXED second derivative d2/dx1ds is
-    representable on a bilinear quad (the axial d2/dx1^2 part of Lambda_1 is not, so
-    the k11 drilling term is dropped); the mixed operator vanishes for a span-
-    invariant field, so the prismatic reduction is unchanged.  Default False = the
-    validated leading-order RM (EB + Timo already match the 2-D solid <0.3%)."""
+    NOTE (RM has NO second derivative): the curvature rows use ONLY first derivatives
+    of the rotation fluctuations omega1,omega2 (that is what makes RM a SECOND-ORDER
+    variational problem, vs Kirchhoff's fourth-order).  The appendix Lambda_alpha
+    (omega_3-drilling) term would need a SECOND derivative of w -- because omega_3 is
+    itself a first-derivative combination of w that is then differentiated -- which is
+    the Kirchhoff-ELIMINATION path.  RM avoids it by keeping omega1,omega2 as
+    independent DOFs and simply dropping the omega_3 drilling contribution (it is
+    epsilon^2-smaller).  The `full_curvature` argument is retained for API
+    compatibility but is a NO-OP: there is no second derivative to add in RM.
+    """
     N, dNx, dNe = _bilinear(xi, eta)
     Jxi = dNx @ X                       # dX/dxi (3,)
     Jeta = dNe @ X                      # dX/deta (3,)
@@ -134,19 +136,13 @@ def _quad_ops(X, e1, e2, e3, xi, eta, k22, cross=(1, 2), full_curvature=False):
     # (Using G^-1 instead of (G^T)^-1 swaps the hoop/axial lengths for a non-square element.)
     G = np.array([[e1 @ Jxi, e1 @ Jeta],
                   [e2 @ Jxi, e2 @ Jeta]])
-    M = np.linalg.inv(G.T)
     # per-node in-frame derivatives: rows = nodes, cols = [d/dx1, d/ds]
-    d = (M @ np.vstack([dNx, dNe])).T   # (4,2): d[a,0]=dNa/dx1, d[a,1]=dNa/ds
+    d = (np.linalg.inv(G.T) @ np.vstack([dNx, dNe])).T   # (4,2): d[a,0]=dNa/dx1, d[a,1]=dNa/ds
     dA = np.linalg.norm(np.cross(Jxi, Jeta))
     x = N @ X
     x2, x3 = x[cross[0]], x[cross[1]]              # cross-section coords
     t2, t3 = e2[cross[0]], e2[cross[1]]            # hoop tangent (in-plane) -- as in 1-D
     n2, n3 = t3, -t2                               # 1-D in-plane normal convention
-    # mixed physical 2nd derivative d2/dx1ds for the bilinear quad (constant-metric):
-    #   d2N/dx1ds = (M[1,0] M[0,1] + M[1,1] M[0,0]) * d2N/dxi.deta,  d2N/dxi.deta = 0.25 xc ec
-    mf = M[1, 0] * M[0, 1] + M[1, 1] * M[0, 0]
-    _xc = np.array([-1., 1., 1., -1.]); _ec = np.array([-1., -1., 1., 1.])
-    d1s = mf * 0.25 * _xc * _ec                   # (4,) d2Na/dx1ds
 
     BDq = np.zeros((6, 20)); BGq = np.zeros((2, 20)); BLq = np.zeros((6, 20))
     for a in range(4):
@@ -157,14 +153,11 @@ def _quad_ops(X, e1, e2, e3, xi, eta, k22, cross=(1, 2), full_curvature=False):
         BDq[1, o+1] += t2*Ds; BDq[1, o+2] += t3*Ds          # eps22 = d(t.w)/ds
         BDq[2, o+0] += Ds                                   # 2eps12 = dw1/ds
         BDq[2, o+1] += t2*D1; BDq[2, o+2] += t3*D1          # 2eps12 += d(t.w)/dx1   (axial; ->0)
-        # --- Gamma_h : bending (RM, first derivative of rotations) ---
+        # --- Gamma_h : bending (RM, FIRST derivative of rotations -- no 2nd derivative) ---
         BDq[3, o+4] += D1                                   # k11 = domega2/dx1      (axial; ->0)
         BDq[4, o+3] += Ds                                   # k22 = domega1/ds
         BDq[5, o+4] += Ds; BDq[5, o+0] += 0.5*k22*Ds        # 2k12 = domega2/ds + 0.5 k22 dw1/ds
         BDq[5, o+3] += D1                                   # 2k12 += domega1/dx1    (axial; ->0)
-        if full_curvature:                                 # drilling omega3 -> 2k12 (representable Lambda_2)
-            BDq[5, o+1] += 0.5*t3*t2*d1s[a]                # t3 * d/ds( 1/2 t2 dw2/dx1 )
-            BDq[5, o+2] += 0.5*t3*t3*d1s[a]                # t3 * d/ds( 1/2 t3 dw3/dx1 )
         # --- transverse shear (pre-tying; MITC4 assembles the tied form) ---
         BGq[0, o+4] += Na                                   # 2eps13 = omega2
         BGq[0, o+1] += n2*D1; BGq[0, o+2] += n3*D1          # 2eps13 += d(n.w)/dx1   (axial; ->0)
