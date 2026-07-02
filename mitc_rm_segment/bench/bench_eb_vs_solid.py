@@ -25,18 +25,19 @@ SEG = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, SEG)
 from compute_timo_taper import compute_timo_taper
 
-# FEniCS solid annulus reference (opensg_env_v8, run_solid_annulus_fenics.py)
-SOLID_EB = {"EA": 4.3971e10, "GJ": 1.6950e10, "EI2": 2.2035e10, "EI3": 2.2035e10}
-LBL = ["EA", "GJ", "EI2", "EI3"]
+# FEniCS solid annulus reference 6x6 diagonal (opensg_env_v8, run_solid_annulus_fenics.py)
+SOLID6 = [4.3971e10, 8.4920e9, 8.4920e9, 1.6950e10, 2.2035e10, 2.2035e10]
+LBL6 = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
 
 npz = os.path.join(SEG, "out", "seg_iso_hR0.1_direct.npz")
 b = np.load(npz, allow_pickle=True)
-r = compute_timo_taper(b, k22_mode="tube")
-d = np.diag(r["EB"])
+r = compute_timo_taper(b, k22_mode="tube", return_timo=True)
+d6 = np.diag(r["C6"])
 print("Prismatic tube  R=%.2f  L=%.2f  origin=%.2f" % (r["R"], r["L"], r["origin"]))
-print("%-5s %16s %16s %9s" % ("term", "shell EB (JAX)", "solid EB (FEniCS)", "diff"))
+print("%-5s %16s %16s %9s" % ("term", "shell (JAX RM)", "solid (FEniCS)", "diff"))
 worst = 0.0
-for i, k in enumerate(LBL):
-    s = SOLID_EB[k]; e = 100.0 * (d[i] - s) / s; worst = max(worst, abs(e))
-    print("%-5s %16.4e %16.4e %+8.2f%%" % (k, d[i], s, e))
-print("\nmax |diff| = %.2f%%  ->  %s" % (worst, "EB WORKS (shell == solid)" if worst < 1.0 else "CHECK"))
+for i, k in enumerate(LBL6):
+    s = SOLID6[i]; e = 100.0 * (d6[i] - s) / s; worst = max(worst, abs(e))
+    print("%-5s %16.4e %16.4e %+8.2f%%" % (k, d6[i], s, e))
+print("\nmax |diff| = %.2f%%  ->  %s" % (worst,
+      "TIMO 6x6 WORKS (shell == solid, incl. transverse shear)" if worst < 1.0 else "CHECK"))

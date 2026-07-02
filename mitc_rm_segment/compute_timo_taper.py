@@ -22,8 +22,10 @@ for p in (HERE, REPO):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from segment_element import assemble_segment, dirichlet_solve, compute_k22
+import jax.numpy as jnp
+from segment_element import assemble_segment, dirichlet_solve, compute_k22, build_C_Psi_segment
 from solve_segment_jax import _material_by_section, solve_boundary_bundle
+from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
 
 def _seg_k22(nodes, quads, e2s, e3s, cross, mode, R=None):
@@ -65,9 +67,34 @@ def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
     EB = (np.asarray(Dee) + V0seg.T @ np.asarray(Dhe)) / L          # 4x4 per unit length
     out = {"EB": EB, "L": L, "R": R, "V0seg": V0seg, "ring_C6": resL["C6"],
            "origin": float(nodes[:, ax].mean())}
+
+    if return_timo:                                                # full Timoshenko 6x6 (V1 step)
+        Dhh_a, Dhl_a, Dll_a, Dle_a = (np.asarray(Dhh), np.asarray(Dhl),
+                                      np.asarray(Dll), np.asarray(Dle))
+        C, Psi = build_C_Psi_segment(nodes, quads, cross); Dc = C.T
+        bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
+            jnp.array(V0seg), jnp.array(Dhl_a), jnp.array(Dll_a), jnp.array(Dle_a),
+            jnp.array(Psi), jnp.array(Dc))
+        bb = np.asarray(bb)
+        bd1, bv1 = [], []
+        for res, n2s in [(resL, np.asarray(b["L_node2seg"])), (resR, np.asarray(b["R_node2seg"]))]:
+            V1 = res["V1"].reshape(-1, 5, 4)
+            for i, sn in enumerate(n2s):
+                for c in range(5):
+                    bd1.append(5 * int(sn) + c); bv1.append(V1[i, c, :])
+        V1seg = dirichlet_solve(Dhh_a, bb, np.array(bd1), np.array(bv1, float))
+        S, *_ = finalize_v1_and_compute_deff(
+            jnp.array(V1seg), jnp.array(V0seg), jnp.array(EB),
+            jnp.array(np.asarray(V0DllV0) / L), jnp.array(np.asarray(DhlV0) / L),
+            jnp.array(np.asarray(DhlTV0Dle) / L), jnp.array(Psi), jnp.array(Dc))
+        S = np.asarray(S); out["C6"] = 0.5 * (S + S.T)
+
     if verbose:
         d = np.diag(EB)
         print("EB 4x4 [EA, GJ, EI2, EI3] diag:", np.array2string(d, precision=4))
+        if "C6" in out:
+            print("Timo 6x6 [EA,GA2,GA3,GJ,EI2,EI3] diag:",
+                  np.array2string(np.diag(out["C6"]), precision=4))
     return out
 
 
