@@ -71,6 +71,39 @@ def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
     return out
 
 
+def compute_timo_taper_jax(bundle, center_ref=True, shear="mitc", k22_mode="tube"):
+    """JAX-assembled EB path (segment_element_jax.assemble_segment_jax) -- same
+    result as compute_timo_taper, jit+vmap over quads.  Boundary V0 + the small
+    Dirichlet solve stay in NumPy (already fast)."""
+    from segment_element_jax import assemble_segment_jax
+    b = bundle
+    ax = int(b["axis"]); cross = tuple(j for j in range(3) if j != ax)
+    nodes = np.asarray(b["seg_x"]); quads = np.asarray(b["seg_cells"]); subdom = np.asarray(b["seg_subdom"])
+    e1s, e2s, e3s = np.asarray(b["seg_e1"]), np.asarray(b["seg_e2"]), np.asarray(b["seg_e3"])
+    sections = json.loads(str(b["sections"])); materials = json.loads(str(b["materials"]))
+    D_by, G_by = _material_by_section(sections, materials, center_ref)
+    nsec = len(D_by)
+    D_stack = np.array([D_by[i] for i in range(nsec)])
+    G_stack = np.array([G_by[i] for i in range(nsec)])
+    k22_e, R = _seg_k22(nodes, quads, e2s, e3s, cross, k22_mode)
+    Dhh, Dhe, Dee = assemble_segment_jax(nodes, quads, subdom, e1s, e2s, e3s, D_stack, G_stack, k22_e, cross)
+    Dhh, Dhe, Dee = np.asarray(Dhh), np.asarray(Dhe), np.asarray(Dee)
+
+    resL = solve_boundary_bundle(b, "L", center_ref, shear)
+    resR = solve_boundary_bundle(b, "R", center_ref, shear)
+    bdofs, bvals = [], []
+    for res, n2s in [(resL, np.asarray(b["L_node2seg"])), (resR, np.asarray(b["R_node2seg"]))]:
+        V0 = res["V0"].reshape(-1, 5, 4)
+        for i, sn in enumerate(n2s):
+            for c in range(5):
+                bdofs.append(5 * int(sn) + c); bvals.append(V0[i, c, :])
+    bdofs = np.array(bdofs); bvals = np.array(bvals, float)
+    V0seg = dirichlet_solve(Dhh, -Dhe, bdofs, bvals)
+    L = float(nodes[:, ax].max() - nodes[:, ax].min())
+    EB = (Dee + V0seg.T @ Dhe) / L
+    return {"EB": EB, "L": L, "R": R, "origin": float(nodes[:, ax].mean())}
+
+
 if __name__ == "__main__":
     npz = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "out", "seg_iso_hR0.1_direct.npz")
     b = np.load(npz, allow_pickle=True)
