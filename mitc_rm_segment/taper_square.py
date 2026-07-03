@@ -195,10 +195,13 @@ def cmd_gen(nc=None, nl=None):
             for aR in TAPERS:
                 tg = gen_square_case(regime, mat, aR, nc=nc, nl=nl)
                 print("mesh", tg, "(NC=%d NL=%d)" % (nc or NC, nl or NL))
-    for regime in ("thin", "thick"):
-        for mat in ("iso", "m45"):
-            red_ref_png(ts.tag_of(regime, mat, 0.7))
-    print("red-ref PNGs ->", ORI)
+    try:
+        for regime in ("thin", "thick"):
+            for mat in ("iso", "m45"):
+                red_ref_png(ts.tag_of(regime, mat, 0.7))
+        print("red-ref PNGs ->", ORI)
+    except ImportError as e:
+        print("skip red-ref PNGs (%s) -- render locally where pyvista is available" % e)
 
 
 def cmd_shell(mat):
