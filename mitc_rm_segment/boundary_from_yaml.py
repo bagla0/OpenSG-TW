@@ -111,7 +111,7 @@ def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx,
     }
     with open(path, "w") as f:
         yaml.safe_dump(d, f, default_flow_style=None, sort_keys=False)
-    return len(comp), len(comp_edges)
+    return len(comp), len(oedges)
 
 
 def extract(seg_yaml, out_npz, write_yaml=False):

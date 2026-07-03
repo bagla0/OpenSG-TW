@@ -52,8 +52,16 @@ def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
         nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_e, cross, full_curvature)
 
     # boundary rings -> V0 (4 EB modes), scattered as Dirichlet BCs
-    resL = solve_boundary_bundle(b, "L", center_ref, shear)
-    resR = solve_boundary_bundle(b, "R", center_ref, shear)
+    # (k22_mode='general': per-edge geometric hoop curvature on the rings too,
+    #  from the parent-quad frames -- same convention as the segment quads)
+    def _bnd_k22(side):
+        if k22_mode != "general":
+            return None
+        rc = np.asarray(b["%s_cells" % side]); rx = np.asarray(b["%s_x" % side])
+        return compute_k22(rx[rc].mean(axis=1), np.asarray(b["%s_e2" % side]),
+                           np.asarray(b["%s_e3" % side]), rc)
+    resL = solve_boundary_bundle(b, "L", center_ref, shear, k22=_bnd_k22("L"))
+    resR = solve_boundary_bundle(b, "R", center_ref, shear, k22=_bnd_k22("R"))
     bdofs, bvals = [], []
     for res, n2s in [(resL, np.asarray(b["L_node2seg"])), (resR, np.asarray(b["R_node2seg"]))]:
         V0 = res["V0"].reshape(-1, 5, 4)
