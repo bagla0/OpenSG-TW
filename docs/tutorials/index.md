@@ -6,6 +6,8 @@ $C_{ij}$** (not just the diagonal) against a benchmark. They are committed pre-r
 you see are the real outputs. Every input is bundled in the repo under
 [`examples/data/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data) — clone and run, no external paths.
 
+## Prismatic cross-sections
+
 ::::{grid} 1 1 2 2
 :gutter: 3
 
@@ -27,13 +29,32 @@ Eight span stations regenerated from windIO — RM & KL vs the 2-D solid on the 
 :link-type: doc
 A thick-web blade station from both solid and shell — solid exact (quad mesh), shells drift on the web.
 :::
+::::
 
-:::{grid-item-card} 4 · 3D-SG tapered segment
+## Tapered 3-D segments
+
+Two independent tracks. The **wind-blade tapered segment** homogenizes a real, layup-varying BAR-URC blade
+region; the **circular taper convergence study** is a clean verification benchmark that isolates the general
+RM taper kinematics against an analytic / 3-D-solid reference on a tube. They are separate tutorials — start
+with whichever matches your goal (production geometry vs. formulation verification).
+
+### Wind-blade tapered segment (real geometry)
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 4 · 3D-SG tapered segment (BAR-URC)
 :link: taper_3dsg_segment
 :link-type: doc
 Three BAR-URC tapered shell segments (5/12/15) — boundary rings + MITC-RM tapered 6×6 vs the 3-D solid
 at the same origin, plus the JAX-vs-OpenSG boundary-YAML equivalence check.
 :::
+::::
+
+### Circular taper convergence study (verification)
+
+::::{grid} 1 1 2 2
+:gutter: 3
 
 :::{grid-item-card} 5 · Taper convergence (isotropic)
 :link: taper_convergence_iso

@@ -47,6 +47,12 @@ tutorials/index
 tutorials/rm_timo_from_yaml
 tutorials/iea22_full_blade
 tutorials/st15_solid_vs_shell
+```
+
+```{toctree}
+:hidden:
+:caption: Tapered 3-D segments
+
 tutorials/taper_3dsg_segment
 tutorials/taper_convergence_iso
 tutorials/taper_convergence_m45
