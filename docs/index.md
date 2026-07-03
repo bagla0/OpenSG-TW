@@ -47,6 +47,7 @@ tutorials/index
 tutorials/rm_timo_from_yaml
 tutorials/iea22_full_blade
 tutorials/st15_solid_vs_shell
+tutorials/taper_3dsg_segment
 ```
 
 ```{toctree}

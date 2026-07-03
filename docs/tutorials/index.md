@@ -1,12 +1,12 @@
 # Tutorials
 
-Three **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
+Four **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
 prints the **full Timoshenko $6\times6$**, and reports the per-term **%-diff on every non-zero $C_{ij}$**
 (not just the diagonal) against a benchmark. They are committed pre-run, so the numbers and figures you see
 are the real outputs. Every input is bundled in the repo under
 [`examples/data/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data) — clone and run, no external paths.
 
-::::{grid} 1 1 3 3
+::::{grid} 1 1 2 2
 :gutter: 3
 
 :::{grid-item-card} 1 · RM shell (+ KL)
@@ -26,6 +26,13 @@ Eight span stations regenerated from windIO — RM & KL vs the 2-D solid on the 
 :link: st15_solid_vs_shell
 :link-type: doc
 A thick-web blade station from both solid and shell — solid exact (quad mesh), shells drift on the web.
+:::
+
+:::{grid-item-card} 4 · 3D-SG tapered segment
+:link: taper_3dsg_segment
+:link-type: doc
+Three BAR-URC tapered shell segments (5/12/15) — boundary rings + MITC-RM tapered 6×6 vs the 3-D solid
+at the same origin, plus the JAX-vs-OpenSG boundary-YAML equivalence check.
 :::
 ::::
 
@@ -49,6 +56,10 @@ A thick-web blade station from both solid and shell — solid exact (quad mesh),
   - `data/1d_yaml/st15_shell.yaml` + `data/2d_yaml/st15_solid.yaml` (quad)
   - KL + RM + `compute_timo_from_yaml`
   - VABS `data/benchmark/st15_vabs.K`
+* - 3D-SG tapered segment
+  - `data/3d_yaml/BAR_URC_numEl_52_segment_{5,12,15}.yaml`
+  - `boundary_from_yaml.extract` + `solve_boundary_bundle` + `compute_timo_taper`
+  - 3-D solid `data/benchmark/bar_urc_taper_solid_refs.npz`
 ```
 
 All paths are relative to [`examples/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples).
