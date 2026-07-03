@@ -29,6 +29,10 @@ from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute
 
 
 def _seg_k22(nodes, quads, e2s, e3s, cross, mode, R=None):
+    """The CURVATURE argument: 'tube' = uniform -1/R; 'general' = per-element
+    geometric (compute_k22: median + flat-snap-to-0, bounded); 'zero' = off."""
+    if mode == "zero":
+        return np.zeros(len(quads)), R
     if mode == "tube":
         c = nodes[:, cross].mean(0)
         if R is None:
@@ -38,7 +42,7 @@ def _seg_k22(nodes, quads, e2s, e3s, cross, mode, R=None):
     return compute_k22(cent, np.asarray(e2s), np.asarray(e3s), quads), R
 
 
-def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
+def compute_timo_taper(bundle, center_ref=True, shear="mitc_both", k22_mode="tube",
                        return_timo=False, full_curvature=False, verbose=False):
     b = bundle
     ax = int(b["axis"]); cross = tuple(j for j in range(3) if j != ax)
@@ -55,6 +59,8 @@ def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
     # (k22_mode='general': per-edge geometric hoop curvature on the rings too,
     #  from the parent-quad frames -- same convention as the segment quads)
     def _bnd_k22(side):
+        if k22_mode == "zero":
+            return "zero"
         if k22_mode != "general":
             return None
         rc = np.asarray(b["%s_cells" % side]); rx = np.asarray(b["%s_x" % side])
@@ -106,7 +112,7 @@ def compute_timo_taper(bundle, center_ref=True, shear="mitc", k22_mode="tube",
     return out
 
 
-def compute_timo_taper_jax(bundle, center_ref=True, shear="mitc", k22_mode="tube"):
+def compute_timo_taper_jax(bundle, center_ref=True, shear="mitc_both", k22_mode="tube"):
     """JAX-assembled EB path (segment_element_jax.assemble_segment_jax) -- same
     result as compute_timo_taper, jit+vmap over quads.  Boundary V0 + the small
     Dirichlet solve stay in NumPy (already fast)."""

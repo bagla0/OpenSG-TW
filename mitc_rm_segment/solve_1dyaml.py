@@ -51,7 +51,10 @@ def load_1d(fn):
     return d, nodes, elems, lab, ori
 
 
-def solve(fn, shear="mitc", center_ref=True, k22_mode="geom", verbose=False):
+def solve(fn, shear="mitc_both", center_ref=True, k22_mode="geom", flat_tol=1e-3,
+          verbose=False):
+    """CURVATURE argument k22_mode: 'geom' (default; symmetric discrete curvature,
+    flat edges |k22|<flat_tol snapped to EXACTLY 0), 'uniform' (-1/R), 'zero'."""
     d, nodes, elems, lab, ori = load_1d(fn)
     nd2 = nodes[:, :2]                                   # [cross1, cross2, axial] convention
     # --- canonical edge orientation, WRITER-INDEPENDENT: CCW about the section
@@ -78,8 +81,10 @@ def solve(fn, shear="mitc", center_ref=True, k22_mode="geom", verbose=False):
             abd = shift_abd_reference(abd, 0.5 * sum(th))
         D_by[si] = abd
         G_by[si] = np.asarray(transverse_shear_stiffness(th, an, mn, matmap)[0])
-    # --- per-edge k22 ---
-    if k22_mode == "uniform":
+    # --- per-edge k22 (the curvature argument) ---
+    if k22_mode == "zero":
+        k22 = np.zeros(len(elems))
+    elif k22_mode == "uniform":
         c = nd2.mean(0); R = float(np.mean(np.hypot(nd2[:, 0] - c[0], nd2[:, 1] - c[1])))
         k22 = np.full(len(elems), -1.0 / R)
     else:
@@ -116,6 +121,7 @@ def solve(fn, shear="mitc", center_ref=True, k22_mode="geom", verbose=False):
                 kap.append(_turn(t0v / L0, t1) / (0.5 * (L0 + L1)))
             if kap:
                 k22[i] = -float(np.mean(kap))            # code's -1/R convention (CCW ring -> -1/R)
+        k22[np.abs(k22) < flat_tol] = 0.0                # FLAT edges (webs/panels): exactly zero
     C6, Deff, V0, V1 = timoshenko_rm(nd2, elems, lab, D_by, G_by, k22,
                                      p=1, return_warp=True, shear=shear)
     C6 = np.asarray(C6)

@@ -70,11 +70,19 @@ def compute_curvatures(centroids, e1s, e2s, e3s, elems):
     return K
 
 
-def compute_k22(centroids, e2s, e3s, elems):
+def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None):
     """Per-element hoop curvature k22 = d e3/ds . e2 (== -1/R for a circle with inward
     e3), estimated from hoop-aligned neighbours -- elements sharing a node whose
     centroid displacement is mostly along e2.  Works for the 1-D boundary contour
-    (line elements) and the 2-D segment (quads); junction/isolated elements -> 0."""
+    (line elements) and the 2-D segment (quads); junction/isolated elements -> 0.
+
+    Guards (the initial-curvature terms must never explode):
+      - per-neighbour estimates combined with the MEDIAN (robust to one cross-branch
+        neighbour at a web junction leaking the other branch's frame);
+      - FLAT elements snap to EXACTLY zero: |k22| < flat_tol (1e-3 ~ R > 1 km, far
+        below any real blade curvature ~0.1..20 1/m) -- a web/flat panel carries no
+        initial curvature;
+      - optional |k22| <= k22_max cap for sharp trailing-edge spikes."""
     node2el = defaultdict(list)
     for ei, el in enumerate(elems):
         for n in el:
@@ -92,7 +100,12 @@ def compute_k22(centroids, e2s, e3s, elems):
             if abs(ds) < 0.5 * nd:                         # keep only hoop-direction neighbours
                 continue
             ks.append(float(np.dot(e3s[ej] - e3s[ei], e2s[ei])) / ds)
-        k22[ei] = float(np.mean(ks)) if ks else 0.0
+        k = float(np.median(ks)) if ks else 0.0
+        if abs(k) < flat_tol:
+            k = 0.0                                        # flat element: exactly zero
+        elif k22_max is not None:
+            k = float(np.clip(k, -k22_max, k22_max))
+        k22[ei] = k
     return k22
 
 

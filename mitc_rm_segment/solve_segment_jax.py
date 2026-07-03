@@ -109,7 +109,7 @@ def solve_ring(ring_x, D, G, shear="mitc_both"):
             "perm": perm, "R": R, "nodes2d": nodes2d, "elems": elems}
 
 
-def solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc"):
+def solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc_both"):
     """Solve a boundary ring from its standalone 1-D cross-section YAML file.
 
     Reads the YAML directly (node order preserved == node2seg order), builds the
@@ -152,14 +152,20 @@ def _material_by_section(sections, materials, center_ref=True):
     return D_by, G_by
 
 
-def solve_boundary_bundle(b, side, center_ref=True, shear="mitc", k22=None):
+def solve_boundary_bundle(b, side, center_ref=True, shear="mitc_both", k22=None):
     """Solve a boundary ring IN-MEMORY straight from the extraction bundle -- no
     boundary-YAML write/read round-trip (the fast path; pass write_yaml=True to
     boundary_from_yaml.extract only if you also want the 1-D YAML for inspection).
 
     Multi-material: ABD/G computed once per layup section, keyed by section index;
-    per-edge section id = bundle['<side>_subdom'].  k22 = -1/R (circular cross-
-    section); a general per-edge contour curvature is used for the airfoil taper.
+    per-edge section id = bundle['<side>_subdom'].
+
+    k22 = the CURVATURE argument (initial hoop curvature per edge):
+      None       -> uniform -1/R (circular cross-section default)
+      'general'  -> per-edge geometric curvature from the parent-quad frames
+                    (segment_element.compute_k22: median + flat-element snap-to-0)
+      'zero'     -> no initial-curvature terms
+      array      -> caller-supplied per-edge values
     """
     ax = int(b["axis"]); cross = [j for j in range(3) if j != ax]
     nd2 = np.asarray(b["%s_x" % side])[:, cross]                 # (m,2) cross-section coords
@@ -169,6 +175,14 @@ def solve_boundary_bundle(b, side, center_ref=True, shear="mitc", k22=None):
     c = nd2.mean(0); R = float(np.mean(np.hypot(nd2[:, 0] - c[0], nd2[:, 1] - c[1])))
     if k22 is None:                                          # circular cross-section default
         k22 = np.full(len(elems), -1.0 / R)
+    elif isinstance(k22, str) and k22 == "zero":
+        k22 = np.zeros(len(elems))
+    elif isinstance(k22, str) and k22 == "general":
+        from segment_element import compute_k22
+        rx = np.asarray(b["%s_x" % side])
+        k22 = compute_k22(rx[np.asarray(b["%s_cells" % side])].mean(axis=1),
+                          np.asarray(b["%s_e2" % side]), np.asarray(b["%s_e3" % side]),
+                          np.asarray(b["%s_cells" % side]))
     C6, Deff, V0, V1 = timoshenko_rm(nd2, elems, lpe, D_by, G_by, np.asarray(k22),
                                      p=1, return_warp=True, shear=shear)
     return {"C6": np.asarray(C6), "V0": np.asarray(V0), "V1": np.asarray(V1), "R": R}
