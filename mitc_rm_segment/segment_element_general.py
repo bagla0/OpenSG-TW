@@ -87,7 +87,15 @@ OM3_SIGN = +1.0   # sign convention of omega_3 (A.3); +1 confirmed by the kappa_
                   # prismatic identity: x_{b;2}x11 om'_b + x_{3;2}(-C3b/C33)om'_b
                   # = (xd2 + xd3^2/xd2) om'_2 = om'_2/xd2  (eq:prism)
 LAMBDA_ON = 1.0   # ablation switch: Lambda_alpha drilling in the kappa rows
-GDRILL_ON = 1.0   # ablation switch: x_{3;a} omega_3 drilling in the gamma rows
+# GDRILL_ON: the x_{3;a} omega_3 drilling coupling in the transverse-shear (gamma)
+# rows.  DEFAULT OFF.  On a SMOOTH section (circle) it is a negligible stabilization
+# (<0.5% on every 6x6 term), but on a FOLDED/flat-walled section it is a
+# drilling-DOF-at-folds pathology: across a 90-deg corner the drilling rotation of
+# one wall reads as the out-of-plane rotation of its neighbour, so this term adds a
+# SPURIOUS torsional stiffness that does not converge -- on the square tube it
+# inflates GJ by +1280% (and grows with mesh) whereas GDRILL_ON=0 gives GJ within
+# +14% of Bredt with EA/GA/EI unchanged.  Found via the flat-walled (k22=0) square.
+GDRILL_ON = 0.0
 
 
 def _surf_frame(X, e3_mat, xi, eta, cross, ax):

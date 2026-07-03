@@ -3,12 +3,14 @@ from OpenSG-1.0/examples).  Computes boundary (Taper=False) + taper (Taper=True)
 6x6 for every solid mesh in out/taper_study/meshes and saves next to the RM
 results:  solid_<tag>_{L,R,seg}.npy  + timing lines in solid_timings.txt."""
 import os, sys, glob, time
-sys.path.insert(0, "/mnt/c/Users/bagla0/OpenSG-1.0")
+# opensg (solid) package location: env var OPENSG_SOLID_PATH, else the WSL default.
+sys.path.insert(0, os.environ.get("OPENSG_SOLID_PATH", "/mnt/c/Users/bagla0/OpenSG-1.0"))
 import numpy as np
 from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
 
-HERE = "/mnt/c/Users/bagla0/OneDrive - purdue.edu/2026_195/Claude_code/mitc_rm_segment"
+# repo mitc_rm_segment dir: derived from this file so it works on WSL and the SSH server.
+HERE = os.path.dirname(os.path.abspath(__file__))
 STUDY = sys.argv[2] if len(sys.argv) > 2 else "taper_study"   # out/<STUDY>/{meshes,results}
 MESH = HERE + "/out/" + STUDY + "/meshes"
 RES = HERE + "/out/" + STUDY + "/results"
