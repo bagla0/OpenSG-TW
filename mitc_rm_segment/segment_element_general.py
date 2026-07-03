@@ -358,26 +358,42 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
 
 
 # ------------------------------------------------------------------ MITC tying
-# Dvorkin-Bathe MITC4 assumed transverse shear, same tying points as the
-# validated reduced element: g23 sampled at (0,-1),(0,+1) linear in eta;
-# g13 sampled at (-1,0),(+1,0) linear in xi; BOTH rows tied (mitc_both).
+# Assumed transverse-shear schemes for the QUAD element (Dvorkin-Bathe MITC4
+# tying points: g23 sampled at (0,-1),(0,+1) linear in eta; g13 sampled at
+# (-1,0),(+1,0) linear in xi).  Selected by name so the element stays general:
+#   'mitc4_both' : tie BOTH shear rows (default -- mirrors the validated 1-D
+#                  mitc_both scheme)
+#   'mitc4_g23'  : tie only the hoop-locking-prone g23 row, g13 full
+#   'reduced'    : single-point (centre) evaluation of both rows
+#   'full'       : no treatment (exhibits transverse-shear LOCKING thin)
+# TRIANGLE HOOK: if a 3-node element type is added, register its MITC3 tying
+# (edge-midpoint tangential sampling, Lee-Bathe) under 'mitc3' here -- the
+# assembly only calls shear_rows_general(scheme, ...).
 _TIE_G23 = [(0.0, -1.0), (0.0, 1.0)]
 _TIE_G13 = [(-1.0, 0.0), (1.0, 0.0)]
+SHEAR_SCHEMES = ("mitc4_both", "mitc4_g23", "reduced", "full")
 
 
-def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax):
+def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4_both"):
+    if scheme == "full":
+        return quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax)[4]
+    if scheme == "reduced":
+        return quad_ops_general(X, e1m, e2m, e3m, 0.0, 0.0, k22, cross, ax)[4]
     r23 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][1:2, :]
            for (tx, te) in _TIE_G23]
-    r13 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][0:1, :]
-           for (tx, te) in _TIE_G13]
     g23 = 0.5 * (1.0 - eta) * r23[0] + 0.5 * (1.0 + eta) * r23[1]
-    g13 = 0.5 * (1.0 - xi) * r13[0] + 0.5 * (1.0 + xi) * r13[1]
+    if scheme == "mitc4_g23":
+        g13 = quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax)[4][0:1, :]
+    else:                                                  # 'mitc4_both'
+        r13 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][0:1, :]
+               for (tx, te) in _TIE_G13]
+        g13 = 0.5 * (1.0 - xi) * r13[0] + 0.5 * (1.0 + xi) * r13[1]
     return np.vstack([g13, g23])
 
 
 # -------------------------------------------------------------------- assembly
 def assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by,
-                             k22_e, cross=(1, 2), dof_map=None):
+                             k22_e, cross=(1, 2), dof_map=None, shear="mitc4_both"):
     """Assemble the six MSG blocks with the GENERAL RM taper operators:
         Dhh = <Gh' C Gh>   Dhe = <Gh' C Ge>   Dee = <Ge' C Ge>
         Dhl = <Gh' C Gl>   Dll = <Gl' C Gl>   Dle = <Gl' C Ge>
@@ -405,7 +421,7 @@ def assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by,
         for (xi, eta) in gp:
             BDe, BDh, BDl, BGe, BGh, BGl, dA = quad_ops_general(
                 X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax)
-            BGt = _mitc_shear_general(X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax)
+            BGt = _mitc_shear_general(X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax, shear)
             w = dA  # unit gauss weights on [-1,1]^2 (2x2)
             # np.add.at (NOT fancy-index +=): with a dof_map the index vector g
             # contains REPEATED dofs (wrapped strip) and fancy-index += silently
@@ -420,7 +436,8 @@ def assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by,
 
 
 # ---------------------------------------------------- general-consistent RING SG
-def ring_general(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None):
+def ring_general(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
+                 shear="mitc4_both"):
     """Boundary cross-section SG solved with the SAME general operator as the
     segment (one parametrization end-to-end): the ring is extruded into a
     one-quad-deep PRISMATIC strip whose top node row is DOF-MAPPED onto the
@@ -444,7 +461,7 @@ def ring_general(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None)
     e1q = np.tile(ez, (len(quads), 1)); e2q = e3q       # e1m/e2m unused by the op
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_general(
         nodes, quads, rsub, e1q, e2q, e3q, D_by, G_by, np.asarray(k22_edge), cross,
-        dof_map=dof_map)
+        dof_map=dof_map, shear=shear)
     Dhh, Dhe, Dee, Dhl, Dll, Dle = [np.asarray(M) / h for M in (Dhh, Dhe, Dee, Dhl, Dll, Dle)]
     C, Psi = build_C_Psi(rx[:, cross], rcells, p=1)     # 4 rigid modes / constraints
     # GENERAL-op rigid twist: omega_beta are GLOBAL components, so the twist
