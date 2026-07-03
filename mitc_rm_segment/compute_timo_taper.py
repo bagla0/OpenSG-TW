@@ -145,6 +145,76 @@ def compute_timo_taper_jax(bundle, center_ref=True, shear="mitc_both", k22_mode=
     return {"EB": EB, "L": L, "R": R, "origin": float(nodes[:, ax].mean())}
 
 
+def compute_timo_taper_layup(bundle, bundle_next, center_ref=False, shear="mitc_both",
+                             k22_mode="general", verbose=False):
+    """Layup-TAPERED segment: the OpenSG shell mesh freezes each segment's laminate
+    at its INBOARD (left) reference, so a segment's RIGHT boundary carries the
+    inboard-frozen (too-thick) layup -- NOT the true cross-section at that station
+    (see ref_bar_urc_shell_spar_mislabel).  Because consecutive segments share the
+    face (seg N's R geometry == seg N+1's L geometry, identical connectivity), the
+    true outboard layup is seg N+1's LEFT layup.  This routine blends the per-quad
+    ABD/G linearly from seg N's layup (at x_min) to seg N+1's layup (at x_max) by
+    span fraction, and uses seg N+1's LEFT ring as the RIGHT boundary -- so BOTH
+    end cross-sections are one-to-one with the 3-D solid.
+
+    `bundle` = segment N, `bundle_next` = segment N+1 (same numEl mesh; must have
+    identical connectivity, checked).  Returns the Timoshenko 6x6 + EB.
+    """
+    b, bn = bundle, bundle_next
+    ax = int(b["axis"]); cross = tuple(j for j in range(3) if j != ax)
+    nodes = np.asarray(b["seg_x"]); quads = np.asarray(b["seg_cells"])
+    e1s, e2s, e3s = np.asarray(b["seg_e1"]), np.asarray(b["seg_e2"]), np.asarray(b["seg_e3"])
+    sdN = np.asarray(b["seg_subdom"]); sdN1 = np.asarray(bn["seg_subdom"])
+    if not np.array_equal(quads, np.asarray(bn["seg_cells"])):
+        raise ValueError("segments N and N+1 must share connectivity for layup taper")
+    DN, GN = _material_by_section(json.loads(str(b["sections"])), json.loads(str(b["materials"])), center_ref)
+    DN1, GN1 = _material_by_section(json.loads(str(bn["sections"])), json.loads(str(bn["materials"])), center_ref)
+    xc = nodes[quads].mean(1)[:, ax]; f = (xc - xc.min()) / (xc.max() - xc.min())
+    Dq = {i: (1 - f[i]) * DN[int(sdN[i])] + f[i] * DN1[int(sdN1[i])] for i in range(len(quads))}
+    Gq = {i: (1 - f[i]) * GN[int(sdN[i])] + f[i] * GN1[int(sdN1[i])] for i in range(len(quads))}
+    subdom = np.arange(len(quads))
+    k22_e = compute_k22(nodes[quads].mean(1), e2s, e3s, quads) if k22_mode == "general" \
+        else _seg_k22(nodes, quads, e2s, e3s, cross, k22_mode)[0]
+    Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment(nodes, quads, subdom, e1s, e2s, e3s, Dq, Gq, k22_e, cross)
+    Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))
+
+    kb = None if k22_mode != "general" else "general"
+    resL = solve_boundary_bundle(b, "L", center_ref, shear, k22=kb)      # true @ x_min
+    resR = solve_boundary_bundle(bn, "L", center_ref, shear, k22=kb)     # true @ x_max (== seg N R)
+    n2sL = np.asarray(b["L_node2seg"])
+    X6L = np.asarray(bn["L_x"]); X5R = np.asarray(b["R_x"])              # coincident rings
+    dmap = np.linalg.norm(X6L[:, None, :] - X5R[None, :, :], axis=2); jm = dmap.argmin(axis=1)
+    if dmap[np.arange(len(jm)), jm].max() > 1e-6:
+        raise ValueError("seg N R and seg N+1 L rings are not geometrically coincident")
+    n2sR = np.asarray(b["R_node2seg"])[jm]
+
+    def scatter(key):
+        bd, bv = [], []
+        for res, n2s in [(resL, n2sL), (resR, n2sR)]:
+            Vv = res[key].reshape(-1, 5, 4)
+            for i, sn in enumerate(n2s):
+                for c in range(5):
+                    bd.append(5 * int(sn) + c); bv.append(Vv[i, c, :])
+        return np.array(bd), np.array(bv, float)
+
+    bd0, bv0 = scatter("V0"); V0 = dirichlet_solve(Dhh, -Dhe, bd0, bv0)
+    L = float(xc.max() - xc.min()); EB = (np.asarray(Dee) + V0.T @ Dhe) / L
+    C, Psi = build_C_Psi_segment(nodes, quads, cross); Dc = C.T
+    bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
+        jnp.array(V0), jnp.array(Dhl), jnp.array(Dll), jnp.array(Dle), jnp.array(Psi), jnp.array(Dc))
+    bd1, bv1 = scatter("V1"); V1 = dirichlet_solve(Dhh, np.asarray(bb), bd1, bv1)
+    S, *_ = finalize_v1_and_compute_deff(
+        jnp.array(V1), jnp.array(V0), jnp.array(EB),
+        jnp.array(np.asarray(V0DllV0) / L), jnp.array(np.asarray(DhlV0) / L),
+        jnp.array(np.asarray(DhlTV0Dle) / L), jnp.array(Psi), jnp.array(Dc))
+    C6 = np.asarray(S); C6 = 0.5 * (C6 + C6.T)
+    out = {"C6": C6, "EB": EB, "L": L, "origin": float(nodes[:, ax].mean())}
+    if verbose:
+        print("layup-tapered Timo 6x6 diag [EA,GA2,GA3,GJ,EI2,EI3]:",
+              np.array2string(np.diag(C6), precision=4))
+    return out
+
+
 if __name__ == "__main__":
     npz = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "out", "seg_iso_hR0.1_direct.npz")
     b = np.load(npz, allow_pickle=True)
