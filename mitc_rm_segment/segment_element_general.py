@@ -332,36 +332,46 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
     BDh[5] += LAMBDA_ON * (c["x32"] * L2h - c["x31"] * L1h)
     BDl[5] += LAMBDA_ON * (c["x32"] * L2l - c["x31"] * L1l)
 
-    # ================= TRANSVERSE SHEAR (GENERAL, drilling-boosted) ============
-    # 2g13 = y_i w_{i|1} + x11 y_i w'_i + x11 y_i u'_i(macro) + Omega_2
-    # 2g23 = y_i w_{i|2} + x12 y_i w'_i + x12 y_i u'_i(macro) - Omega_1
-    # with the TOTAL rotation about a_alpha through the GLOBAL rotation vector
-    # (omega_1, omega_2 the retained RM unknowns, omega_3 the drilling (A.3)):
-    #   Omega_2 = x_{1;2} om_1 + x_{2;2} om_2 + x_{3;2} omega_3
-    #   Omega_1 = x_{1;1} om_1 + x_{2;1} om_2 + x_{3;1} omega_3
-    # and the macro axial-gradient  u'_i = (g11 + x3 k2 - x2 k3, -k1 x3, +k1 x2):
-    #   y_i u'_i = y1 g11 + (x2 y3 - x3 y2) k1 + y1 x3 k2 - y1 x2 k3
-    # PRISMATIC IDENTITY (verified): Omega_2 -> om_2/xd2 - (xd3/2xd2) wd_1
-    # + (xd3/2xd2) k1 Rn + ..., and the w' pair collapses to
-    # -w'_2 xd3/2 + w'_3 (xd2 + xd3^2/(2 xd2))  == eq:prism gamma_13 exactly.
-    OM3h, OM3l, OM3e, _ = _omega3_ops(N, D1, D2, c, k22)
-    umac = np.array([c["y1"], c["x2"] * c["y3"] - c["x3"] * c["y2"],
-                     c["y1"] * x3, -c["y1"] * x2])
-    BGe[0] = x11 * umac + GDRILL_ON * c["x32"] * OM3e
-    BGe[1] = x12 * umac - GDRILL_ON * c["x31"] * OM3e
-    BGh[0] += GDRILL_ON * c["x32"] * OM3h; BGl[0] += GDRILL_ON * c["x32"] * OM3l
-    BGh[1] += -GDRILL_ON * c["x31"] * OM3h; BGl[1] += -GDRILL_ON * c["x31"] * OM3l
+    # ============ TRANSVERSE SHEAR (GENERAL, paper Shell-Strains 2eps13/2eps23) ==========
+    # EXACT drilling-ELIMINATED general transverse shear from the RM paper.  omega_3 is
+    # substituted algebraically through C33^ab -- the x_{3;2}/(2C33), x_{3;1}/(2C33) factors
+    # ARE that substitution (so NO separate drilling boost is needed).  Using C^ab (Eq.1):
+    #   C31=y1, C33=y3, C32=y2, C23=x_{3;2}=x32, C13=x_{3;1}=x31,
+    #   C_{2a}=x_{a;2}, C_{1a}=x_{a;1}, C_{3a}=y_a, C_{3i}=y_i, and y_{j;a}=delta_{ja}:
+    #  2eps13 = x11 C31 e11
+    #         + [ x2( (x32^2 x11 - x32 x31 x12)/(2C33) + C33 x11 )
+    #            -x3( (x32 x22 x11 - x32 x21 x12)/(2C33) + C32 x11 ) ] k1
+    #         + x11 C31 x3 k2  - x11 C31 x2 k3
+    #         + ( x32 x_{i;2}/(2C33) + y_i ) w_{i|1}  - ( x32 x_{i;1}/(2C33) ) w_{i|2}
+    #         + ( C_{2a} - C23 C_{3a}/C33 ) om_a
+    #         + x11 ( x32 x_{i;2}/(2C33) + y_i ) w'_i         # Gamma_l  (== eq:prism underlined)
+    #  2eps23 : x11<->x12, x32<->x31, w_{i|1}<->w_{i|2}; om coeff = -C_{1a} + C13 C_{3a}/C33.
+    # PRISMATIC (x12=x31=y1=0, y3=xd2, x32=xd3, y2=-xd3) reproduces eq:prism 2gamma_13/23
+    # EXACTLY: omega_2/xd2, the k1 swept term x2(xd2+xd3^2/2xd2)+x3 xd3/2, the -wd1 xd3/2xd2,
+    # and the w' pair -w'_2 xd3/2 + w'_3 (xd2 + xd3^2/2xd2).  (C32=y2 fixed by this identity.)
+    c33 = _c33_floor(c["y3"])
+    y1, y2 = c["y1"], c["y2"]; x31, x32 = c["x31"], c["x32"]; x21, x22 = c["x21"], c["x22"]
+    k1_13 = (x2 * ((x32 * x32 * x11 - x32 * x31 * x12) / (2 * c33) + c["y3"] * x11)
+             - x3 * ((x32 * x22 * x11 - x32 * x21 * x12) / (2 * c33) + y2 * x11))
+    k1_23 = (x2 * ((x31 * x31 * x12 - x31 * x32 * x11) / (2 * c33) + c["y3"] * x12)
+             - x3 * ((x31 * x21 * x12 - x31 * x22 * x11) / (2 * c33) + y2 * x12))
+    BGe[0] = np.array([x11 * y1, k1_13, x11 * y1 * x3, -x11 * y1 * x2])
+    BGe[1] = np.array([x12 * y1, k1_23, x12 * y1 * x3, -x12 * y1 * x2])
     for a in range(4):
         o = NDOF * a
         for i in range(3):
-            BGh[0, o + i] += yv[i] * D1[a]                    # y_i w_{i|1}
-            BGl[0, o + i] += x11 * yv[i] * N[a]               # x11 y_i w'_i
-            BGh[1, o + i] += yv[i] * D2[a]                    # y_i w_{i|2}
-            BGl[1, o + i] += x12 * yv[i] * N[a]               # x12 y_i w'_i
-        BGh[0, o + 3] += c["x12"] * N[a]                      # Omega_2: x_{1;2} om_1
-        BGh[0, o + 4] += c["x22"] * N[a]                      #          x_{2;2} om_2
-        BGh[1, o + 3] += -c["x11"] * N[a]                     # -Omega_1: x_{1;1} om_1
-        BGh[1, o + 4] += -c["x21"] * N[a]                     #           x_{2;1} om_2
+            a13 = x32 * xi2[i] / (2 * c33) + yv[i]           # 2eps13 w_{i|1} coeff (w'_i = x11*a13)
+            b13 = -x32 * xi1[i] / (2 * c33)                  # 2eps13 w_{i|2} coeff
+            a23 = x31 * xi1[i] / (2 * c33) + yv[i]           # 2eps23 w_{i|2} coeff (w'_i = x12*a23)
+            b23 = -x31 * xi2[i] / (2 * c33)                  # 2eps23 w_{i|1} coeff
+            BGh[0, o + i] += a13 * D1[a] + b13 * D2[a]
+            BGl[0, o + i] += x11 * a13 * N[a]
+            BGh[1, o + i] += a23 * D2[a] + b23 * D1[a]
+            BGl[1, o + i] += x12 * a23 * N[a]
+        BGh[0, o + 3] += (x12 - x32 * y1 / c33) * N[a]       # 2eps13 om_1: C_21 - C23 C31/C33
+        BGh[0, o + 4] += (x22 - x32 * y2 / c33) * N[a]       #          om_2: C_22 - C23 C32/C33
+        BGh[1, o + 3] += (-x11 + x31 * y1 / c33) * N[a]      # 2eps23 om_1: -C_11 + C13 C31/C33
+        BGh[1, o + 4] += (-x21 + x31 * y2 / c33) * N[a]      #          om_2: -C_12 + C13 C32/C33
     return BDe, BDh, BDl, BGe, BGh, BGl, dA
 
 
