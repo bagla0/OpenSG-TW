@@ -47,14 +47,15 @@ def tag_of(regime, mat, aR):
 
 
 # ------------------------------------------------------------------ mesh gen
-def gen_case(regime, mat, aR, mesh_dir=None):
+def gen_case(regime, mat, aR, mesh_dir=None, nc=None, nl=None, nr=None):
     mesh_dir = mesh_dir or MESH
     os.makedirs(mesh_dir, exist_ok=True)
+    nc = nc or NC; nl = nl or NL; nr = nr or NR       # circumferential / axial / through-thickness
     t = THICK[regime]
     matc = ISO if mat == "iso" else ANI
     layup = [["iso", t, 0.0]] if mat == "iso" else [["ani", t, -45.0]]   # single ply
     tg = tag_of(regime, mat, aR)
-    Z = [L * i / NL for i in range(NL + 1)]
+    Z = [L * i / nl for i in range(nl + 1)]
 
     def radius(z):
         return R0 + (aR * R0 - R0) * (z / L)
@@ -78,15 +79,15 @@ def gen_case(regime, mat, aR, mesh_dir=None):
     snodes, squads, soris = [], [], []
     for i, z in enumerate(Z):
         r = radius(z)
-        for k in range(NC):
-            th = 2 * math.pi * k / NC
+        for k in range(nc):
+            th = 2 * math.pi * k / nc
             snodes.append([r * math.cos(th), r * math.sin(th), float(z)])
-    for i in range(NL):
-        for k in range(NC):
-            k1 = (k + 1) % NC
-            n0 = i * NC + k; n1 = i * NC + k1; n2 = (i + 1) * NC + k1; n3 = (i + 1) * NC + k
+    for i in range(nl):
+        for k in range(nc):
+            k1 = (k + 1) % nc
+            n0 = i * nc + k; n1 = i * nc + k1; n2 = (i + 1) * nc + k1; n3 = (i + 1) * nc + k
             squads.append([n0 + 1, n1 + 1, n2 + 1, n3 + 1])
-            e1, e2, e3 = surf_frame(2 * math.pi * (k + 0.5) / NC)
+            e1, e2, e3 = surf_frame(2 * math.pi * (k + 0.5) / nc)
             soris.append(e1 + e2 + e3)
     shell = {"nodes": snodes, "elements": squads,
              "sections": [{"elementSet": "wall", "layup": layup}],
@@ -97,26 +98,26 @@ def gen_case(regime, mat, aR, mesh_dir=None):
     yaml.safe_dump(shell, open(os.path.join(mesh_dir, "shell_%s.yaml" % tg), "w"),
                    default_flow_style=None, sort_keys=False)
 
-    # ---- solid (NR through-thickness layers about the mid-surface) ----
+    # ---- solid (nr through-thickness layers about the mid-surface) ----
     def nid(i, m, k):
-        return i * ((NR + 1) * NC) + m * NC + (k % NC) + 1
+        return i * ((nr + 1) * nc) + m * nc + (k % nc) + 1
     dn = []
     for i, z in enumerate(Z):
         r = radius(z)
-        for m in range(NR + 1):
-            rr = r + (m / NR - 0.5) * t
-            for k in range(NC):
-                th = 2 * math.pi * k / NC
+        for m in range(nr + 1):
+            rr = r + (m / nr - 0.5) * t
+            for k in range(nc):
+                th = 2 * math.pi * k / nc
                 dn.append("%.10f %.10f %.10f" % (rr * math.cos(th), rr * math.sin(th), z))
     hexes, hories = [], []
-    for i in range(NL):
-        for m in range(NR):
-            for k in range(NC):
-                k1 = (k + 1) % NC
+    for i in range(nl):
+        for m in range(nr):
+            for k in range(nc):
+                k1 = (k + 1) % nc
                 hexes.append(" ".join(str(x) for x in
                                       [nid(i, m, k), nid(i, m, k1), nid(i, m + 1, k1), nid(i, m + 1, k),
                                        nid(i + 1, m, k), nid(i + 1, m, k1), nid(i + 1, m + 1, k1), nid(i + 1, m + 1, k)]))
-                a1, hoopl, nrm = surf_frame(2 * math.pi * (k + 0.5) / NC)
+                a1, hoopl, nrm = surf_frame(2 * math.pi * (k + 0.5) / nc)
                 a1 = np.array(a1); hoop = np.array(hoopl); e3 = np.array(nrm)
                 if mat == "iso":
                     e1 = a1                                              # fiber = in-surface axial
@@ -169,6 +170,72 @@ def arrow_pngs(tg, mesh_dir=None, ori_dir=None):
             p.add_text("%s %s : %s%s" % (kind.upper(), vec, tg, note), font_size=11)
             p.screenshot(os.path.join(ori_dir, "%s_%s_%s.png" % (tg, kind, vec)))
             p.close()
+
+
+def _load_mesh(tg, kind, mesh_dir):
+    d = yaml.safe_load(open(os.path.join(mesh_dir, "%s_%s.yaml" % (kind, tg))))
+    if kind == "shell":
+        nodes = np.array([[float(v) for v in n] for n in d["nodes"]])
+        elems = np.array([[int(v) - 1 for v in e] for e in d["elements"]])
+    else:
+        nodes = np.array([[float(v) for v in n[0].split()] for n in d["nodes"]])
+        elems = np.array([[int(v) - 1 for v in e[0].split()] for e in d["elements"]])
+    return nodes, elems, np.array(d["elementOrientations"])
+
+
+def arrow_strip(tg, kind, mesh_dir=None, out_dir=None):
+    """One HORIZONTAL image with e1(red) | e2(blue) | e3(black) side by side for
+    a single body (kind='shell' or 'solid').  e3 is the inward normal (its mean
+    e3.r_hat is annotated).  Returns the PNG path."""
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+    mesh_dir = mesh_dir or MESH; out_dir = out_dir or ORI
+    os.makedirs(out_dir, exist_ok=True)
+    nodes, elems, ori = _load_mesh(tg, kind, mesh_dir)
+    cent = nodes[elems].mean(1)
+    rhat = cent.copy(); rhat[:, 2] = 0.0
+    rhat /= np.linalg.norm(rhat, axis=1)[:, None] + 1e-30
+    e3dot = float(np.mean(np.sum(ori[:, 6:9] * rhat, axis=1)))
+    step = max(1, len(cent) // 220)
+    p = pv.Plotter(off_screen=True, shape=(1, 3), window_size=(1650, 620), border=False)
+    for c, (vec, off, col) in enumerate((("e1", 0, "red"), ("e2", 3, "blue"), ("e3", 6, "black"))):
+        p.subplot(0, c)
+        pd = pv.PolyData(cent[::step]); pd["v"] = ori[::step, off:off + 3]
+        p.add_mesh(pd.glyph(orient="v", scale=False, factor=0.20), color=col)
+        p.add_mesh(pv.PolyData(nodes), color="#cccccc", point_size=1.5, render_points_as_spheres=True)
+        note = "  (e3.rhat=%+.2f, inward)" % e3dot if vec == "e3" else ""
+        p.add_text("%s  %s%s" % (kind.upper(), vec, note), font_size=10)
+        p.camera_position = [(5.5, -5.5, 4.5), (0, 0, 1.0), (0, 0, 1)]
+    fn = os.path.join(out_dir, "%s_%s_strip.png" % (tg, kind))
+    p.screenshot(fn); p.close()
+    return fn
+
+
+def tapered_mesh_png(tg, kind, mesh_dir=None, out_dir=None):
+    """3-D image of the TAPERED mesh (shell mid-surface quads, or solid hex body),
+    one body per image.  Returns the PNG path."""
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+    mesh_dir = mesh_dir or MESH; out_dir = out_dir or ORI
+    os.makedirs(out_dir, exist_ok=True)
+    nodes, elems, _ = _load_mesh(tg, kind, mesh_dir)
+    if kind == "shell":
+        faces = np.hstack([np.full((len(elems), 1), 4), elems]).ravel()
+        grid = pv.PolyData(nodes, faces)
+        col = "#4c78a8"
+    else:
+        cells = np.hstack([np.full((len(elems), 1), 8), elems]).ravel()
+        ct = np.full(len(elems), pv.CellType.HEXAHEDRON, np.uint8)
+        grid = pv.UnstructuredGrid(cells, ct, nodes)
+        col = "#e07b39"
+    p = pv.Plotter(off_screen=True, window_size=(760, 900))
+    p.add_mesh(grid, color=col, show_edges=True, edge_color="#404040", line_width=0.6, opacity=1.0)
+    p.add_text("%s tapered mesh : %s" % (kind.upper(), tg), font_size=11)
+    p.add_axes(line_width=3)
+    p.camera_position = [(6.2, -6.2, 3.2), (0, 0, 1.0), (0, 0, 1)]
+    fn = os.path.join(out_dir, "%s_%s_mesh.png" % (tg, kind))
+    p.screenshot(fn); p.close()
+    return fn
 
 
 # ------------------------------------------------------------------ shell solve

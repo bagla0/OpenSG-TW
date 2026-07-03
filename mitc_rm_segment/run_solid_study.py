@@ -9,8 +9,9 @@ from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
 
 HERE = "/mnt/c/Users/bagla0/OneDrive - purdue.edu/2026_195/Claude_code/mitc_rm_segment"
-MESH = HERE + "/out/taper_study/meshes"
-RES = HERE + "/out/taper_study/results"
+STUDY = sys.argv[2] if len(sys.argv) > 2 else "taper_study"   # out/<STUDY>/{meshes,results}
+MESH = HERE + "/out/" + STUDY + "/meshes"
+RES = HERE + "/out/" + STUDY + "/results"
 os.makedirs(RES, exist_ok=True)
 
 only = sys.argv[1] if len(sys.argv) > 1 else ""            # substring filter, e.g. 'thin_iso'
