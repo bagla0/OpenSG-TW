@@ -377,8 +377,16 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
 # TRIANGLE HOOK: if a 3-node element type is added, register its MITC3 tying
 # (edge-midpoint tangential sampling, Lee-Bathe) under 'mitc3' here -- the
 # assembly only calls shear_rows_general(scheme, ...).
-_TIE_G23 = [(0.0, -1.0), (0.0, 1.0)]
-_TIE_G13 = [(-1.0, 0.0), (1.0, 0.0)]
+# Dvorkin-Bathe MITC4 tying (xi = hoop, eta = axial in these meshes):
+#   2*gamma_13 = axial(e1)-normal transverse shear -> constant in xi, LINEAR in eta,
+#                tied at the two eta-edge midpoints (0,+-1);
+#   2*gamma_23 = hoop(e2)-normal transverse shear  -> constant in eta, LINEAR in xi,
+#                tied at the two xi-edge midpoints (+-1,0).
+# (Earlier these were SWAPPED; the swap is invisible on the axisymmetric circle but
+# breaks GA2==GA3 on the tapered square, since gamma_13 must follow the AXIAL taper
+# variation -- eta -- not the hoop direction.)
+_TIE_G13 = [(0.0, -1.0), (0.0, 1.0)]     # gamma_13: sample along eta (axial)
+_TIE_G23 = [(-1.0, 0.0), (1.0, 0.0)]     # gamma_23: sample along xi  (hoop)
 SHEAR_SCHEMES = ("mitc4_both", "mitc4_g23", "reduced", "full")
 
 
@@ -387,15 +395,17 @@ def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4
         return quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax)[4]
     if scheme == "reduced":
         return quad_ops_general(X, e1m, e2m, e3m, 0.0, 0.0, k22, cross, ax)[4]
+    # gamma_23 (row 1): tied at (+-1,0), linear in xi
     r23 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][1:2, :]
            for (tx, te) in _TIE_G23]
-    g23 = 0.5 * (1.0 - eta) * r23[0] + 0.5 * (1.0 + eta) * r23[1]
+    g23 = 0.5 * (1.0 - xi) * r23[0] + 0.5 * (1.0 + xi) * r23[1]
     if scheme == "mitc4_g23":
         g13 = quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax)[4][0:1, :]
     else:                                                  # 'mitc4_both'
+        # gamma_13 (row 0): tied at (0,+-1), linear in eta
         r13 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][0:1, :]
                for (tx, te) in _TIE_G13]
-        g13 = 0.5 * (1.0 - xi) * r13[0] + 0.5 * (1.0 + xi) * r13[1]
+        g13 = 0.5 * (1.0 - eta) * r13[0] + 0.5 * (1.0 + eta) * r13[1]
     return np.vstack([g13, g23])
 
 

@@ -70,18 +70,23 @@ def compute_curvatures(centroids, e1s, e2s, e3s, elems):
     return K
 
 
-def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None):
+def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None, cop_tol=0.5):
     """Per-element hoop curvature k22 = d e3/ds . e2 (== -1/R for a circle with inward
     e3), estimated from hoop-aligned neighbours -- elements sharing a node whose
     centroid displacement is mostly along e2.  Works for the 1-D boundary contour
     (line elements) and the 2-D segment (quads); junction/isolated elements -> 0.
 
     Guards (the initial-curvature terms must never explode):
-      - per-neighbour estimates combined with the MEDIAN (robust to one cross-branch
-        neighbour at a web junction leaking the other branch's frame);
-      - FLAT elements snap to EXACTLY zero: |k22| < flat_tol (1e-3 ~ R > 1 km, far
-        below any real blade curvature ~0.1..20 1/m) -- a web/flat panel carries no
-        initial curvature;
+      - COPLANARITY filter (cop_tol): only neighbours whose e3 is within ~60 deg of
+        this element's e3 count.  Smooth curvature is a SMALL angle between adjacent
+        normals (well under 30 deg even on a coarse circle), so this keeps the real
+        curvature; a sharp FOLD (square corner, web junction) has near-perpendicular
+        normals (e3.e3 ~ 0) and is a discontinuity, NOT curvature -- counting it would
+        inject a spurious curvature spike that breaks section symmetry (square GA2!=GA3)
+        and blows up the boundary-ring torsion.  A fold's mechanics live in the mesh
+        connectivity, not a k22 term;
+      - per-neighbour estimates combined with the MEDIAN (robust to a stray branch);
+      - FLAT elements snap to EXACTLY zero: |k22| < flat_tol (1e-3 ~ R > 1 km);
       - optional |k22| <= k22_max cap for sharp trailing-edge spikes."""
     node2el = defaultdict(list)
     for ei, el in enumerate(elems):
@@ -93,6 +98,8 @@ def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None):
         neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
         ks = []
         for ej in neigh:
+            if float(np.dot(e3s[ej], e3s[ei])) < cop_tol:  # non-coplanar fold -> not curvature
+                continue
             disp = centroids[ej] - centroids[ei]; nd = float(np.linalg.norm(disp))
             if nd < 1e-12:
                 continue
