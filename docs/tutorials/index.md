@@ -1,9 +1,9 @@
 # Tutorials
 
-Four **executed** notebooks — each loads an OpenSG YAML, draws the $e_1/e_2/e_3$ material orientation,
-prints the **full Timoshenko $6\times6$**, and reports the per-term **%-diff on every non-zero $C_{ij}$**
-(not just the diagonal) against a benchmark. They are committed pre-run, so the numbers and figures you see
-are the real outputs. Every input is bundled in the repo under
+Six **executed** notebooks — each loads (or generates) an OpenSG YAML, draws the $e_1/e_2/e_3$ material
+orientation, prints the **full Timoshenko $6\times6$**, and reports the per-term **%-diff on every non-zero
+$C_{ij}$** (not just the diagonal) against a benchmark. They are committed pre-run, so the numbers and figures
+you see are the real outputs. Every input is bundled in the repo under
 [`examples/data/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data) — clone and run, no external paths.
 
 ::::{grid} 1 1 2 2
@@ -34,6 +34,20 @@ A thick-web blade station from both solid and shell — solid exact (quad mesh),
 Three BAR-URC tapered shell segments (5/12/15) — boundary rings + MITC-RM tapered 6×6 vs the 3-D solid
 at the same origin, plus the JAX-vs-OpenSG boundary-YAML equivalence check.
 :::
+
+:::{grid-item-card} 5 · Taper convergence (isotropic)
+:link: taper_convergence_iso
+:link-type: doc
+Incremental-taper sweep of the general RM taper operators on an isotropic tube, thin + thick wall —
+L/taper/R full 6×6 vs the 3-D solid, convergence plot, no shear locking.
+:::
+
+:::{grid-item-card} 6 · Taper convergence ([-45] aniso)
+:link: taper_convergence_m45
+:link-type: doc
+The same sweep with a single-ply −45° wall: surface-following fiber, anisotropic couplings,
+thin + thick tables and convergence plot vs the 3-D solid.
+:::
 ::::
 
 ```{list-table} Cross-sections and benchmarks used
@@ -60,6 +74,10 @@ at the same origin, plus the JAX-vs-OpenSG boundary-YAML equivalence check.
   - `data/3d_yaml/BAR_URC_numEl_52_segment_{5,12,15}.yaml`
   - `boundary_from_yaml.extract` + `solve_boundary_bundle` + `compute_timo_taper`
   - 3-D solid `data/benchmark/bar_urc_taper_solid_refs.npz`
+* - Taper convergence (iso / −45)
+  - `data/taper_study/meshes/*.yaml` (generated in-notebook)
+  - `taper_study.gen_case` + `ring_general` + `assemble_segment_general`
+  - 3-D solid `data/benchmark/taper_study_solid_{iso,m45}.npz`
 ```
 
 All paths are relative to [`examples/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples).

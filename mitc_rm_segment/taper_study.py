@@ -47,7 +47,9 @@ def tag_of(regime, mat, aR):
 
 
 # ------------------------------------------------------------------ mesh gen
-def gen_case(regime, mat, aR):
+def gen_case(regime, mat, aR, mesh_dir=None):
+    mesh_dir = mesh_dir or MESH
+    os.makedirs(mesh_dir, exist_ok=True)
     t = THICK[regime]
     matc = ISO if mat == "iso" else ANI
     layup = [["iso", t, 0.0]] if mat == "iso" else [["ani", t, -45.0]]   # single ply
@@ -56,6 +58,21 @@ def gen_case(regime, mat, aR):
 
     def radius(z):
         return R0 + (aR * R0 - R0) * (z / L)
+
+    dRdz = (aR * R0 - R0) / L                                 # taper rate (linear)
+
+    def surf_frame(th):
+        """SURFACE-FOLLOWING frame on the tapered wall (the reference frame):
+        e1 = in-surface AXIAL tangent = the slanted generator line,
+        e2 = hoop tangent (CCW),
+        e3 = TRUE INWARD surface normal (perp to the tapered wall, not radial).
+        For a prismatic tube (dRdz=0) this reduces to the axial/hoop/inward triad."""
+        gen = np.array([dRdz * math.cos(th), dRdz * math.sin(th), 1.0])
+        e1 = (gen / np.linalg.norm(gen)).tolist()
+        e2 = [-math.sin(th), math.cos(th), 0.0]
+        nrm = np.array([-math.cos(th), -math.sin(th), dRdz])   # inward, perp to surface
+        e3 = (nrm / np.linalg.norm(nrm)).tolist()
+        return e1, e2, e3
 
     # ---- shell (mid-surface) ----
     snodes, squads, soris = [], [], []
@@ -69,17 +86,15 @@ def gen_case(regime, mat, aR):
             k1 = (k + 1) % NC
             n0 = i * NC + k; n1 = i * NC + k1; n2 = (i + 1) * NC + k1; n3 = (i + 1) * NC + k
             squads.append([n0 + 1, n1 + 1, n2 + 1, n3 + 1])
-            tm = 2 * math.pi * (k + 0.5) / NC
-            e2 = [-math.sin(tm), math.cos(tm), 0.0]           # hoop (CCW)
-            e3 = [-math.cos(tm), -math.sin(tm), 0.0]          # INWARD normal (reference)
-            soris.append([0.0, 0.0, 1.0] + e2 + e3)           # e1 = axial
+            e1, e2, e3 = surf_frame(2 * math.pi * (k + 0.5) / NC)
+            soris.append(e1 + e2 + e3)
     shell = {"nodes": snodes, "elements": squads,
              "sections": [{"elementSet": "wall", "layup": layup}],
              "sets": {"element": [{"name": "wall", "labels": list(range(1, len(squads) + 1))}]},
              "materials": [{"name": matc["name"], "density": matc["rho"],
                             "elastic": {"E": matc["E"], "G": matc["G"], "nu": matc["nu"]}}],
              "elementOrientations": soris}
-    yaml.safe_dump(shell, open(os.path.join(MESH, "shell_%s.yaml" % tg), "w"),
+    yaml.safe_dump(shell, open(os.path.join(mesh_dir, "shell_%s.yaml" % tg), "w"),
                    default_flow_style=None, sort_keys=False)
 
     # ---- solid (NR through-thickness layers about the mid-surface) ----
@@ -101,14 +116,13 @@ def gen_case(regime, mat, aR):
                 hexes.append(" ".join(str(x) for x in
                                       [nid(i, m, k), nid(i, m, k1), nid(i, m + 1, k1), nid(i, m + 1, k),
                                        nid(i + 1, m, k), nid(i + 1, m, k1), nid(i + 1, m + 1, k1), nid(i + 1, m + 1, k)]))
-                tm = 2 * math.pi * (k + 0.5) / NC
-                hoop = np.array([-math.sin(tm), math.cos(tm), 0.0])
-                e3 = np.array([-math.cos(tm), -math.sin(tm), 0.0])       # INWARD (matches shell)
+                a1, hoopl, nrm = surf_frame(2 * math.pi * (k + 0.5) / NC)
+                a1 = np.array(a1); hoop = np.array(hoopl); e3 = np.array(nrm)
                 if mat == "iso":
-                    e1 = np.array([0.0, 0.0, 1.0])
-                else:                                                    # fiber at -45
+                    e1 = a1                                              # fiber = in-surface axial
+                else:                                                    # fiber at -45 IN the surface
                     ca, sa = math.cos(math.radians(-45)), math.sin(math.radians(-45))
-                    e1 = ca * np.array([0.0, 0.0, 1.0]) + sa * hoop
+                    e1 = ca * a1 + sa * hoop
                 e1 = e1 / np.linalg.norm(e1)
                 e2 = np.cross(e3, e1)
                 hories.append([float(v) for v in np.concatenate([e1, e2, e3])])
@@ -116,18 +130,20 @@ def gen_case(regime, mat, aR):
     solid = {"nodes": [[s] for s in dn], "elements": [[h] for h in hexes],
              "sets": {"element": [{"name": matc["name"], "labels": list(range(1, len(hexes) + 1))}]},
              "elementOrientations": hories, "materials": mats}
-    yaml.safe_dump(solid, open(os.path.join(MESH, "solid_%s.yaml" % tg), "w"),
+    yaml.safe_dump(solid, open(os.path.join(mesh_dir, "solid_%s.yaml" % tg), "w"),
                    default_flow_style=None, sort_keys=False)
     return tg
 
 
-def arrow_pngs(tg):
+def arrow_pngs(tg, mesh_dir=None, ori_dir=None):
+    mesh_dir = mesh_dir or MESH; ori_dir = ori_dir or ORI
+    os.makedirs(ori_dir, exist_ok=True)
     """SEPARATE e1(red)/e2(blue)/e3(black) arrow images for shell AND solid,
     e3 = inward normal (annotated with the measured e3.r_hat)."""
     import pyvista as pv
     pv.OFF_SCREEN = True
     for kind in ("shell", "solid"):
-        d = yaml.safe_load(open(os.path.join(MESH, "%s_%s.yaml" % (kind, tg))))
+        d = yaml.safe_load(open(os.path.join(mesh_dir, "%s_%s.yaml" % (kind, tg))))
         if kind == "shell":
             nodes = np.array([[float(v) for v in n] for n in d["nodes"]])
             elems = np.array([[int(v) - 1 for v in e] for e in d["elements"]])
@@ -151,12 +167,14 @@ def arrow_pngs(tg):
             p.camera_position = [(5.5, -5.5, 4.5), (0, 0, 1.0), (0, 0, 1)]
             note = "  (e3.r_hat = %+.2f -> INWARD)" % e3dot if vec == "e3" else ""
             p.add_text("%s %s : %s%s" % (kind.upper(), vec, tg, note), font_size=11)
-            p.screenshot(os.path.join(ORI, "%s_%s_%s.png" % (tg, kind, vec)))
+            p.screenshot(os.path.join(ori_dir, "%s_%s_%s.png" % (tg, kind, vec)))
             p.close()
 
 
 # ------------------------------------------------------------------ shell solve
-def shell_solve(tg, shear="mitc4_both"):
+def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
+    mesh_dir = mesh_dir or MESH; res_dir = res_dir or RES
+    os.makedirs(res_dir, exist_ok=True)
     import io, contextlib
     import jax.numpy as jnp
     from boundary_from_yaml import extract
@@ -165,9 +183,9 @@ def shell_solve(tg, shear="mitc4_both"):
     from solve_segment_jax import _material_by_section
     from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
-    npz = os.path.join(RES, "shell_%s.npz" % tg)
+    npz = os.path.join(res_dir, "shell_%s.npz" % tg)
     with contextlib.redirect_stdout(io.StringIO()):
-        extract(os.path.join(MESH, "shell_%s.yaml" % tg), npz)
+        extract(os.path.join(mesh_dir, "shell_%s.yaml" % tg), npz)
     b = np.load(npz, allow_pickle=True)
     ax = int(b["axis"]); cross = tuple(j for j in range(3) if j != ax)
     nodes = np.asarray(b["seg_x"]); quads = np.asarray(b["seg_cells"]); sd = np.asarray(b["seg_subdom"])
@@ -183,7 +201,7 @@ def shell_solve(tg, shear="mitc4_both"):
         kr = compute_k22(rx[rc].mean(1), np.asarray(b["%s_e2" % side]), re3, rc)
         C6r, V0r, V1r = ring_general(rx, rc, rs, re3, D_by, G_by, kr, ax, list(cross), shear=shear)
         rings[side] = dict(C6=C6r, V0=V0r, V1=V1r)
-        np.save(os.path.join(RES, "rm_%s_%s.npy" % (tg, side)), C6r)
+        np.save(os.path.join(res_dir, "rm_%s_%s.npy" % (tg, side)), C6r)
 
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_general(
         nodes, quads, sd, e1s, e2s, e3s, D_by, G_by, k22_e, cross, shear=shear)
@@ -212,7 +230,7 @@ def shell_solve(tg, shear="mitc4_both"):
         jnp.array(np.asarray(V0DllV0) / Lz), jnp.array(np.asarray(DhlV0) / Lz),
         jnp.array(np.asarray(DhlTV0Dle) / Lz), jnp.array(Psi), jnp.array(Dc))
     S6 = 0.5 * (np.asarray(S6) + np.asarray(S6).T)
-    np.save(os.path.join(RES, "rm_%s_seg.npy" % tg), S6)
+    np.save(os.path.join(res_dir, "rm_%s_seg.npy" % tg), S6)
     return rings["L"]["C6"], S6, rings["R"]["C6"]
 
 
