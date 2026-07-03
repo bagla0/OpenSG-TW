@@ -40,9 +40,17 @@ def load_segment_yaml(path):
 def subdomain_ids(seg):
     ne = len(seg["elements"])
     subdom = np.zeros(ne, dtype=np.int32)
+    # OpenSG Shell_3D_Taper files use 0-INDEXED element ids in the sets (matching
+    # their 0-indexed connectivity); our cylinder generator writes 1-indexed.
+    # Detect: a label of 0 can only be 0-indexed.  (The old unconditional lab-1
+    # shifted every label one element spanwise, corrupting exactly the LAST strip
+    # -> R-boundary ring labels shifted one position along the hoop while L stayed
+    # correct -- see ref_bar_urc_shell_spar_mislabel.)
+    labs_min = min(min(es["labels"]) for es in seg["sets"]["element"] if es["labels"])
+    off = 0 if labs_min == 0 else 1
     for i, es in enumerate(seg["sets"]["element"]):
-        for lab in es["labels"]:                       # 1-indexed element ids
-            subdom[lab - 1] = i
+        for lab in es["labels"]:
+            subdom[lab - off] = i
     return subdom
 
 
@@ -173,12 +181,13 @@ def extract(seg_yaml, out_npz, write_yaml=False):
         re1 = np.array([e1s[q] for q in oq])                  # full 3-D parent frame (axis-agnostic;
         re2 = np.array([e2s[q] for q in oq])                  # for axis=x the x-comp of e2/e3 is ~0,
         re3 = np.array([e3s[q] for q in oq])                  # so this is unchanged for the cylinder)
+        edge_sub = np.array([int(subdom[q]) for q in oq], np.int32)
         okr, txtr = frame_report(rx, rcells, re1, re2, re3); print("  %s-ring %s" % (side, txtr))
         orientation_png_ring(rx, rcells, re2, re3, os.path.join(out_dir, "orient_%s_ring_%s.png" % (tag, side)),
                              title="%s %s-ring e2/e3" % (tag, side))
         bundle["%s_x" % side] = rx
         bundle["%s_cells" % side] = rcells
-        bundle["%s_subdom" % side] = np.array([int(subdom[q]) for q in oq], np.int32)
+        bundle["%s_subdom" % side] = edge_sub
         bundle["%s_e1" % side] = re1; bundle["%s_e2" % side] = re2; bundle["%s_e3" % side] = re3
         bundle["%s_node2seg" % side] = np.array(comp, dtype=np.int64)
     np.savez(out_npz, **bundle)

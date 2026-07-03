@@ -72,10 +72,13 @@ def write_gmsh(seg, msh_path):
     elements = seg["elements"]           # 1-indexed quads [n1 n2 n3 n4]
 
     # subdomain (layup) id per element, from the element sets
+    # (labels may be 0- or 1-indexed; a 0 label can only be 0-indexed)
     subdom = np.zeros(len(elements), dtype=int)
+    labs_min = min(min(es["labels"]) for es in seg["sets"]["element"] if es["labels"])
+    off = 0 if labs_min == 0 else 1
     for i, es in enumerate(seg["sets"]["element"]):
-        for lab in es["labels"]:         # labels are 1-indexed element ids
-            subdom[lab - 1] = i
+        for lab in es["labels"]:
+            subdom[lab - off] = i
 
     with open(msh_path, "w") as m:
         m.write("$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n")
@@ -127,11 +130,13 @@ def build_frame(mesh, element_orientations, original_cell_index):
 
 
 # ----------------------------------------------------------------- boundary rings
-def extract_ring(mesh, cell_subdom, e1, e2, e3, x_target, tol=1e-6):
-    """Extract one end cross-section (a 1-D ring) at x == x_target.
+def extract_ring(mesh, cell_subdom, e1, e2, e3, x_target=None, tol=1e-6, facets=None):
+    """Extract one end cross-section (a 1-D ring).
 
     Follows ShellSegmentMesh._build_boundary_submeshdata:
-      1. locate facets on the plane x = x_target,
+      1. select the cross-section facets -- either the given `facets` array
+         (robust path: exterior facets partitioned by end), or the plane
+         x == x_target (legacy prismatic path),
       2. create_submesh -> standalone 1-D ring + maps to the parent,
       3. copy the material frame + subdomain from the PARENT cell that owns
          each ring facet (on the cross-section the axial component of the
@@ -143,10 +148,11 @@ def extract_ring(mesh, cell_subdom, e1, e2, e3, x_target, tol=1e-6):
     tdim = mesh.topology.dim          # 2 (surface)
     fdim = tdim - 1                   # 1 (edges = cross-section facets)
 
-    def on_plane(x):
-        return np.isclose(x[0], x_target, atol=tol)
-
-    facets = dolfinx.mesh.locate_entities_boundary(mesh, fdim, on_plane)
+    if facets is None:                # legacy plane selection (prismatic meshes)
+        def on_plane(x):
+            return np.isclose(x[0], x_target, atol=tol)
+        facets = dolfinx.mesh.locate_entities_boundary(mesh, fdim, on_plane)
+    facets = np.asarray(facets, dtype=np.int32)
     ring, entity_map, vertex_map, geom_map = dolfinx.mesh.create_submesh(mesh, fdim, facets)
 
     # parent facet -> parent cell (to inherit material data onto the ring)
@@ -192,8 +198,17 @@ def extract(seg_yaml, out_npz, work_msh="SG_mesh.msh"):
 
     xg = mesh.geometry.x
     x_min, x_max = float(xg[:, 0].min()), float(xg[:, 0].max())
-    left = extract_ring(mesh, cell_subdom, e1, e2, e3, x_min)
-    right = extract_ring(mesh, cell_subdom, e1, e2, e3, x_max)
+    # ROBUST end selection (twisted blade end faces are NOT planar): take ALL
+    # exterior facets (the dolfinx facet->one-cell criterion, exactly what
+    # ShellSegmentMesh uses) and partition them by which end their midpoint is
+    # nearer.  No plane tolerance involved.
+    tdim = mesh.topology.dim; fdim = tdim - 1
+    mesh.topology.create_connectivity(fdim, tdim)
+    ext = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+    mid = dolfinx.mesh.compute_midpoints(mesh, fdim, np.asarray(ext, dtype=np.int32))
+    xc = 0.5 * (x_min + x_max)
+    left = extract_ring(mesh, cell_subdom, e1, e2, e3, facets=ext[mid[:, 0] < xc])
+    right = extract_ring(mesh, cell_subdom, e1, e2, e3, facets=ext[mid[:, 0] >= xc])
 
     # segment connectivity in dolfinx order (Ne, 4)
     mesh.topology.create_connectivity(mesh.topology.dim, 0)
