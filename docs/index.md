@@ -56,6 +56,8 @@ tutorials/st15_solid_vs_shell
 tutorials/taper_3dsg_segment
 tutorials/taper_convergence_iso
 tutorials/taper_convergence_m45
+tutorials/taper_square_iso
+tutorials/taper_square_m45
 ```
 
 ```{toctree}
