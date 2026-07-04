@@ -116,6 +116,38 @@ def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None, cop_tol
     return k22
 
 
+def compute_kg(centroids, e1s, e2s, e3s, elems, flat_tol=1e-3, cop_tol=0.5):
+    """Per-element GEODESIC curvature of the hoop coordinate line:
+    kg = d(e1)/ds . e2 -- the in-surface rotation rate of the axial tangent along
+    the hoop.  Zero for a prismatic tube and on any FLAT wall; ~ (taper rate)/R on
+    a tapered curved wall (the hoop circles of a cone are not surface geodesics).
+    Same neighbour estimate/guards as compute_k22 (hoop-aligned neighbours,
+    coplanarity filter, median, flat snap-to-zero)."""
+    node2el = defaultdict(list)
+    for ei, el in enumerate(elems):
+        for n in el:
+            node2el[int(n)].append(ei)
+    centroids = np.asarray(centroids); e1s = np.asarray(e1s)
+    e2s = np.asarray(e2s); e3s = np.asarray(e3s)
+    kg = np.zeros(len(elems))
+    for ei in range(len(elems)):
+        neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
+        ks = []
+        for ej in neigh:
+            if float(np.dot(e3s[ej], e3s[ei])) < cop_tol:  # non-coplanar fold
+                continue
+            disp = centroids[ej] - centroids[ei]; nd = float(np.linalg.norm(disp))
+            if nd < 1e-12:
+                continue
+            ds = float(np.dot(disp, e2s[ei]))
+            if abs(ds) < 0.5 * nd:                         # hoop-direction neighbours only
+                continue
+            ks.append(float(np.dot(e1s[ej] - e1s[ei], e2s[ei])) / ds)
+        k = float(np.median(ks)) if ks else 0.0
+        kg[ei] = 0.0 if abs(k) < flat_tol else k
+    return kg
+
+
 # --------------------------------------------------------------- quad kinematics
 def _bilinear(xi, eta):
     """4-node bilinear N and parametric derivatives at (xi,eta) in [-1,1]^2.

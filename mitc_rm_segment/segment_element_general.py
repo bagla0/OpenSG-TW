@@ -175,18 +175,24 @@ def _omega3_ops(N, D1, D2, c, k22):
     return OM3_SIGN*OM3h, OM3_SIGN*OM3l, OM3_SIGN*OM3e, OM3_SIGN*OM3pl
 
 
-def _lambda_ops(N, D1, D2, c, k22, alpha):
-    """Lambda_alpha = omega'_3 x_{1;alpha} + omega_{3|alpha}   (A.6)
+def _lambda_ops(N, D1, D2, c, k22, kg, alpha):
+    """Lambda_alpha = omega'_3 x_{1;alpha} + omega_{3|alpha}  (paper Eq. omega3alpha),
+    with the geometric coefficient derivatives modeled by the DARBOUX frame of the
+    hoop coordinate line (verified against exact FD geometry, verify_strains_paper):
 
-    omega_{3|alpha} = d/dzeta_alpha of the omega_3 operator:
-      (i)  shape part:  -(C3b/C33) omega_{b|alpha}   [KEPT: first derivative]
-           w_{i|1|alpha}, w_{i|2|alpha}              [SECOND derivative: DROPPED
-                                                      -- C0-RM cannot resolve]
-      (ii) coefficient part (alpha=2 only; hoop Frenet with wall curvature k22):
-             (x_{i;2})_{;2} = k22 y_i     (y_i)_{;2} = -k22 x_{i;2}
-             (x_i)_{;2}     = x_{i;2}     (x_{i;1})_{;2} = 0  [geodesic: dropped]
-           all (.)_{;1} coefficient derivatives (frame taper rate): DROPPED
-           (higher order; flat-ish quads).
+      along zeta_2 (hoop):   (a1)_{;2} = kg a2
+                             (a2)_{;2} = -k22 n - kg a1
+                             (n)_{;2}  = +k22 a2         [surface torsion ~ 0]
+      along zeta_1 (axial):  frame derivatives = 0 (straight generators of a
+                             linear taper -- verified exactly axially invariant);
+                             COORDINATE derivatives survive: (x_i)_{;1} = x_{i;1},
+                             so Rn2_{;1} = x21 x32 - x31 x22 != 0 under taper.
+
+    k22 = hoop normal curvature (d e3/ds . e2), kg = hoop GEODESIC curvature
+    (d e1/ds . e2; 0 prismatic/flat wall, ~ taper x 1/R on a tapered curved wall).
+
+    DROPPED (documented): w_{i|1|alpha}, w_{i|2|alpha} (2nd SG derivatives --
+    C0-RM cannot resolve) and the kappa'_11 (eb-derivative) term.
     Returns (Lh(20,), Ll(20,), Le(4,)) acting on (w, w', eb).
     """
     x11, x12 = c["x11"], c["x12"]
@@ -194,66 +200,61 @@ def _lambda_ops(N, D1, D2, c, k22, alpha):
     xi2 = np.array([x12, c["x22"], c["x32"]])
     yv = np.array([c["y1"], c["y2"], c["y3"]])
     C33 = _c33_floor(c["y3"])
+    x2, x3 = c["x2"], c["x3"]
+    Rn1 = x2 * xi1[2] - x3 * xi1[1]
+    Rn2 = x2 * xi2[2] - x3 * xi2[1]
     x1a = x11 if alpha == 1 else x12                      # x_{1;alpha}
     Da = D1 if alpha == 1 else D2
+
+    # geometric coefficient derivatives (.)_{;alpha} from the Darboux model
+    if alpha == 1:
+        xi1_a = np.zeros(3); xi2_a = np.zeros(3); yv_a = np.zeros(3)
+        x2_a, x3_a = xi1[1], xi1[2]                       # (x_i)_{;1} = x_{i;1}
+    else:
+        xi1_a = kg * xi2
+        xi2_a = -k22 * yv - kg * xi1
+        yv_a = k22 * xi2
+        x2_a, x3_a = xi2[1], xi2[2]                       # (x_i)_{;2} = x_{i;2}
+    C33_a = yv_a[2]
+    Rn1_a = x2_a * xi1[2] + x2 * xi1_a[2] - x3_a * xi1[1] - x3 * xi1_a[1]
+    Rn2_a = x2_a * xi2[2] + x2 * xi2_a[2] - x3_a * xi2[1] - x3 * xi2_a[1]
+    tw = 2.0 * C33
+    dinv = -(2.0 * C33_a) / (tw * tw)                     # d/dz_alpha [1/(2C33)]
 
     OM3h, OM3l, OM3e, OM3pl = _omega3_ops(N, D1, D2, c, k22)
     Lh = np.zeros(4 * NDOF); Ll = np.zeros(4 * NDOF); Le = np.zeros(4)
     sgn = OM3_SIGN                                        # every Lambda term carries omega_3's sign
 
-    # ---- omega'_3 x_{1;alpha} : acts on the w' field ----
+    # ---- t1: kappa_1 coefficient-derivative group (paper line 882-883) ----
+    Le[1] += sgn * ((xi1_a[0] * Rn2 + x11 * Rn2_a - xi2_a[0] * Rn1 - x12 * Rn1_a) / tw
+                    + (x11 * Rn2 - x12 * Rn1) * dinv)
+
+    # ---- t4 + omega' parts: x_{1;alpha} * omega'_3  (OM3pl carries the
+    #      w'_{i|1}, w'_{i|2} shape parts and -(C3b/C33) omega'_b) ----
     Ll += x1a * OM3pl                                     # (OM3pl already sign-scaled)
 
-    # ---- omega_{3|alpha}, shape part: -(C3b/C33) omega_{b|alpha} ----
     for a in range(4):
         o = NDOF * a
+        # ---- t8 shape: -(C3b/C33) omega_{b|alpha} ----
         Lh[o + 3] += -sgn * (yv[0] / C33) * Da[a]
         Lh[o + 4] += -sgn * (yv[1] / C33) * Da[a]
-
-    # ---- omega_{3|alpha}, shape part on the S w'-term: w'_{i|alpha} (a FIRST
-    #      derivative of the w' FIELD -- resolvable, carried by Gamma_l) ----
-    for a in range(4):
-        o = NDOF * a
+        # ---- t8 coefficient: -om_b (y_{b;alpha} C33 - C33_alpha y_b)/C33^2 ----
+        for b in range(2):
+            Lh[o + 3 + b] += -sgn * ((yv_a[b] * C33 - C33_a * yv[b]) / (C33 * C33)) * N[a]
         for i in range(3):
-            Ll[o + i] += sgn * (x11 * xi2[i] - x12 * xi1[i]) * Da[a] / (2 * C33)
-
-    if alpha == 2:
-        # ---- omega_{3|2}, coefficient part (hoop Frenet with wall curvature
-        #      k22, INWARD normal, k22=-1/R convention:
-        #        (x_{i;2})_{;2} = da2/ds = -k22 y_i        (dt/ds = -k22 n)
-        #        (y_i)_{;2}     = dn/ds  = +k22 x_{i;2}    (dn/ds = +k22 t)
-        #        (x_i)_{;2}     = x_{i;2} ;  (x_{i;1})_{;2} = 0 [geodesic dropped]
-        #      -- verified row-by-row against eq:prism (check_rows.py) ----
-        Rn2 = c["x2"] * c["x32"] - c["x3"] * c["x22"]
-        Rn1 = c["x2"] * c["x31"] - c["x3"] * c["x21"]
-        # (1/2C33)_{;2} = -(y3)_{;2}/(2 C33^2) = -k22 x32/(2 C33^2)
-        dinvC = -k22 * c["x32"] / (2 * C33 * C33)
-        # (Rn2)_{;2} = x22 x32 - x32 x22 + x2(-k22 y3) - x3(-k22 y2)
-        #            = -k22 (x2 y3 - x3 y2)
-        dRn2 = -k22 * (c["x2"] * c["y3"] - c["x3"] * c["y2"])
-        # (Rn1)_{;2} (x_{i;1} frozen): x22 x31 - x32 x21
-        dRn1 = c["x22"] * c["x31"] - c["x32"] * c["x21"]
-        # S-coefficient derivatives -> macro (k1) row
-        Le[1] += sgn * ((x11 * dRn2 - x12 * dRn1) / (2 * C33)
-                        + (x11 * Rn2 - x12 * Rn1) * dinvC)
-        for a in range(4):
-            o = NDOF * a
-            for i in range(3):
-                # w'-coefficient: d/dz2 [ (x11 xi2 - x12 xi1)/(2C33) ]
-                Ll[o + i] += sgn * ((x11 * (-k22) * yv[i]) * N[a] / (2 * C33)
-                                    + (x11 * xi2[i] - x12 * xi1[i]) * N[a] * dinvC)
-                # w_{i|1},w_{i|2}-coefficient derivatives (shape part stays 1st-order)
-                Lh[o + i] += sgn * (((-k22) * yv[i]) * D1[a] / (2 * C33)
-                                    + (xi2[i] * D1[a] - xi1[i] * D2[a]) * dinvC)
-            # -(C3b/C33) coefficient derivative:
-            #   (yb/C33)_{;2} = (+k22 x_{b;2} C33 - yb (+k22 x32)) / C33^2
-            for b, (yb, xb2) in enumerate(((yv[0], c["x12"]), (yv[1], c["x22"]))):
-                dcoef = (k22 * xb2 * C33 - yb * k22 * c["x32"]) / (C33 * C33)
-                Lh[o + 3 + b] += -sgn * dcoef * N[a]
+            # ---- t3: w'_{i|alpha} (first derivative of the independent w' field) ----
+            Ll[o + i] += sgn * (x11 * xi2[i] - x12 * xi1[i]) * Da[a] / tw
+            # ---- t5: w'_i coefficient-derivative group (paper line 887-888) ----
+            Ll[o + i] += sgn * ((xi1_a[0] * xi2[i] + x11 * xi2_a[i]
+                                 - xi2_a[0] * xi1[i] - x12 * xi1_a[i]) / tw
+                                + (x11 * xi2[i] - x12 * xi1[i]) * dinv) * N[a]
+            # ---- t7: w_{i|1}, w_{i|2} coefficient-derivative group (line 890) ----
+            Lh[o + i] += sgn * ((xi2_a[i] / tw + xi2[i] * dinv) * D1[a]
+                                - (xi1_a[i] / tw + xi1[i] * dinv) * D2[a])
     return Lh, Ll, Le
 
 
-def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
+def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0.0):
     """GENERAL RM operators at (xi,eta):  returns
         BDe (6,4)  macro map        Gamma_eps (D-block rows)
         BDh (6,20) fluctuation      Gamma_h
@@ -293,8 +294,8 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
             BDl[2, o + i] += (x11 * xi2[i] + x12 * xi1[i]) * N[a]
 
     # ================= CURVATURES (A.8, Lambda per A.6) ========================
-    L1h, L1l, L1e = _lambda_ops(N, D1, D2, c, k22, alpha=1)
-    L2h, L2l, L2e = _lambda_ops(N, D1, D2, c, k22, alpha=2)
+    L1h, L1l, L1e = _lambda_ops(N, D1, D2, c, k22, kg, alpha=1)
+    L2h, L2l, L2e = _lambda_ops(N, D1, D2, c, k22, kg, alpha=2)
 
     # k11 = x11 x_{i;2} k_{1i} + x_{b;2} x11 om'_b + x_{b;2} om_{b|1} + x32 Lambda_1
     BDe[3] = [0.0, x11 * x12, x11 * c["x22"], x11 * c["x32"]]
@@ -373,14 +374,18 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
     for a in range(4):
         o = NDOF * a
         for i in range(3):
-            a13 = x32 * xi2[i] * h33 + yv[i]                 # 2eps13 w_{i|1} coeff (w'_i = x11*a13)
+            a13 = x32 * xi2[i] * h33 + yv[i]                 # 2eps13 w_{i|1} coeff
             b13 = -x32 * xi1[i] * h33                        # 2eps13 w_{i|2} coeff
-            a23 = x31 * xi1[i] * h33 + yv[i]                 # 2eps23 w_{i|2} coeff (w'_i = x12*a23)
+            a23 = x31 * xi1[i] * h33 + yv[i]                 # 2eps23 w_{i|2} coeff
             b23 = -x31 * xi2[i] * h33                        # 2eps23 w_{i|1} coeff
             BGh[0, o + i] += a13 * D1[a] + b13 * D2[a]
-            BGl[0, o + i] += x11 * a13 * N[a]
             BGh[1, o + i] += a23 * D2[a] + b23 * D1[a]
-            BGl[1, o + i] += x12 * a23 * N[a]
+            # w' CHAIN RULE: the total zeta_alpha derivative of a fluctuation splits
+            # micro + macro, d(w_i)/dzeta_alpha -> w_{i|alpha} + x_{1;alpha} w'_i, so the
+            # w'_i coefficient = x11*(w_{i|1} coeff) + x12*(w_{i|2} coeff)  [BOTH halves;
+            # verified against eq:prism 2gamma_13 underlined terms and verify_strains_paper]
+            BGl[0, o + i] += (x11 * a13 + x12 * b13) * N[a]
+            BGl[1, o + i] += (x12 * a23 + x11 * b23) * N[a]
         BGh[0, o + 3] += (x12 - x32 * y1 * invc33) * N[a]    # 2eps13 om_1: C_21 - C23 C31/C33
         BGh[0, o + 4] += (x22 - x32 * y2 * invc33) * N[a]    #          om_2: C_22 - C23 C32/C33
         BGh[1, o + 3] += (-x11 + x31 * y1 * invc33) * N[a]   # 2eps23 om_1: -C_11 + C13 C31/C33
@@ -415,20 +420,20 @@ _TIE_G13 = [(-1.0, 0.0), (1.0, 0.0)]     # gamma_13 (row 0): sample along xi
 SHEAR_SCHEMES = ("mitc4_both", "mitc4_g23", "reduced", "full")
 
 
-def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4_both"):
+def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4_both", kg=0.0):
     if scheme == "full":
-        return quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax)[4]
+        return quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, kg)[4]
     if scheme == "reduced":
-        return quad_ops_general(X, e1m, e2m, e3m, 0.0, 0.0, k22, cross, ax)[4]
+        return quad_ops_general(X, e1m, e2m, e3m, 0.0, 0.0, k22, cross, ax, kg)[4]
     # gamma_23 (row 1): tied at (0,+-1), linear in eta
-    r23 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][1:2, :]
+    r23 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax, kg)[4][1:2, :]
            for (tx, te) in _TIE_G23]
     g23 = 0.5 * (1.0 - eta) * r23[0] + 0.5 * (1.0 + eta) * r23[1]
     if scheme == "mitc4_g23":
-        g13 = quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax)[4][0:1, :]
+        g13 = quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, kg)[4][0:1, :]
     else:                                                  # 'mitc4_both'
         # gamma_13 (row 0): tied at (+-1,0), linear in xi
-        r13 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax)[4][0:1, :]
+        r13 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax, kg)[4][0:1, :]
                for (tx, te) in _TIE_G13]
         g13 = 0.5 * (1.0 - xi) * r13[0] + 0.5 * (1.0 + xi) * r13[1]
     return np.vstack([g13, g23])
@@ -436,7 +441,8 @@ def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4
 
 # -------------------------------------------------------------------- assembly
 def assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by,
-                             k22_e, cross=(1, 2), dof_map=None, shear="mitc4_both"):
+                             k22_e, cross=(1, 2), dof_map=None, shear="mitc4_both",
+                             kg_e=None):
     """Assemble the six MSG blocks with the GENERAL RM taper operators:
         Dhh = <Gh' C Gh>   Dhe = <Gh' C Ge>   Dee = <Ge' C Ge>
         Dhl = <Gh' C Gl>   Dll = <Gl' C Gl>   Dle = <Gl' C Ge>
@@ -457,14 +463,15 @@ def assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by,
           (1 / np.sqrt(3), 1 / np.sqrt(3)), (-1 / np.sqrt(3), 1 / np.sqrt(3))]
     for q, quad in enumerate(quads):
         X = nodes[quad]; k22 = float(k22_e[q])
+        kg = float(kg_e[q]) if kg_e is not None else 0.0
         D = D_by[int(subdom[q])] if not isinstance(D_by, dict) or int(subdom[q]) in D_by else D_by[subdom[q]]
         G = G_by[int(subdom[q])]
         g = np.concatenate([[NDOF * int(dof_map[n]) + c for c in range(NDOF)] for n in quad])
         gij = (g[:, None], g[None, :])
         for (xi, eta) in gp:
             BDe, BDh, BDl, BGe, BGh, BGl, dA = quad_ops_general(
-                X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax)
-            BGt = _mitc_shear_general(X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax, shear)
+                X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax, kg)
+            BGt = _mitc_shear_general(X, e1s[q], e2s[q], e3s[q], xi, eta, k22, cross, ax, shear, kg)
             w = dA  # unit gauss weights on [-1,1]^2 (2x2)
             # np.add.at (NOT fancy-index +=): with a dof_map the index vector g
             # contains REPEATED dofs (wrapped strip) and fancy-index += silently

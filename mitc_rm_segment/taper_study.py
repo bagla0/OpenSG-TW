@@ -245,7 +245,7 @@ def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
     import io, contextlib
     import jax.numpy as jnp
     from boundary_from_yaml import extract
-    from segment_element import dirichlet_solve, compute_k22, build_C_Psi_segment
+    from segment_element import dirichlet_solve, compute_k22, compute_kg, build_C_Psi_segment
     from segment_element_general import assemble_segment_general, ring_general
     from solve_segment_jax import _material_by_section
     from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
@@ -259,7 +259,9 @@ def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
     e1s, e2s, e3s = np.asarray(b["seg_e1"]), np.asarray(b["seg_e2"]), np.asarray(b["seg_e3"])
     D_by, G_by = _material_by_section(json.loads(str(b["sections"])),
                                       json.loads(str(b["materials"])), center_ref=True)
-    k22_e = compute_k22(nodes[quads].mean(1), e2s, e3s, quads)
+    cents = nodes[quads].mean(1)
+    k22_e = compute_k22(cents, e2s, e3s, quads)
+    kg_e = compute_kg(cents, e1s, e2s, e3s, quads)        # hoop geodesic curvature (taper)
 
     rings = {}
     for side in ("L", "R"):
@@ -271,7 +273,7 @@ def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
         np.save(os.path.join(res_dir, "rm_%s_%s.npy" % (tg, side)), C6r)
 
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_general(
-        nodes, quads, sd, e1s, e2s, e3s, D_by, G_by, k22_e, cross, shear=shear)
+        nodes, quads, sd, e1s, e2s, e3s, D_by, G_by, k22_e, cross, shear=shear, kg_e=kg_e)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))
 
     def scatter(key):
