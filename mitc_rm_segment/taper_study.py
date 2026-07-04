@@ -136,6 +136,15 @@ def gen_case(regime, mat, aR, mesh_dir=None, nc=None, nl=None, nr=None):
     return tg
 
 
+def _iso_cam(p):
+    """Consistent SPANWISE ISOMETRIC camera for every taper render: parallel
+    (orthographic) projection so the taper is shown without perspective
+    foreshortening, beam axis z kept up, same view angle across all figures."""
+    p.enable_parallel_projection()
+    p.camera_position = [(6.0, -6.0, 4.3), (0.0, 0.0, 1.0), (0.0, 0.0, 1.0)]
+    p.reset_camera()
+
+
 def arrow_pngs(tg, mesh_dir=None, ori_dir=None):
     mesh_dir = mesh_dir or MESH; ori_dir = ori_dir or ORI
     os.makedirs(ori_dir, exist_ok=True)
@@ -165,7 +174,7 @@ def arrow_pngs(tg, mesh_dir=None, ori_dir=None):
             p.add_mesh(pv.PolyData(nodes), color="#bbbbbb", point_size=2.0,
                        render_points_as_spheres=True)
             p.add_axes(line_width=3)
-            p.camera_position = [(5.5, -5.5, 4.5), (0, 0, 1.0), (0, 0, 1)]
+            _iso_cam(p)
             note = "  (e3.r_hat = %+.2f -> INWARD)" % e3dot if vec == "e3" else ""
             p.add_text("%s %s : %s%s" % (kind.upper(), vec, tg, note), font_size=11)
             p.screenshot(os.path.join(ori_dir, "%s_%s_%s.png" % (tg, kind, vec)))
@@ -205,7 +214,7 @@ def arrow_strip(tg, kind, mesh_dir=None, out_dir=None):
         p.add_mesh(pv.PolyData(nodes), color="#cccccc", point_size=1.5, render_points_as_spheres=True)
         note = "  (e3.rhat=%+.2f, inward)" % e3dot if vec == "e3" else ""
         p.add_text("%s  %s%s" % (kind.upper(), vec, note), font_size=10)
-        p.camera_position = [(5.5, -5.5, 4.5), (0, 0, 1.0), (0, 0, 1)]
+        _iso_cam(p)
     fn = os.path.join(out_dir, "%s_%s_strip.png" % (tg, kind))
     p.screenshot(fn); p.close()
     return fn
@@ -232,7 +241,7 @@ def tapered_mesh_png(tg, kind, mesh_dir=None, out_dir=None):
     p.add_mesh(grid, color=col, show_edges=True, edge_color="#404040", line_width=0.6, opacity=1.0)
     p.add_text("%s tapered mesh : %s" % (kind.upper(), tg), font_size=11)
     p.add_axes(line_width=3)
-    p.camera_position = [(6.2, -6.2, 3.2), (0, 0, 1.0), (0, 0, 1)]
+    _iso_cam(p)
     fn = os.path.join(out_dir, "%s_%s_mesh.png" % (tg, kind))
     p.screenshot(fn); p.close()
     return fn

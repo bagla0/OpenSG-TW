@@ -183,7 +183,7 @@ def red_ref_png(tg, mesh_dir=None, out_dir=None):
         p.add_mesh(pv.PolyData(ring), color="red", point_size=6, render_points_as_spheres=True)
     p.add_text("SOLID square taper : %s\nred = mid-surface (center reference)" % tg, font_size=11)
     p.add_axes(line_width=3)
-    p.camera_position = [(6.4, -6.4, 3.2), (0, 0, 1.0), (0, 0, 1)]
+    ts._iso_cam(p)
     fn = os.path.join(out_dir, "%s_solid_ref.png" % tg)
     p.screenshot(fn); p.close()
     return fn
