@@ -68,15 +68,25 @@ MEMBRANE STRAINS (paper, Shell Strains):
            + 2 x11 x12 (x3 k2 - x2 k3)
            + (x_{i;1} w_{i|2} + x_{i;2} w_{i|1}) + (x11 x_{i;2} + x12 x_{i;1}) w'_i
 
-TRANSVERSE SHEAR (prismatic-consistent minimal generalization; the fully
-drilling-boosted general gamma_13 (eq12 form) is 1-D-validated and marked TODO
-for the surface element -- it changes only GA2/GA3, not the taper diagonals):
-  2g_13  = y_i w_{i|1} + omega_2 + x11 y_i w'_i
-  2g_23  = y_i w_{i|2} - omega_1
-
-PRISMATIC REDUCTION CHECK: x11=1, x12=0, x21=x31=0, D1->0, (y2,y3)=(-xd3,xd2)
-reproduces eq:prism of the paper exactly (incl. omega'_2/xd2 and the
-(xd3/2xd2)-terms through Lambda) minus the dropped second-derivative pieces.
+TRANSVERSE SHEAR (paper Eq.12 = Shell-Strains 2eps13,2eps23 -- the FULL GENERAL
+drilling-ELIMINATED form; NOT the prismatic reduction).  omega_3 is substituted
+through C33=C^ab_33 (eq:om3), so the /(2 C33) factors ARE the drilling; there is
+NO Lambda/curvature term in the shear (Lambda enters ONLY the curvature rows
+k11/k22/k12).  With C^ab of Eq.1 (C31=y1, C33=y3, C32=y2, C23=x_{3;2}, C13=x_{3;1},
+C_{2a}=x_{a;2}, C_{1a}=x_{a;1}, C_{3a}=y_a, C_{3i}=y_i, y_{j;a}=delta_{ja}):
+  2g_13 = x11 C31 e11                                          # first term = C31 x11
+        + [x2((x32^2 x11 - x32 x31 x12)/2C33 + C33 x11)
+          -x3((x32 x22 x11 - x32 x21 x12)/2C33 + C32 x11)] k1  # swept-area
+        + x11 C31 x3 k2 - x11 C31 x2 k3
+        + (x32 x_{i;2}/2C33 + y_i) w_{i|1} - (x32 x_{i;1}/2C33) w_{i|2}
+        + (C_{2a} - C23 C_{3a}/C33) om_a
+        + x11 (x32 x_{i;2}/2C33 + y_i) w'_i                     # Gamma_l (chain rule)
+  2g_23 : x11<->x12, x32<->x31, w_{i|1}<->w_{i|2}; om coeff = -C_{1a} + C13 C_{3a}/C33.
+The prismatic reduction (x12=x31=y1=0, y3=xd2, x32=xd3, y2=-xd3) recovers eq:prism
+2g13 = omega_2/xd2 + k1(x2(xd2+xd3^2/2xd2)+x3 xd3/2) - wd1 xd3/2xd2 + [w' pair];
+the FULL code is certified term-by-term against Eq.12 + the Appendix curvature
+strains by verify_strains_paper.py (<=1e-5).  1/C33 is Tikhonov-regularized
+(C33_EPS) so the drilling elimination stays well-posed on flat/folded walls.
 """
 import numpy as np
 from segment_element import _bilinear, dirichlet_solve, compute_k22, build_C_Psi_segment  # noqa
