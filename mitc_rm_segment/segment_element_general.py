@@ -96,6 +96,11 @@ LAMBDA_ON = 1.0   # ablation switch: Lambda_alpha drilling in the kappa rows
 # inflates GJ by +1280% (and grows with mesh) whereas GDRILL_ON=0 gives GJ within
 # +14% of Bredt with EA/GA/EI unchanged.  Found via the flat-walled (k22=0) square.
 GDRILL_ON = 0.0
+# Tikhonov regularization scale for the drilling denominator 1/C33 (C33=y3=a3.b3).
+# 1/C33 -> C33/(C33^2 + C33_EPS^2): identity where C33 is O(1), smoothly ->0 as C33->0.
+# On the CIRCLE C33 crosses zero only at isolated points (regularization negligible);
+# on the SQUARE whole walls have C33=0 and this cleanly drops the ill-posed drilling term.
+C33_EPS = 0.1
 
 
 def _surf_frame(X, e3_mat, xi, eta, cross, ax):
@@ -349,29 +354,37 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None):
     # PRISMATIC (x12=x31=y1=0, y3=xd2, x32=xd3, y2=-xd3) reproduces eq:prism 2gamma_13/23
     # EXACTLY: omega_2/xd2, the k1 swept term x2(xd2+xd3^2/2xd2)+x3 xd3/2, the -wd1 xd3/2xd2,
     # and the w' pair -w'_2 xd3/2 + w'_3 (xd2 + xd3^2/2xd2).  (C32=y2 fixed by this identity.)
-    c33 = _c33_floor(c["y3"])
+    # C33 = y3 = a3.b3 is the drilling-elimination denominator (Eq. om3).  It VANISHES on
+    # flat walls whose hoop tangent aligns with b3 (a whole square wall has y3=0, not just
+    # isolated points as on a circle), so a plain 1/C33 -- even magnitude-floored -- injects
+    # a spurious drilling stiffness there (GJ blow-up = the drilling-at-folds artifact).
+    # Tikhonov regularization  1/C33 -> C33/(C33^2 + eps^2)  equals 1/C33 where C33 is
+    # healthy and SMOOTHLY -> 0 as C33 -> 0, dropping the ill-posed drilling term exactly at
+    # the singularity (recovering the well-behaved no-drilling shear on flat walls).
+    invc33 = c["y3"] / (c["y3"] ** 2 + C33_EPS ** 2)     # regularized 1/C33 (sign-preserving)
+    h33 = 0.5 * invc33                                    # regularized 1/(2 C33)
     y1, y2 = c["y1"], c["y2"]; x31, x32 = c["x31"], c["x32"]; x21, x22 = c["x21"], c["x22"]
-    k1_13 = (x2 * ((x32 * x32 * x11 - x32 * x31 * x12) / (2 * c33) + c["y3"] * x11)
-             - x3 * ((x32 * x22 * x11 - x32 * x21 * x12) / (2 * c33) + y2 * x11))
-    k1_23 = (x2 * ((x31 * x31 * x12 - x31 * x32 * x11) / (2 * c33) + c["y3"] * x12)
-             - x3 * ((x31 * x21 * x12 - x31 * x22 * x11) / (2 * c33) + y2 * x12))
+    k1_13 = (x2 * ((x32 * x32 * x11 - x32 * x31 * x12) * h33 + c["y3"] * x11)
+             - x3 * ((x32 * x22 * x11 - x32 * x21 * x12) * h33 + y2 * x11))
+    k1_23 = (x2 * ((x31 * x31 * x12 - x31 * x32 * x11) * h33 + c["y3"] * x12)
+             - x3 * ((x31 * x21 * x12 - x31 * x22 * x11) * h33 + y2 * x12))
     BGe[0] = np.array([x11 * y1, k1_13, x11 * y1 * x3, -x11 * y1 * x2])
     BGe[1] = np.array([x12 * y1, k1_23, x12 * y1 * x3, -x12 * y1 * x2])
     for a in range(4):
         o = NDOF * a
         for i in range(3):
-            a13 = x32 * xi2[i] / (2 * c33) + yv[i]           # 2eps13 w_{i|1} coeff (w'_i = x11*a13)
-            b13 = -x32 * xi1[i] / (2 * c33)                  # 2eps13 w_{i|2} coeff
-            a23 = x31 * xi1[i] / (2 * c33) + yv[i]           # 2eps23 w_{i|2} coeff (w'_i = x12*a23)
-            b23 = -x31 * xi2[i] / (2 * c33)                  # 2eps23 w_{i|1} coeff
+            a13 = x32 * xi2[i] * h33 + yv[i]                 # 2eps13 w_{i|1} coeff (w'_i = x11*a13)
+            b13 = -x32 * xi1[i] * h33                        # 2eps13 w_{i|2} coeff
+            a23 = x31 * xi1[i] * h33 + yv[i]                 # 2eps23 w_{i|2} coeff (w'_i = x12*a23)
+            b23 = -x31 * xi2[i] * h33                        # 2eps23 w_{i|1} coeff
             BGh[0, o + i] += a13 * D1[a] + b13 * D2[a]
             BGl[0, o + i] += x11 * a13 * N[a]
             BGh[1, o + i] += a23 * D2[a] + b23 * D1[a]
             BGl[1, o + i] += x12 * a23 * N[a]
-        BGh[0, o + 3] += (x12 - x32 * y1 / c33) * N[a]       # 2eps13 om_1: C_21 - C23 C31/C33
-        BGh[0, o + 4] += (x22 - x32 * y2 / c33) * N[a]       #          om_2: C_22 - C23 C32/C33
-        BGh[1, o + 3] += (-x11 + x31 * y1 / c33) * N[a]      # 2eps23 om_1: -C_11 + C13 C31/C33
-        BGh[1, o + 4] += (-x21 + x31 * y2 / c33) * N[a]      #          om_2: -C_12 + C13 C32/C33
+        BGh[0, o + 3] += (x12 - x32 * y1 * invc33) * N[a]    # 2eps13 om_1: C_21 - C23 C31/C33
+        BGh[0, o + 4] += (x22 - x32 * y2 * invc33) * N[a]    #          om_2: C_22 - C23 C32/C33
+        BGh[1, o + 3] += (-x11 + x31 * y1 * invc33) * N[a]   # 2eps23 om_1: -C_11 + C13 C31/C33
+        BGh[1, o + 4] += (-x21 + x31 * y2 * invc33) * N[a]   #          om_2: -C_12 + C13 C32/C33
     return BDe, BDh, BDl, BGe, BGh, BGl, dA
 
 
