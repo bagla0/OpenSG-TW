@@ -111,6 +111,15 @@ GDRILL_ON = 0.0
 # On the CIRCLE C33 crosses zero only at isolated points (regularization negligible);
 # on the SQUARE whole walls have C33=0 and this cleanly drops the ill-posed drilling term.
 C33_EPS = 0.1
+# --- DIAGNOSTIC transverse-shear TAPER ablations (default 1.0 = production, no effect) ---
+# Each scales a taper-activated piece of the transverse-shear operator so we can localize
+# the thin-square GA3 (C33) taper deficit.  NOT for production use.
+SH_ABL_BGE = 1.0     # entire macro (beam-strain) shear coupling BGe(2,4)  [=0 prismatically except k1 swept]
+SH_ABL_BGL = 1.0     # entire w'(Gamma_l) transverse-shear block BGl(2,20)
+SH_ABL_Y1 = 1.0      # only the y1 = n.b1 (axial-normal) taper couplings (y1=0 prismatically)
+KG_ABL = 1.0         # scale the hoop geodesic curvature kg (taper) fed to the curvature operator
+G_SHEAR_SCALE = 1.0  # scale the shell transverse-shear material G in the segment assembly
+DRILL_TOL = 0.0      # >0: drop the omega_3 drilling (Lambda + shear 1/C33) on |C33|=|n.b3|<tol walls
 
 
 def _surf_frame(X, e3_mat, xi, eta, cross, ax):
@@ -143,9 +152,13 @@ def _surf_frame(X, e3_mat, xi, eta, cross, ax):
     return N, d[0], d[1], dA, c
 
 
-def _c33_floor(y3, floor=5e-2):
+FLOOR33 = 5e-2   # drilling-denominator floor for C33=n.b3 (diagnostic-tunable)
+
+
+def _c33_floor(y3, floor=None):
     """C33 = n.b3 appears in the drilling denominators; floor it away from zero
     exactly like the validated 1-D code floors 1/xdot2 (vertical walls)."""
+    floor = FLOOR33 if floor is None else floor
     return y3 if abs(y3) > floor else (floor if y3 >= 0 else -floor)
 
 
@@ -274,7 +287,14 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
     Rows: [e11, e22, 2e12, k11, k22, k12+21] and [2g13, 2g23]."""
     if ax is None:
         ax = [j for j in range(3) if j not in cross][0]
+    kg = KG_ABL * kg                                     # diagnostic geodesic-curvature ablation
     N, D1, D2, dA, c = _surf_frame(X, e3m, xi, eta, cross, ax)
+    # DRILL_TOL: on gauss points where the drilling denominator C33=n.b3 nearly vanishes
+    # (a whole flat wall, e.g. the GA3-carrier walls / shear web), DROP the drilling
+    # rather than floor 1/C33.  dmask kills the omega_3 (Lambda) curvature contribution
+    # AND the shear 1/C33 there; keeps the regular (non-drilling) strains intact.
+    dmask = 0.0 if (DRILL_TOL > 0.0 and abs(c["y3"]) < DRILL_TOL) else 1.0
+    lam = LAMBDA_ON * dmask
     x11, x12 = c["x11"], c["x12"]
     xi1 = np.array([x11, c["x21"], c["x31"]])
     xi2 = np.array([x12, c["x22"], c["x32"]])
@@ -309,25 +329,25 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
 
     # k11 = x11 x_{i;2} k_{1i} + x_{b;2} x11 om'_b + x_{b;2} om_{b|1} + x32 Lambda_1
     BDe[3] = [0.0, x11 * x12, x11 * c["x22"], x11 * c["x32"]]
-    BDe[3] += LAMBDA_ON * c["x32"] * L1e
+    BDe[3] += lam *c["x32"] * L1e
     for a in range(4):
         o = NDOF * a
         BDl[3, o + 3] += x11 * c["x12"] * N[a]                    # x_{1;2} x11 om'_1
         BDl[3, o + 4] += x11 * c["x22"] * N[a]                    # x_{2;2} x11 om'_2
         BDh[3, o + 3] += c["x12"] * D1[a]                         # x_{1;2} om_{1|1}
         BDh[3, o + 4] += c["x22"] * D1[a]                         # x_{2;2} om_{2|1}
-    BDh[3] += LAMBDA_ON * c["x32"] * L1h; BDl[3] += LAMBDA_ON * c["x32"] * L1l
+    BDh[3] += lam *c["x32"] * L1h; BDl[3] += lam *c["x32"] * L1l
 
     # k22 = -[ x12 x_{i;1} k_{1i} + x_{b;1} x12 om'_b + x_{b;1} om_{b|2} + x31 Lambda_2 ]
     BDe[4] = [0.0, -x12 * x11, -x12 * c["x21"], -x12 * c["x31"]]
-    BDe[4] += -LAMBDA_ON * c["x31"] * L2e
+    BDe[4] += -lam *c["x31"] * L2e
     for a in range(4):
         o = NDOF * a
         BDl[4, o + 3] += -x12 * c["x11"] * N[a]
         BDl[4, o + 4] += -x12 * c["x21"] * N[a]
         BDh[4, o + 3] += -c["x11"] * D2[a]
         BDh[4, o + 4] += -c["x21"] * D2[a]
-    BDh[4] += -LAMBDA_ON * c["x31"] * L2h; BDl[4] += -LAMBDA_ON * c["x31"] * L2l
+    BDh[4] += -lam *c["x31"] * L2h; BDl[4] += -lam *c["x31"] * L2l
     # NOTE prismatic check: x12=0, x31=0 -> k22 = -x_{1;1} om_{1|2} = -omdot_1  (eq:prism)
     # [the VALIDATED 1-D code carries +omdot_1 with its own compensating sign
     #  convention for omega_1; the prismatic-identity test decides the sign map]
@@ -338,15 +358,15 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
               x12 * x12 - x11 * x11,
               x12 * c["x22"] - x11 * c["x21"],
               x12 * c["x32"] - x11 * c["x31"]]
-    BDe[5] += LAMBDA_ON * (c["x32"] * L2e - c["x31"] * L1e)
+    BDe[5] += lam *(c["x32"] * L2e - c["x31"] * L1e)
     for a in range(4):
         o = NDOF * a
         BDl[5, o + 3] += (x12 * c["x12"] - x11 * c["x11"]) * N[a]
         BDl[5, o + 4] += (x12 * c["x22"] - x11 * c["x21"]) * N[a]
         BDh[5, o + 3] += c["x12"] * D2[a] - c["x11"] * D1[a]
         BDh[5, o + 4] += c["x22"] * D2[a] - c["x21"] * D1[a]
-    BDh[5] += LAMBDA_ON * (c["x32"] * L2h - c["x31"] * L1h)
-    BDl[5] += LAMBDA_ON * (c["x32"] * L2l - c["x31"] * L1l)
+    BDh[5] += lam *(c["x32"] * L2h - c["x31"] * L1h)
+    BDl[5] += lam *(c["x32"] * L2l - c["x31"] * L1l)
 
     # ============ TRANSVERSE SHEAR (GENERAL, paper Shell-Strains 2eps13/2eps23) ==========
     # EXACT drilling-ELIMINATED general transverse shear from the RM paper.  omega_3 is
@@ -372,9 +392,10 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
     # Tikhonov regularization  1/C33 -> C33/(C33^2 + eps^2)  equals 1/C33 where C33 is
     # healthy and SMOOTHLY -> 0 as C33 -> 0, dropping the ill-posed drilling term exactly at
     # the singularity (recovering the well-behaved no-drilling shear on flat walls).
-    invc33 = c["y3"] / (c["y3"] ** 2 + C33_EPS ** 2)     # regularized 1/C33 (sign-preserving)
+    invc33 = dmask * c["y3"] / (c["y3"] ** 2 + C33_EPS ** 2)  # regularized 1/C33 (sign-preserving; dmask drops it on flat walls)
     h33 = 0.5 * invc33                                    # regularized 1/(2 C33)
-    y1, y2 = c["y1"], c["y2"]; x31, x32 = c["x31"], c["x32"]; x21, x22 = c["x21"], c["x22"]
+    y1, y2 = SH_ABL_Y1 * c["y1"], c["y2"]; x31, x32 = c["x31"], c["x32"]; x21, x22 = c["x21"], c["x22"]
+    yv_s = yv.copy(); yv_s[0] = SH_ABL_Y1 * yv[0]        # y1-ablated normal for the shear w-flux terms
     k1_13 = (x2 * ((x32 * x32 * x11 - x32 * x31 * x12) * h33 + c["y3"] * x11)
              - x3 * ((x32 * x22 * x11 - x32 * x21 * x12) * h33 + y2 * x11))
     k1_23 = (x2 * ((x31 * x31 * x12 - x31 * x32 * x11) * h33 + c["y3"] * x12)
@@ -384,9 +405,9 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
     for a in range(4):
         o = NDOF * a
         for i in range(3):
-            a13 = x32 * xi2[i] * h33 + yv[i]                 # 2eps13 w_{i|1} coeff
+            a13 = x32 * xi2[i] * h33 + yv_s[i]               # 2eps13 w_{i|1} coeff
             b13 = -x32 * xi1[i] * h33                        # 2eps13 w_{i|2} coeff
-            a23 = x31 * xi1[i] * h33 + yv[i]                 # 2eps23 w_{i|2} coeff
+            a23 = x31 * xi1[i] * h33 + yv_s[i]               # 2eps23 w_{i|2} coeff
             b23 = -x31 * xi2[i] * h33                        # 2eps23 w_{i|1} coeff
             BGh[0, o + i] += a13 * D1[a] + b13 * D2[a]
             BGh[1, o + i] += a23 * D2[a] + b23 * D1[a]
@@ -400,6 +421,8 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
         BGh[0, o + 4] += (x22 - x32 * y2 * invc33) * N[a]    #          om_2: C_22 - C23 C32/C33
         BGh[1, o + 3] += (-x11 + x31 * y1 * invc33) * N[a]   # 2eps23 om_1: -C_11 + C13 C31/C33
         BGh[1, o + 4] += (-x21 + x31 * y2 * invc33) * N[a]   #          om_2: -C_12 + C13 C32/C33
+    BGe = SH_ABL_BGE * BGe                                    # diagnostic block ablations (default 1.0)
+    BGl = SH_ABL_BGL * BGl
     return BDe, BDh, BDl, BGe, BGh, BGl, dA
 
 
@@ -427,7 +450,21 @@ def quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0
 # rows (BGe/BGh/BGl), not the tying points.
 _TIE_G23 = [(0.0, -1.0), (0.0, 1.0)]     # gamma_23 (row 1): sample along eta
 _TIE_G13 = [(-1.0, 0.0), (1.0, 0.0)]     # gamma_13 (row 0): sample along xi
-SHEAR_SCHEMES = ("mitc4_both", "mitc4_g23", "reduced", "full")
+SHEAR_SCHEMES = ("mitc4_both", "mitc4_g23", "mitc4_cov", "reduced", "full")
+
+
+def _metric_at(X, e3_mat, xi, eta):
+    """G = [[a1.g_r, a1.g_s],[a2.g_r, a2.g_s]] (g_r=Jxi, g_s=Jeta) with the SAME
+    (a1,a2) frame + e3-sign convention as _surf_frame.  Then the COVARIANT transverse
+    shears are cov = G.T @ [2g13; 2g23], and physical = (G.T)^-1 @ cov."""
+    N, dNx, dNe = _bilinear(xi, eta)
+    Jxi = dNx @ X; Jeta = dNe @ X
+    a2 = Jxi / np.linalg.norm(Jxi)
+    a1 = Jeta - (Jeta @ a2) * a2
+    a1 = a1 / np.linalg.norm(a1)
+    if np.cross(a1, a2) @ e3_mat < 0.0:
+        a1 = -a1
+    return np.array([[a1 @ Jxi, a1 @ Jeta], [a2 @ Jxi, a2 @ Jeta]])
 
 
 def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4_both", kg=0.0):
@@ -435,6 +472,18 @@ def _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4
         return quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, kg)[4]
     if scheme == "reduced":
         return quad_ops_general(X, e1m, e2m, e3m, 0.0, 0.0, k22, cross, ax, kg)[4]
+    if scheme == "mitc4_cov":
+        # RIGOROUS Dvorkin-Bathe: tie the COVARIANT shears (metric-consistent on a
+        # DISTORTED quad), not the physical rows.  e_rt=cov row0 (along g_r), tied at
+        # (0,+-1) linear in eta;  e_st=cov row1 (along g_s), tied at (+-1,0) linear in xi.
+        def cov(tx, te):
+            rows = quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax, kg)[4]
+            return _metric_at(X, e3m, tx, te).T @ rows            # (2,Ndof) = [e_rt; e_st]
+        A, Cc = cov(0.0, -1.0), cov(0.0, 1.0)
+        ert = 0.5 * (1.0 - eta) * A[0:1, :] + 0.5 * (1.0 + eta) * Cc[0:1, :]
+        Dp, Bp = cov(-1.0, 0.0), cov(1.0, 0.0)
+        est = 0.5 * (1.0 - xi) * Dp[1:2, :] + 0.5 * (1.0 + xi) * Bp[1:2, :]
+        return np.linalg.solve(_metric_at(X, e3m, xi, eta).T, np.vstack([ert, est]))
     # gamma_23 (row 1): tied at (0,+-1), linear in eta
     r23 = [quad_ops_general(X, e1m, e2m, e3m, tx, te, k22, cross, ax, kg)[4][1:2, :]
            for (tx, te) in _TIE_G23]
@@ -475,7 +524,7 @@ def assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by,
         X = nodes[quad]; k22 = float(k22_e[q])
         kg = float(kg_e[q]) if kg_e is not None else 0.0
         D = D_by[int(subdom[q])] if not isinstance(D_by, dict) or int(subdom[q]) in D_by else D_by[subdom[q]]
-        G = G_by[int(subdom[q])]
+        G = G_SHEAR_SCALE * G_by[int(subdom[q])]
         g = np.concatenate([[NDOF * int(dof_map[n]) + c for c in range(NDOF)] for n in quad])
         gij = (g[:, None], g[None, :])
         for (xi, eta) in gp:

@@ -1,0 +1,137 @@
+================================================================================
+THIN TAPERED-SQUARE GA3 (C33) DEFICIT : INVESTIGATION AND FIX (independent omega_3)
+================================================================================
+Section: mitc_rm_segment/ .  Operator under study: segment_element_general.py
+(GENERAL RM taper shell -> Timoshenko 6x6).  Solid reference: FEniCS 3-D solid,
+examples/data/benchmark/taper_square_solid_{iso,m45}.npz.  Env C:\conda_envs\opensg_2_0_env.
+Harness: dbg_ga3.py .  Fix: segment_indep.py (+ driver run_indep.py).
+
+--------------------------------------------------------------------------------
+1. SYMPTOM
+--------------------------------------------------------------------------------
+Tapered SQUARE tube (flat walls, mid-surface mesh, t/R=0.02 thin, aR=0.7), single ply.
+Beam transverse-shear stiffness GA3 (Timoshenko C33) under-predicts vs the 3-D solid:
+  thin iso  C33 -24.4% ,  thin m45 C33 -39.9%  (C36 = GA3-EI2 coupling tracks it, -39.7%).
+GA2 (C22) is fine (-1% / +5.5%).  Thick wall (t/R=0.2) is fine (-5.7% / -1.3%).
+
+--------------------------------------------------------------------------------
+2. DIAGNOSIS (each step is a dbg_ga3.py experiment; all reproduced)
+--------------------------------------------------------------------------------
+ - Localised to the tapered SEGMENT: prismatic boundary RINGS are clean & symmetric
+   (thin_m45 ring C33 +0.9% vs segment -39.9%).
+ - NOT discretisation / NOT quad distortion: axial refinement NL=10..80 leaves C33
+   flat (-24.8% / -40.2%) even as trapezoids -> parallelograms.  Converged operator error.
+ - 2nd-order in taper, thin-only: extra deficit ~ (dR/dz)^2 ; ~0 for thick walls.
+ - NOT the transverse-shear STRAIN rows (BGe/BGh/BGl): ablating all their taper terms
+   moves C33 <1%.  (Overturns the code's own comment on lines ~423-427.)
+ - The transverse shear is generated THROUGH the omega_3-drilling-in-curvature (Lambda)
+   mechanism: LAMBDA_ON=0 collapses BOTH GA2 and GA3 to zero in the segment.
+ - Denominator C33 = n.b3 = 0 identically on the two flat walls that carry the GA3 shear
+   flow (normal || b2).  BUT: GA3 is insensitive to the C33 regularisation --
+   C33_EPS (shear Tikhonov) and FLOOR33 (curvature floor) sweeps over 100x change C33 by
+   <0.6%.  So the singular value is NOT the quantitative driver.
+ - FRAME-ROTATION test (rotate the cross frame so no wall has C33=0): at 45deg every wall
+   has C33=+-0.707 (healthy, no floor) yet GA3 is STILL -28.7% (and GA2 degrades to match).
+   The shear trace GA2+GA3 is NOT frame-invariant (2.20 -> 1.80 x1e9) -> the operator is
+   NOT frame-objective on flat walls.  The axis-aligned frame is a LUCKY special case that
+   rescues GA2 (its walls align, cosines exactly 0/1); GA3's walls sit at C33=0.
+ - Square-specific: the CIRCLE tube (C33=0 only at isolated points, walls curved) is clean
+   and symmetric (C33 +3.7% / +4.9%).  Flat walls (k22=0) + taper is the root.
+
+ROOT CAUSE: the RM drilling omega_3 is eliminated algebraically via
+  omega_3 = S/(2 C33) - (C3b/C33) omega_b ,  C33 = n.b3 ,
+which on flat walls (C33=0) is degenerate; the eliminated-then-regularised drilling is a
+frame-non-objective, ~-24..-40% mis-representation of the flat-wall tapered transverse shear.
+
+--------------------------------------------------------------------------------
+3. WHAT DID NOT WORK (tested, negative)
+--------------------------------------------------------------------------------
+ - Neglecting the flat-wall drilling (DRILL_TOL: zero Lambda+shear 1/C33 on |C33|<tol):
+   collapses GA2 AND GA3 to zero -- the drilling there is load-bearing.
+ - Removing the singularity from the denominator (better/consistent 1/C33): cannot help --
+   GA3 is provably insensitive to the 1/C33 value (floor sweep).  The singularity-free
+   rewrite of the SAME strain (via the finite drilling angle phi_3) needs 2nd SG-derivatives
+   of w, which C0-RM forbids; so with omega_3 dependent + C0 the 1/C33 is unavoidable and
+   its conditioning does not set GA3.
+ - Frame rotation (square): backfires -- 45deg makes GA2=GA3=-28.7% (two orthogonal flat
+   wall-sets; rotating helps one, hurts the other).
+
+--------------------------------------------------------------------------------
+4. THE FIX : omega_3 as an INDEPENDENT 6th DOF  (segment_indep.py)
+--------------------------------------------------------------------------------
+Keep the pre-elimination kinematics: omega_3 is a genuine nodal DOF [w1,w2,w3,om1,om2,om3]
+and appears DIRECTLY -- no 1/C33 anywhere:
+   curvature   Lambda_a = omega_3|a + x_{1;a} omega_3'     (raw field derivatives)
+   shear       2g13 += C23 om3 = x_{3;2} om3 ;  2g23 += -C13 om3 = -x_{3;1} om3
+   membrane    unchanged (no omega_3)
+The in-plane symmetry that DEFINED omega_3 is re-imposed in its FINITE (undivided) product
+form as a penalty on the drilling residual
+   DR = C33 om3 + C3b om_b - S/2   (= C33 (om3 - om3_eliminated); finite even at C33=0),
+   S/2 = 1/2[ k1(x11 Rn2 - x12 Rn1) + w'_i(x11 x_{i;2}-x12 x_{i;1}) + (w_{i|1}x_{i;2}-w_{i|2}x_{i;1}) ].
+On healthy walls (C33~1) the penalty pins om3 to its eliminated value (recovering the
+general operator); where C33=0 the residual drops om3 and om3 is set by its own curvature
+stiffness -- no singularity, no null mode.  Boundary: reuse the validated 5-DOF rings for
+dofs [0..4]; om3 (dof 5) is left free at the boundary (natural BC).
+
+PENALTY (D-scaled).  pen = pen_beta * max|diag(D)|  (default pen_beta=0.1).  Rationale: a
+penalty must be commensurate with the elastic stiffness it competes against -- large enough
+to enforce DR=0, small enough to avoid ill-conditioning.  An ABSOLUTE pen only lands in the
+good window for one material/thickness; scaling to D makes pen_beta dimensionless and
+portable.  Plateau: pen in ~[1e5,1e9] absolute (iso thin) gives a stable answer; pen>=1e11
+breaks from conditioning.  pen_beta=0.1 sits safely inside for all cases tested.
+
+--------------------------------------------------------------------------------
+5. VALIDATION  (independent-omega3 shell vs 3-D solid; pen_beta=0.1)
+--------------------------------------------------------------------------------
+ GA3 (C33) deficit, general -> independent omega_3:
+   thin square iso    -24.4%  ->  -3.1%     [FIXED]
+   thin square m45    -39.9%  ->  -2.3%     [FIXED; C36  -39.7% -> +4.5%]
+   thin square, 45deg -28.7%  ->  -5.1%     [frame-robust]
+   circle iso / m45   +3.7/+4.9% -> +3.8/+5.0%   [no regression]
+   thick square iso   -5.7%  ->  -4.8% ;  thick m45  -1.3% -> +1.5%   [no regression]
+ GA2/GA3 symmetry is RESTORED (square: -6.0/-3.1% vs the old -1.1/-24.4%).
+
+ Full 6x6, thin_m45 square, tapered (x1e9; %err vs solid):
+   term  solid    shell    %err
+   EA    1.5435   1.5632   +1.3
+   GA2   0.3404   0.2995  -12.0     <- largest residual (field-om3 discretisation; asymmetry)
+   GA3   0.3404   0.3324   -2.4
+   GJ    0.6887   0.6580   -4.5
+   EI2   0.7472   0.7544   +1.0
+   EI3   0.7472   0.7637   +2.2
+   couplings: C14(ext-twist) -3.3 ; C25 -7.3 ; C26 -1.8 ; C35 -1.1 ; C36 +4.5 .
+
+--------------------------------------------------------------------------------
+5b. STRONG IMPOSITION VARIANT : LAGRANGE MULTIPLIER (no penalty, no pen_beta)
+--------------------------------------------------------------------------------
+run_indep.shell_solve_lagrange + segment_indep.assemble_constraint.  One nodal multiplier
+per node enforces the WEAK drilling constraint <N_a . DR> = 0 EXACTLY via the augmented KKT
+   [ Dhh  G^T ][ w ]   [ -Dhe ]
+   [ G    0   ][ lam] = [ -Ge  ]  (+ the w' coupling Gl in the l-block),
+G/Gl/Ge = nodal-weak DRh/DRl/DRe.  Multipliers append to the DOF vector; the existing MSG
+V0/V1 condensation runs unchanged on the augmented matrices.  No penalty, no conditioning window.
+Agreement with the penalty confirms the fix is real (not a penalty artifact):
+   thin sq iso  GA3  penalty -3.1% | Lagrange -4.0%   (GA2 -6.0/-6.3, GJ -2.6/-7.5)
+   thin sq m45  GA3  penalty -2.4% | Lagrange -4.3%   (GA2 -12.0/-11.5, GJ -4.5/-9.0)
+Lagrange GJ is slightly softer; GA2/GJ residuals (field-om3 discretisation + free-om3 end BC)
+are the same in both. Lagrange is the cleaner production choice (no pen_beta tuning).
+
+--------------------------------------------------------------------------------
+6. AIRFOIL (BAR-URC blade) NOTE
+--------------------------------------------------------------------------------
+On a real airfoil the GA3 shear flow is carried by the CURVED skin (circle-like), not the
+flat web.  Independent omega_3 barely changes the blade seg-5 m45 GA3 (tap-vs-ring-avg
++14.1% -> +13.7%), i.e. the blade's tapered-vs-average deviation is most likely REAL taper
+compliance, not the flat-wall formulation error -- confirmable only with a blade 3-D solid.
+
+--------------------------------------------------------------------------------
+7. STATUS / TODO
+--------------------------------------------------------------------------------
+ - Fix lives in a standalone EXPERIMENTAL module (segment_indep.py); production
+   segment_element_general.py is unchanged.
+ - Residual GA2 (-12% m45) and the small GA2/GA3 asymmetry: likely field-om3 discretisation;
+   check axial refinement.
+ - Productionise: replace the penalty by a Lagrange-multiplier constraint (removes pen_beta
+   tuning entirely), or keep the D-scaled penalty; extend the boundary rings to 6-DOF for a
+   fully-consistent om3 BC (currently natural/free at the ends).
+================================================================================
