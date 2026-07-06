@@ -1,213 +1,136 @@
 ---
-title: Independent-$\omega_3$ transverse-shear (GA3) fix
+title: Tapered segments — the six-parameter (independent-$\omega_3$) RM model
 ---
 
-# Independent-$\omega_3$ transverse-shear (GA3) fix
+# Tapered segments: the six-parameter (independent-$\omega_3$) RM model
 
-On a **flat-walled** tapered section the RM shell under-predicts the beam transverse-shear
-stiffness $GA_3$ ($C_{33}$) — by **$-24\%$** (isotropic) to **$-40\%$** ($[-45]$) on a thin
-tapered **square** tube — while every other $6\times6$ term stays within a few percent. This
-page shows the root cause, the fix (carry the drilling rotation $\omega_3$ as an **independent
-DOF** and impose the in-plane symmetry with a **Lagrange multiplier**), and the validation on
-all eight cases $\{\text{square},\text{circle}\}\times\{\text{thin},\text{thick}\}\times\{\text{iso},[-45]\}$
-at strong taper ($a_R=0.7$) against the FEniCS 3-D solid.
+On a **flat-walled** tapered section the classical RM shell — with the drilling
+rotation $\omega_3$ *eliminated* through the in-plane symmetry — under-predicts the
+beam transverse-shear stiffness by **$-24\%$** (isotropic) to **$-40\%$** ($[-45]$)
+on a thin tapered square tube, an error that is mesh-converged, grows with the taper
+rate squared, and is insensitive to any regularization of the $1/C_{33}$ drilling
+reciprocal. This page shows the production resolution used by OpenSG-TW's tapered
+pipeline: a **single six-parameter element** — the drilling rotation kept as an
+independent DOF, the in-plane symmetry enforced exactly by element-wise Lagrange
+multipliers, full shear integration — used for **both** the boundary rings and the
+tapered segment, with the ring warping fields (including $\omega_3$) transferred to
+the segment as Dirichlet data.
 
-All inputs, the driver script, and the full-$6\times6$ `.dat` are bundled under
+All inputs, the driver scripts, and the full-$6\times6$ `.dat` are bundled under
 [`mitc_rm_segment/taper_indep_study/`](https://github.com/bagla0/OpenSG-TW/tree/main/mitc_rm_segment/taper_indep_study).
 
-## Why $GA_3$ collapses on a flat wall
+## Why the eliminated drilling fails on flat walls
 
-The general RM taper operator eliminates the drilling rotation $\omega_3$ algebraically from the
-in-plane symmetry $\epsilon_{12}=\epsilon_{21}$,
+The elimination $\omega_3=\big(S/2-y_\beta\omega_\beta\big)/C_{33}$ divides by
+$C_{33}=\mathbf{a}_3\cdot\mathbf{b}_3$, which vanishes **identically over every flat
+wall whose normal is perpendicular to $\mathbf{b}_3$** — exactly the walls that
+carry the $V_3$ shear flow. On a smooth (circular) section $C_{33}=0$ only at
+isolated points and nothing goes wrong; on the square the degeneracy covers whole
+walls and the tapered transverse shear collapses. Keeping $\omega_3$ independent
+removes every reciprocal from the strain operators (they become polynomial in the
+direction cosines) and restores the symmetry condition as a finite constraint row
+$g = y_k\omega_k - S/2 = 0$, enforced by one Lagrange multiplier per element.
 
-$$
-\omega_3=\frac{S}{2\,C_{33}}-\frac{C_{3\beta}}{C_{33}}\,\omega_\beta,\qquad C_{33}=n\cdot b_3 ,
-$$
+## Results — all 8 cases at strong taper ($a_R=0.7$)
 
-and substitutes it into the curvature and transverse-shear strains. On the two square walls that
-**carry the $V_3$ shear flow** the normal is $n\parallel b_2$, so $C_{33}=n\cdot b_3\equiv 0$ over
-the *entire* wall and the elimination is degenerate. The resulting eliminated-then-regularised
-drilling is a frame-non-objective, $\sim\!-24..-40\%$ mis-representation of the flat-wall tapered
-transverse shear. It is a **converged formulation error** (flat under mesh refinement), it grows
-$\propto(\mathrm{d}R/\mathrm{d}z)^2$, and it is **specific to flat walls** — the **circular** tube,
-whose walls are curved and cross $C_{33}=0$ only at isolated points, is clean and symmetric.
+Tapered-segment diagonal errors vs the FEniCS 3-D solid (48×10 shell mesh;
+$C_{22}=C_{33}$ is satisfied **identically** — the drilling boundary data enforce
+the square's physical shear symmetry by construction):
 
-:::{note}
-The value of the $1/C_{33}$ regularisation does **not** set $GA_3$ (floor / $\varepsilon$ /
-frame-rotation sweeps all leave it at $\sim\!-24\%$). The defect is the *eliminated* drilling
-being singular/non-objective on a flat wall, not the size of the regularised denominator.
-:::
+| case | EA | GA₂ | GA₃ | GJ | EI₂ | EI₃ |
+|---|---|---|---|---|---|---|
+| square thin iso | +1.0% | −2.9% | −2.9% | −2.4% | +1.0% | +1.0% |
+| square thin [-45] | +1.3% | **−1.8%** | **−1.8%** | −4.4% | +2.2% | +2.2% |
+| square thick iso | +0.7% | −4.6% | −4.6% | −4.4% | −0.3% | −0.3% |
+| square thick [-45] | +0.8% | +1.9% | +1.9% | −6.1% | +1.7% | +1.7% |
+| circle thin iso | +1.2% | +3.8% | +3.8% | +1.2% | +1.3% | +1.3% |
+| circle thin [-45] | +0.8% | +5.1% | +5.1% | +0.0% | +2.1% | +2.1% |
+| circle thick iso | +1.0% | +2.2% | +2.2% | +0.7% | +0.2% | +0.2% |
+| circle thick [-45] | +0.3% | +3.5% | +3.5% | −1.1% | +0.9% | +0.9% |
 
-## The fix — independent $\omega_3$ with a Lagrange constraint
+The eliminated-drilling operator on the same thin square gives GA₃ = −24.4%/−39.9%
+with the coupling C₃₆ at −39.7% — the motivation for the six-parameter model.
 
-Keep the pre-elimination kinematics: $\omega_3$ is a genuine nodal DOF
-$[w_1,w_2,w_3,\omega_1,\omega_2,\omega_3]$ used **directly** (no $1/C_{33}$ anywhere),
+## Cross-sections: 5-DOF MITC vs 6-DOF ring (square)
 
-$$
-\Lambda_\alpha=\omega_{3|\alpha}+x_{1;\alpha}\,\omega_3',\qquad
-2\gamma_{13}\mathrel{+}= x_{3;2}\,\omega_3,\quad 2\gamma_{23}\mathrel{-}= x_{3;1}\,\omega_3,
-$$
+The same element solves the boundary rings on a wrapped strip. On the flat-walled
+cross-section it matches the validated 5-DOF eliminated+MITC element on EA/GA/EI and
+**repairs the ring torsion** (the floored drilling reciprocal injects a small
+spurious prismatic GJ on flat walls):
 
-and re-impose the in-plane symmetry in its **finite** (undivided) product form as a constraint
+| stiffness | 5-DOF MITC (iso) | 6-DOF (iso) | 5-DOF MITC ([-45]) | 6-DOF ([-45]) |
+|---|---|---|---|---|
+| EA | +0.0% | +0.0% | +0.8% | +0.8% |
+| GA₂ | −3.6% | −3.3% | +1.1% | +1.5% |
+| GA₃ | −3.7% | −3.3% | +0.9% | +1.5% |
+| **GJ** | **+9.6%** | **−3.8%** | **+9.0%** | **+1.4%** |
+| EI₂=EI₃ | −0.0% | −0.0% | +0.5% | +0.6% |
 
-$$
-DR \;=\; C_{33}\,\omega_3 + C_{3\beta}\,\omega_\beta - \tfrac{1}{2}S \;=\; 0
-\qquad(=C_{33}(\omega_3-\omega_3^{\text{elim}}),\ \text{finite even at }C_{33}=0).
-$$
+On the ring the transverse-shear treatment is immaterial (full = tie-γ₂₃ = tie-both
+to 0.1%): span-invariance makes the assumed shear field exact, so MITC tying is
+inert there.
 
-Where $C_{33}\neq0$ the constraint pins $\omega_3$ to its eliminated value (recovering the general
-operator); where $C_{33}=0$ it drops $\omega_3$ and the energy sets it from its own curvature
-stiffness — no singularity. `DR=0` is imposed **exactly** by one **nodal Lagrange multiplier** per
-node (weak form $\langle N_a\,DR\rangle=0$), assembled into the augmented KKT system
+## MITC and the six-parameter element (segment)
 
-$$
-\begin{bmatrix} D_{hh} & G^{T}\\ G & 0\end{bmatrix}
-\begin{Bmatrix} w\\ \lambda\end{Bmatrix}
-=\begin{Bmatrix} -D_{he}\\ -G_e\end{Bmatrix},
-$$
+On the genuinely 2-D tapered segment the standard Dvorkin–Bathe tying **must not**
+be applied: the shear rows carry the rotations *algebraically*
+($2\gamma_{13}\supset x_{k;2}\,\omega_k$), and tying aliases that drilling-carried
+shear. Ablation at the reference mesh ($C_{22}=C_{33}$ error):
 
-after which the existing MSG $V_0/V_1$ condensation runs unchanged. **No penalty, no tuning
-parameter.**
+| case | full | tie γ₂₃ | tie both |
+|---|---|---|---|
+| square thin iso | −2.9% | −4.2% | **−29.0%** |
+| square thin [-45] | −1.8% | −5.5% | **−46.6%** |
+| circle thin [-45] | +5.1% | +5.1% | +4.8% |
 
-- operator + constraint: [`segment_indep.py`](https://github.com/bagla0/OpenSG-TW/blob/main/mitc_rm_segment/segment_indep.py) (`quad_ops_indep`, `assemble_constraint`)
-- solve: [`run_indep.py`](https://github.com/bagla0/OpenSG-TW/blob/main/mitc_rm_segment/run_indep.py) → `shell_solve_lagrange`
+Full integration is locking-free: on a prismatic isotropic circle at the coarsest
+mesh (24×5) the errors vs the closed-form constants are **identical at t/R = 0.02
+and t/R = 0.002** (GA within 0.2%, GJ within 1.9%) — thickness-independence of the
+discretization error being the definitive absence-of-locking signature.
 
-## Results — all eight cases at strong taper ($a_R=0.7$)
+## Mesh convergence
 
-Transverse shear $GA_3$ ($C_{33}$) and $GA_2$ ($C_{22}$), **%err vs the 3-D solid**, general
-(eliminated $\omega_3$) vs the fix (independent $\omega_3$, Lagrange):
+Proportional refinement 24×5 → 96×20, thin wall, strong taper, fixed solid
+reference:
 
-```{list-table}
-:header-rows: 1
-:widths: 30 17 17 17 17
+![convergence](_img/taper6dof_convergence.png)
 
-* - case ($a_R=0.7$)
-  - $GA_3$ general
-  - $GA_3$ **indep**
-  - $GA_2$ general
-  - $GA_2$ indep
-* - square · thin · iso
-  - $-24.4\%$
-  - **$-4.0\%$**
-  - $-1.1\%$
-  - $-6.3\%$
-* - square · thin · $[-45]$
-  - $-39.9\%$
-  - **$-4.3\%$**
-  - $+5.5\%$
-  - $-11.5\%$
-* - square · thick · iso
-  - $-5.7\%$
-  - $-5.5\%$
-  - $-5.5\%$
-  - $-5.0\%$
-* - square · thick · $[-45]$
-  - $-1.3\%$
-  - $+0.2\%$
-  - $+8.6\%$
-  - $-1.4\%$
-* - circle · thin · iso
-  - $+3.7\%$
-  - $+3.7\%$
-  - $+4.0\%$
-  - $+4.1\%$
-* - circle · thin · $[-45]$
-  - $+4.9\%$
-  - $+5.0\%$
-  - $+5.1\%$
-  - $+5.2\%$
-* - circle · thick · iso
-  - $+2.1\%$
-  - $+2.1\%$
-  - $+3.6\%$
-  - $+3.7\%$
-* - circle · thick · $[-45]$
-  - $+3.1\%$
-  - $+3.0\%$
-  - $+4.3\%$
-  - $+4.3\%$
-```
+- **Circle**: converged — every curve moves < 0.4 points over 16× more elements;
+  the +4–5% shear plateau is the shell-model error at this slenderness.
+- **Square**: accurate at engineering resolution (+0.02% at 24×5, −2.9% at 48×10,
+  isotropic) with a slow fold-line drift under further refinement (−8.6% iso /
+  −17.4% [-45] at 96×20): the smooth-patch symmetry constraint over-constrains the
+  C⁰-shared rotations across the four fold lines. The ω₃ boundary data halve the
+  drift relative to free end drilling; a fold-consistent drilling treatment is the
+  open question. GJ/EA/EI are mesh-insensitive throughout. Practical guidance:
+  near-unit element aspect ratio, ~12 elements per wall.
 
-- **Pathological square-thin case fixed**: $GA_3$ $-24.4\%/-39.9\%\to-4.0\%/-4.3\%$.
-- **No regression**: the circle (any regime) is *unchanged* by the fix (it never hit the flat-wall
-  degeneracy), and the thick square stays good.
-- **$GA_2$ trade**: on the thin square $GA_2$ softens a few percent (the discretisation cost of
-  representing $\omega_3$ as a field), but $GA_2\approx GA_3$ symmetry — physically required for the
-  square — is *restored* (general gave $-1.1/-24.4\%$; the fix gives $-6.3/-4.0\%$).
+## Computational cost
 
-### Full $6\times6$ — worst case (square, thin, $[-45]$)
+Wall-clock seconds per case, single core (32-core Linux server), reference mesh:
 
-Diagonal (×$10^9$) and the non-zero couplings; the **$GA_3$–$EI_2$ coupling $C_{36}$** is fixed
-alongside $GA_3$ itself:
+| case | extract | rings | segment | shell total | solid (boun+taper) |
+|---|---|---|---|---|---|
+| square thin iso | 1.0 | 1.3 | 5.1 | **7.4** | 6 |
+| square thick iso | 0.9 | 0.7 | 4.7 | **6.3** | 44 |
+| circle thin iso | 1.0 | 0.7 | 4.6 | **6.3** | 17 |
+| circle thick m45 | 0.8 | 0.7 | 4.5 | **6.1** | 16 |
 
-```{list-table}
-:header-rows: 1
-:widths: 20 20 20 20 12 12
-
-* - term
-  - solid
-  - general
-  - indep-lag
-  - gen %err
-  - ind %err
-* - $C_{11}$ EA
-  - 1.5435
-  - 1.5676
-  - 1.5626
-  - $+1.6\%$
-  - $+1.2\%$
-* - $C_{22}$ GA2
-  - 0.3404
-  - 0.3591
-  - 0.3012
-  - $+5.5\%$
-  - $-11.5\%$
-* - $C_{33}$ **GA3**
-  - 0.3404
-  - 0.2048
-  - 0.3257
-  - $\mathbf{-39.9\%}$
-  - $\mathbf{-4.3\%}$
-* - $C_{44}$ GJ
-  - 0.6887
-  - 0.7016
-  - 0.6269
-  - $+1.9\%$
-  - $-9.0\%$
-* - $C_{55}$ EI2
-  - 0.7472
-  - 0.7717
-  - 0.7528
-  - $+3.3\%$
-  - $+0.8\%$
-* - $C_{66}$ EI3
-  - 0.7472
-  - 0.7322
-  - 0.7606
-  - $-2.0\%$
-  - $+1.8\%$
-* - $C_{36}$ (GA3–EI2)
-  - $+1.589\!\times\!10^8$
-  - —
-  - —
-  - $-39.7\%$
-  - $\mathbf{+4.6\%}$
-```
-
-(GJ softens to $-9.0\%$ under the exact constraint — a residual alongside $GA_2$, most likely the
-field-$\omega_3$ discretisation and the free-$\omega_3$ end condition, both open refinements.)
+The shell cost is independent of geometry, thickness, and — unlike the solid, which
+must resolve every ply through the thickness — of the layup count.
 
 ## Reproduce
 
-```powershell
-# env: prepend the conda env to PATH (Windows DLLs)
+```bash
+# on the compute server (conda env opensg_2_0)
 cd mitc_rm_segment
-python run_taper_indep_study.py     # 8 cases, general + indep-Lagrange vs solid -> the .dat
+python run_taper_indep_study.py      # 8 cases -> taper_indep_results.dat (+ timing)
+python run_paper_convergence.py      # 5-level mesh sweep -> paper_convergence.{dat,npz}
+python run_extras.py                 # shear ablation + locking probe
+python plot_paper_convergence.py     # -> fig_convergence.png + timing_summary.dat
+python run_ring_indep.py             # 5-DOF vs 6-DOF ring comparison
 ```
 
-Bundle ([`taper_indep_study/`](https://github.com/bagla0/OpenSG-TW/tree/main/mitc_rm_segment/taper_indep_study)):
-`run_taper_indep_study.py` (driver), `taper_indep_results.dat` (full $6\times6$, all cases),
-`meshes/{square,circle}_{shell,solid}_<tag>.yaml` (all 16 input meshes). Solid references:
-`examples/data/benchmark/taper_{square,study}_solid_{iso,m45}.npz`. Background and the failed
-approaches (drop, denominator reframe, frame rotation) are in
-[`mitc_rm_segment/GA3_investigation_and_fix.txt`](https://github.com/bagla0/OpenSG-TW/blob/main/mitc_rm_segment/GA3_investigation_and_fix.txt).
+Solver entry points: `run_indep.shell_solve_lagrange` (segment, all-6-DOF) and
+`run_ring_indep.ring_indep` (ring); operators in `segment_indep.py`. Solid
+references: `examples/data/benchmark/taper_{square,study}_solid_{iso,m45}.npz`.
