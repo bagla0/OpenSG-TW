@@ -91,6 +91,20 @@ plus the strain-by-strain paper certification.
 :::
 ::::
 
+### Independent-$\omega_3$ transverse-shear (GA3) fix
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 9 · Independent-$\omega_3$ GA3 fix (square + circle)
+:link: taper_indep_omega3
+:link-type: doc
+The flat-wall GA3 (C33) deficit and its fix: carry the drilling $\omega_3$ as an independent
+DOF with the in-plane symmetry imposed by a Lagrange multiplier. All 8 cases
+(square/circle × thin/thick × iso/−45) at strong taper, general vs fixed vs 3-D solid.
+:::
+::::
+
 ```{list-table} Cross-sections and benchmarks used
 :header-rows: 1
 :widths: 22 26 26 26
@@ -123,6 +137,10 @@ plus the strain-by-strain paper certification.
   - `data/taper_square/meshes/*.yaml` (generated in-notebook)
   - `taper_square.gen_square_case` + `assemble_segment_general`
   - 3-D solid `data/benchmark/taper_square_solid_{iso,m45}.npz`
+* - Independent-$\omega_3$ GA3 fix
+  - `mitc_rm_segment/taper_indep_study/meshes/*.yaml` (square + circle, bundled)
+  - `segment_indep.py` + `run_indep.shell_solve_lagrange`
+  - 3-D solid `data/benchmark/taper_{square,study}_solid_{iso,m45}.npz`
 ```
 
 All paths are relative to [`examples/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples).
