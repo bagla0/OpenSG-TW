@@ -110,6 +110,33 @@ def quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0):
     return BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA
 
 
+# standard Dvorkin-Bathe MITC4 tying points (same as segment_element_general):
+#   gamma_13 (row 0): sampled at (-1,0),(+1,0), linear in xi
+#   gamma_23 (row 1): sampled at (0,-1),(0,+1), linear in eta
+_TIE_G13 = [(-1.0, 0.0), (1.0, 0.0)]
+_TIE_G23 = [(0.0, -1.0), (0.0, 1.0)]
+
+
+def _mitc_shear_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0, scheme="mitc4_g23"):
+    """Tied (assumed-strain) transverse-shear BGh rows (2 x 4*NDOF6) at (xi,eta).
+
+    With the INDEPENDENT drilling omega_3 the gamma_13 row is ALGEBRAIC in omega_3 on
+    flat walls (x_{3;2} omega_3 -- the role omega_2 plays prismatically), so tying it
+    removes the director penalization (hourglass; GA3 -31/-50% on the thin square).
+    The field-consistent selective scheme ties ONLY the locking-prone gamma_23 row
+    ('mitc4_g23', mirroring the validated prismatic element); 'mitc4_both' kept for
+    the ablation."""
+    ops = quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg)
+    r23 = [quad_ops_indep(X, e3m, tx, te, k22, cross, ax, kg)[4][1:2, :] for (tx, te) in _TIE_G23]
+    g23 = 0.5 * (1.0 - eta) * r23[0] + 0.5 * (1.0 + eta) * r23[1]
+    if scheme == "mitc4_both":
+        r13 = [quad_ops_indep(X, e3m, tx, te, k22, cross, ax, kg)[4][0:1, :] for (tx, te) in _TIE_G13]
+        g13 = 0.5 * (1.0 - xi) * r13[0] + 0.5 * (1.0 + xi) * r13[1]
+    else:
+        g13 = ops[4][0:1, :]
+    return np.vstack([g13, g23])
+
+
 def _d_scale(D_by):
     """Characteristic ABD stiffness magnitude = max |diag(D)| over layups.  The drilling
     penalty is set to beta*this so it is dimensionally commensurate with the elastic
@@ -119,9 +146,15 @@ def _d_scale(D_by):
 
 
 def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, ax,
-                           kg_e=None, pen=None, pen_beta=0.1, dof_map=None):
+                           kg_e=None, pen=None, pen_beta=0.1, dof_map=None,
+                           shear="full"):
     """6-DOF assembly with the finite drilling-residual penalty pen*DR^2.
-    pen defaults to pen_beta * max|diag(D)| (D-scaled; robust across materials/thickness)."""
+    pen defaults to pen_beta * max|diag(D)| (D-scaled; robust across materials/thickness).
+    shear: 'full' (default) integrates both transverse-shear rows untied -- with the
+    INDEPENDENT omega_3 both rows carry algebraic drilling content that Dvorkin-Bathe
+    assumed-strain interpolation ALIASES (square thin: 'mitc4_both' -31/-50% GA3,
+    'mitc4_g23' -15/-30% GA2, vs 'full' -4..-6%), and no transverse-shear locking is
+    observed untied (circle: full==tied to 0.2%).  Tied variants kept for the ablation."""
     if pen is None:
         pen = pen_beta * _d_scale(D_by)
     if dof_map is None:
@@ -139,36 +172,89 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
         for (xi, eta) in gp:
             BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA = quad_ops_indep(
                 X, e3s[q], xi, eta, k22, cross, ax, kg)
+            BGt = BGh if shear == "full" else _mitc_shear_indep(
+                X, e3s[q], xi, eta, k22, cross, ax, kg, scheme=shear)
             w = dA
             DRh2 = DRh[:, None]; DRl2 = DRl[:, None]
-            np.add.at(Dhh, gij, (BDh.T @ D @ BDh + BGh.T @ G @ BGh + pen * (DRh2 @ DRh2.T)) * w)
-            np.add.at(Dhe, g, (BDh.T @ D @ BDe + BGh.T @ G @ BGe + pen * (DRh2 @ DRe[None, :])).squeeze() * w)
+            np.add.at(Dhh, gij, (BDh.T @ D @ BDh + BGt.T @ G @ BGt + pen * (DRh2 @ DRh2.T)) * w)
+            np.add.at(Dhe, g, (BDh.T @ D @ BDe + BGt.T @ G @ BGe + pen * (DRh2 @ DRe[None, :])).squeeze() * w)
             Dee += (BDe.T @ D @ BDe + BGe.T @ G @ BGe + pen * np.outer(DRe, DRe)) * w
-            np.add.at(Dhl, gij, (BDh.T @ D @ BDl + BGh.T @ G @ BGl + pen * (DRh2 @ DRl2.T)) * w)
+            np.add.at(Dhl, gij, (BDh.T @ D @ BDl + BGt.T @ G @ BGl + pen * (DRh2 @ DRl2.T)) * w)
             np.add.at(Dll, gij, (BDl.T @ D @ BDl + BGl.T @ G @ BGl + pen * (DRl2 @ DRl2.T)) * w)
             np.add.at(Dle, g, (BDl.T @ D @ BDe + BGl.T @ G @ BGe + pen * (DRl2 @ DRe[None, :])).squeeze() * w)
     return Dhh, Dhe, Dee, Dhl, Dll, Dle
 
 
-def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None):
-    """Weak NODAL drilling constraint operators: one multiplier per node enforces
-    <N_a . DR> = 0.  Returns G (Nn x 6Nn) on w_s, Gl (Nn x 6Nn) on w_s', Ge (Nn x 4) on eb.
-    (No dof_map: segment nodes are distinct, so plain fancy-indexed accumulation is safe.)"""
-    Nn = len(nodes); M = NDOF6 * Nn
-    G = np.zeros((Nn, M)); Gl = np.zeros((Nn, M)); Ge = np.zeros((Nn, 4))
+def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
+                        lam_space="elem", dof_map=None):
+    """Weak drilling-constraint operators for the Lagrange multiplier field.
+
+    lam_space='elem' (default): one PIECEWISE-CONSTANT multiplier per element,
+      <DR>_e = 0 -- the inf-sup-stable choice (an equal-order nodal multiplier
+      over-constrains under refinement: square thin GA2/GA3 drift -1/-2% ->
+      -17/-9% from NC=24 to NC=96, the classical LBB failure of equal-order
+      multiplier spaces; the element-constant space removes the drift).
+    lam_space='node': one multiplier per node, <N_a DR> = 0 (kept for the ablation).
+    lam_space='elem_nofold': element-constant multipliers, EXCLUDING elements adjacent
+      to a FOLD line (nodes where incident-element normals disagree > 30 deg).  The
+      drilling constraint is derived on a smooth surface patch; across a slope
+      discontinuity the C0-shared fields cannot satisfy both walls' symmetry rows
+      simultaneously, and the growing number of fold-line rows (~1/h) produces the
+      linear-in-1/h over-constraint drift seen on the square (GA2 -1 -> -17%).
+    dof_map (optional): node -> dof-node index (wrapped prismatic strip, as in the
+    ring SG).  With a dof_map the local index vector contains REPEATED dofs, so the
+    accumulation uses np.add.at (fancy-index += silently drops duplicates).
+    Returns G (P x 6Nd) on w_s, Gl (P x 6Nd) on w_s', Ge (P x 4) on eb."""
+    Nn = len(nodes)
+    if dof_map is None:
+        dof_map = np.arange(Nn)
+    Nd = int(np.max(dof_map)) + 1; M = NDOF6 * Nd
+    skip = np.zeros(len(quads), bool)
+    if lam_space == "elem_nofold":
+        # per-element unit normal from the two diagonals
+        nrm = np.cross(nodes[quads[:, 2]] - nodes[quads[:, 0]],
+                       nodes[quads[:, 3]] - nodes[quads[:, 1]])
+        nrm /= (np.linalg.norm(nrm, axis=1)[:, None] + 1e-30)
+        node_ref = [[] for _ in range(Nn)]
+        for q, quad in enumerate(quads):
+            for nd in quad:
+                node_ref[int(nd)].append(q)
+        fold_node = np.zeros(Nn, bool)
+        for nd in range(Nn):
+            qs = node_ref[nd]
+            for a in range(len(qs)):
+                for c in range(a + 1, len(qs)):
+                    if abs(float(nrm[qs[a]] @ nrm[qs[c]])) < np.cos(np.radians(30.0)):
+                        fold_node[nd] = True
+        skip = np.array([any(fold_node[int(nd)] for nd in quad) for quad in quads])
+    if lam_space.startswith("elem"):
+        row_of = -np.ones(len(quads), int)
+        row_of[~skip] = np.arange(int((~skip).sum()))
+        P = int((~skip).sum())
+    else:
+        P = Nd
+    G = np.zeros((P, M)); Gl = np.zeros((P, M)); Ge = np.zeros((P, 4))
     gpv = 1.0 / np.sqrt(3.0)
     gp = [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]
     for q, quad in enumerate(quads):
+        if skip[q]:
+            continue
         X = nodes[quad]; k22 = float(k22_e[q]); kg = float(kg_e[q]) if kg_e is not None else 0.0
-        gloc = np.array([NDOF6 * int(nd) + c for nd in quad for c in range(NDOF6)])
+        gloc = np.array([NDOF6 * int(dof_map[nd]) + c for nd in quad for c in range(NDOF6)])
         for (xi, eta) in gp:
             N, _, _ = _bilinear(xi, eta)
             _, _, _, _, _, _, DRe, DRh, DRl, dA = quad_ops_indep(X, e3s[q], xi, eta, k22, cross, ax, kg)
-            for a in range(4):
-                nd = int(quad[a])
-                G[nd, gloc] += N[a] * DRh * dA
-                Gl[nd, gloc] += N[a] * DRl * dA
-                Ge[nd] += N[a] * DRe * dA
+            if lam_space.startswith("elem"):
+                rr = row_of[q] if lam_space == "elem_nofold" else q
+                np.add.at(G[rr], gloc, DRh * dA)
+                np.add.at(Gl[rr], gloc, DRl * dA)
+                Ge[rr] += DRe * dA
+            else:
+                for a in range(4):
+                    nd = int(dof_map[quad[a]])
+                    np.add.at(G[nd], gloc, N[a] * DRh * dA)
+                    np.add.at(Gl[nd], gloc, N[a] * DRl * dA)
+                    Ge[nd] += N[a] * DRe * dA
     return G, Gl, Ge
 
 

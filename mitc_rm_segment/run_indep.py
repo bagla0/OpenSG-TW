@@ -72,9 +72,9 @@ def shell_solve_indep(tg, mesh_dir, res_dir, pen=None, pen_beta=0.1):
     return 0.5 * (np.asarray(S6) + np.asarray(S6).T)
 
 
-def shell_solve_lagrange(tg, mesh_dir, res_dir):
-    """Same as shell_solve_indep but DR=0 imposed EXACTLY via nodal Lagrange multipliers
-    (augmented KKT) -- no penalty, no pen_beta."""
+def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem"):
+    """Same as shell_solve_indep but DR=0 imposed EXACTLY via Lagrange multipliers
+    (augmented KKT) -- no penalty, no pen_beta.  lam_space: 'elem' | 'elem_nofold' | 'node'."""
     import io, contextlib
     import jax.numpy as jnp
     from boundary_from_yaml import extract
@@ -105,7 +105,8 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir):
 
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0)   # NO penalty
-    Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e)
+    Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
+                                     lam_space=lam_space)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))
     M = Dhh.shape[0]; P = Gc.shape[0]; naug = M + P
 
