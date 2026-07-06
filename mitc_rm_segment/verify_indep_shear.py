@@ -25,10 +25,17 @@ def point(th, z):
     return np.array([Rz(z) * math.cos(th), Rz(z) * math.sin(th), z])
 
 
+PHI = math.radians(25.0)   # in-surface frame rotation: makes x_{1;2}=a2.b1 NONZERO,
+                           # exercising every x12-carrying term (on a straight-axis tube
+                           # the natural hoop has x12=0 identically, hiding those terms)
+
+
 def frame(th):
-    a2 = np.array([-math.sin(th), math.cos(th), 0.0])
+    a2c = np.array([-math.sin(th), math.cos(th), 0.0])
     g = np.array([m * math.cos(th), m * math.sin(th), 1.0])
-    a1 = g / np.linalg.norm(g)
+    a1c = g / np.linalg.norm(g)
+    a1 = math.cos(PHI) * a1c - math.sin(PHI) * a2c
+    a2 = math.sin(PHI) * a1c + math.cos(PHI) * a2c
     n = np.cross(a1, a2)
     return a1, a2, n
 
@@ -41,12 +48,20 @@ S1F = 1.0 / math.sqrt(1.0 + m * m)
 H = 1e-6
 
 
-def dz2(f, th=th0, z=z0):
+def dhoop(f, th=th0, z=z0):
     return (f(th + H, z) - f(th - H, z)) / (2 * H) / Rz(z)
 
 
-def dz1(f, th=th0, z=z0):
+def dgen(f, th=th0, z=z0):
     return (f(th, z + H) - f(th, z - H)) / (2 * H) * S1F
+
+
+def dz1(f, th=th0, z=z0):   # derivative along the ROTATED a1
+    return math.cos(PHI) * dgen(f, th, z) - math.sin(PHI) * dhoop(f, th, z)
+
+
+def dz2(f, th=th0, z=z0):   # derivative along the ROTATED a2
+    return math.sin(PHI) * dgen(f, th, z) + math.cos(PHI) * dhoop(f, th, z)
 
 
 a1, a2, nn = frame(th0)
