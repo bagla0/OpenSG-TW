@@ -103,6 +103,14 @@ The flat-wall GA3 (C33) deficit and its fix: carry the drilling $\omega_3$ as an
 DOF with the in-plane symmetry imposed by a Lagrange multiplier. All 8 cases
 (square/circle × thin/thick × iso/−45) at strong taper, general vs fixed vs 3-D solid.
 :::
+
+:::{grid-item-card} 10 · MITC 5-DOF vs 6-DOF element (executed)
+:link: mitc_5dof_vs_6dof
+:link-type: doc
+Head-to-head executed comparison of the eliminated-drilling 5-DOF/MITC element and the
+constrained 6-DOF element: ring SGs (GJ repair on flat walls), MITC-tying ablation on the
+tapered segment, and the extreme-thinness locking probe.
+:::
 ::::
 
 ```{list-table} Cross-sections and benchmarks used
