@@ -100,6 +100,9 @@ def quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0):
         BGh[1, o + 5] += -x31 * N[a]                    # -C13 om3
 
     # ---------------- DRILLING RESIDUAL DR = C33 om3 + C3b om_b - S/2 (finite) -------------
+    # twist column: -(x11 Rn2 - x12 Rn1)/2 == +(x2 y2 + x3 y3)/2 by the direction-cosine
+    # identity y2 = x12 x31 - x11 x32, y3 = x11 x22 - x12 x21 (Omega3_new simplification;
+    # verified to 1e-16 in verify_indep_shear).  Kept in Rn form to match eq. A-derivation.
     DRe[1] = -0.5 * (x11 * Rn2 - x12 * Rn1)
     for a in range(4):
         o = n * a
@@ -122,19 +125,32 @@ def _mitc_shear_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0, scheme="mitc4_g23
 
     With the INDEPENDENT drilling omega_3 the gamma_13 row is ALGEBRAIC in omega_3 on
     flat walls (x_{3;2} omega_3 -- the role omega_2 plays prismatically), so tying it
-    removes the director penalization (hourglass; GA3 -31/-50% on the thin square).
-    The field-consistent selective scheme ties ONLY the locking-prone gamma_23 row
-    ('mitc4_g23', mirroring the validated prismatic element); 'mitc4_both' kept for
-    the ablation."""
+    removes the director penalization (hourglass; GA3 -29/-47% on the thin square).
+    Schemes:
+      'mitc4_wonly' : FIELD-CONSISTENT partial tying -- tie BOTH rows at the standard
+                      Dvorkin-Bathe points but keep every ROTATION column (om1,om2,om3)
+                      at its full-integration (Gauss-point) value.  Removes the
+                      w-gradient/rotation order mismatch (the locking pairing) without
+                      de-penalizing the algebraic director content.  The general-case
+                      safeguard.
+      'mitc4_g23'   : tie only the gamma_23 row (prismatic-element analogue).
+      'mitc4_both'  : naive full tying (ablation only -- aliases the drilling shear).
+    """
     ops = quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg)
     r23 = [quad_ops_indep(X, e3m, tx, te, k22, cross, ax, kg)[4][1:2, :] for (tx, te) in _TIE_G23]
     g23 = 0.5 * (1.0 - eta) * r23[0] + 0.5 * (1.0 + eta) * r23[1]
-    if scheme == "mitc4_both":
+    if scheme in ("mitc4_both", "mitc4_wonly"):
         r13 = [quad_ops_indep(X, e3m, tx, te, k22, cross, ax, kg)[4][0:1, :] for (tx, te) in _TIE_G13]
         g13 = 0.5 * (1.0 - xi) * r13[0] + 0.5 * (1.0 + xi) * r13[1]
     else:
         g13 = ops[4][0:1, :]
-    return np.vstack([g13, g23])
+    BGt = np.vstack([g13, g23])
+    if scheme == "mitc4_wonly":
+        rot = np.zeros(BGt.shape[1], bool)
+        for a in range(4):
+            rot[NDOF6 * a + 3:NDOF6 * a + 6] = True
+        BGt[:, rot] = ops[4][:, rot]          # rotations stay fully integrated
+    return BGt
 
 
 def _d_scale(D_by):

@@ -144,6 +144,8 @@ print("            |diff| = %.3e" % abs(g23_elim - g23_indep))
 
 # ---- coefficient-level identities (the algebra behind the un-substitution) ----
 print("\ncoefficient identities (must be ~0):")
+# swept-area collapse (Omega3_new): x11 Rn2 - x12 Rn1 == -(x2 y2 + x3 y3)
+print("  swept-id : %.3e" % abs((x11 * Rn2 - x12 * Rn1) + (x2 * y2 + x3 * y3)))
 # k1 coefficient: eliminated k113 == x11*swept + x32 * (x11 Rn2 - x12 Rn1)/(2 C33)
 print("  k1  (g13): %.3e" % abs(k113 - (x11 * swept + x32 * (x11 * Rn2 - x12 * Rn1) * h33)))
 print("  k1  (g23): %.3e" % abs(k123 - (x12 * swept - x31 * (x11 * Rn2 - x12 * Rn1) * h33)))

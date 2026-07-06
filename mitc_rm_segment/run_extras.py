@@ -1,4 +1,4 @@
-"""run_extras.py -- ablation + locking probe under the ALL-6-DOF pipeline (server)."""
+﻿"""run_extras.py -- ablation + locking probe under the ALL-6-DOF pipeline (server)."""
 import os, sys
 import numpy as np
 
@@ -22,7 +22,7 @@ for geom, MD, npzn, mats in [("square", os.path.join(HERE, "out", "taper_square"
         b = np.load(os.path.join(BENCH, npzn % mat), allow_pickle=True)
         tg = ts.tag_of("thin", mat, 0.7)
         So = 0.5 * (b[tg + "_seg"] + b[tg + "_seg"].T)
-        for sch in ("full", "mitc4_g23", "mitc4_both"):
+        for sch in ("full", "mitc4_wonly", "mitc4_g23", "mitc4_both"):
             def patched(*a, **k):
                 k["shear"] = sch
                 return orig(*a, **k)
