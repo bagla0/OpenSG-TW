@@ -72,18 +72,22 @@ def shell_solve_indep(tg, mesh_dir, res_dir, pen=None, pen_beta=0.1):
     return 0.5 * (np.asarray(S6) + np.asarray(S6).T)
 
 
-def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem"):
-    """Same as shell_solve_indep but DR=0 imposed EXACTLY via Lagrange multipliers
-    (augmented KKT) -- no penalty, no pen_beta.  lam_space: 'elem' | 'elem_nofold' | 'node'."""
-    import io, contextlib
+def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=False):
+    """ALL-6-DOF tapered segment homogenization: constrained (independent-omega3)
+    element for BOTH the boundary rings and the segment interior, DR=0 imposed
+    exactly via element-constant Lagrange multipliers.  The segment Dirichlet data
+    includes the drilling omega_3 ring values.  return_full=True additionally
+    returns the ring 6x6s and per-stage wall times."""
+    import io, contextlib, time
     import jax.numpy as jnp
     from boundary_from_yaml import extract
     from segment_element import dirichlet_solve, compute_k22, compute_kg
-    from segment_element_general import ring_general
     from segment_indep import assemble_segment_indep, assemble_constraint, build_C_Psi_segment6
     from solve_segment_jax import _material_by_section
     from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
+    from run_ring_indep import ring_indep
 
+    t0 = time.perf_counter()
     npz = os.path.join(res_dir, "shell_%s.npz" % tg)
     with contextlib.redirect_stdout(io.StringIO()):
         extract(os.path.join(mesh_dir, "shell_%s.yaml" % tg), npz)
@@ -94,15 +98,20 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem"):
     D_by, G_by = _material_by_section(json.loads(str(b["sections"])), json.loads(str(b["materials"])), center_ref=True)
     cents = nodes[quads].mean(1)
     k22_e = compute_k22(cents, e2s, e3s, quads); kg_e = compute_kg(cents, e1s, e2s, e3s, quads)
+    t_extract = time.perf_counter() - t0
 
+    t0 = time.perf_counter()
     rings = {}
     for side in ("L", "R"):
         rx = np.asarray(b["%s_x" % side]); rc = np.asarray(b["%s_cells" % side])
         rs = np.asarray(b["%s_subdom" % side]); re3 = np.asarray(b["%s_e3" % side])
         kr = compute_k22(rx[rc].mean(1), np.asarray(b["%s_e2" % side]), re3, rc)
-        C6r, V0r, V1r = ring_general(rx, rc, rs, re3, D_by, G_by, kr, ax, list(cross), shear="mitc4_both")
-        rings[side] = dict(V0=V0r, V1=V1r)
+        C6r, V0r, V1r = ring_indep(rx, rc, rs, re3, D_by, G_by, kr, ax, list(cross),
+                                   lam_space=lam_space, return_fields=True)
+        rings[side] = dict(C6=C6r, V0=V0r, V1=V1r)
+    t_rings = time.perf_counter() - t0
 
+    t0 = time.perf_counter()
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0)   # NO penalty
     Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
@@ -120,11 +129,13 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem"):
     Dc_a = np.zeros((naug, 4)); Dc_a[:M] = C.T
 
     def scatter(key):
+        # 6-DOF ring fields: all six dofs (incl. the drilling omega_3) become
+        # Dirichlet data for the segment
         bd, bv = [], []
         for side in ("L", "R"):
-            V = rings[side][key].reshape(-1, 5, 4)
+            V = rings[side][key].reshape(-1, 6, 4)
             for i, sn in enumerate(np.asarray(b["%s_node2seg" % side])):
-                for c in range(5):
+                for c in range(6):
                     bd.append(6 * int(sn) + c); bv.append(V[i, c, :])
         return np.array(bd), np.array(bv, float)
 
@@ -138,7 +149,12 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem"):
         jnp.array(V1), jnp.array(V0), jnp.array(EB),
         jnp.array(np.asarray(V0DllV0) / Lz), jnp.array(np.asarray(DhlV0) / Lz),
         jnp.array(np.asarray(DhlTV0Dle) / Lz), jnp.array(Psi_a), jnp.array(Dc_a))
-    return 0.5 * (np.asarray(S6) + np.asarray(S6).T)
+    S6 = 0.5 * (np.asarray(S6) + np.asarray(S6).T)
+    t_seg = time.perf_counter() - t0
+    if return_full:
+        return dict(S6=S6, C6L=rings["L"]["C6"], C6R=rings["R"]["C6"],
+                    t_extract=t_extract, t_rings=t_rings, t_seg=t_seg)
+    return S6
 
 
 def show6(mat="m45", regime="thin", aR=0.7, pen_beta=0.1):

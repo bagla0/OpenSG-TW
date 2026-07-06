@@ -17,8 +17,11 @@ BENCH = os.path.join(REPO, "examples", "data", "benchmark")
 
 
 def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
-               shear="full", lam_space="elem"):
-    """Constrained 6-DOF ring SG.  Returns the ring Timoshenko C6 (6,6)."""
+               shear="full", lam_space="elem", return_fields=False):
+    """Constrained 6-DOF ring SG.  Returns the ring Timoshenko C6 (6,6); with
+    return_fields=True also the zeroth/first-order warping fields V0, V1 (6m x 4,
+    multiplier rows stripped) for the segment Dirichlet transfer -- including the
+    drilling omega_3 boundary values."""
     import jax.numpy as jnp
     from segment_indep import (assemble_segment_indep, assemble_constraint, NDOF6)
     from opensg_jax.fe_jax.msg_rm_timo import build_C_Psi
@@ -76,7 +79,10 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
         jnp.array(V1), jnp.array(V0), jnp.array(Deff),
         V0DllV0, DhlV0, DhlTV0Dle, jnp.array(Psi_a), jnp.array(Dc_a))
     C6r = np.asarray(C6r)
-    return 0.5 * (C6r + C6r.T)
+    C6r = 0.5 * (C6r + C6r.T)
+    if return_fields:
+        return C6r, np.asarray(V0[:M]), np.asarray(V1[:M])
+    return C6r
 
 
 def main():
