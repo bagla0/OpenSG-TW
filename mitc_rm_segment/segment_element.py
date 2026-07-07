@@ -336,25 +336,33 @@ def dirichlet_solve_fac(fac, RHS, bdofs, bvals):
 
 def dirichlet_factor_sparse(K, bdofs):
     """Sparse analogue of dirichlet_factor: factorize the free-free block of a
-    scipy-sparse K once (PARDISO if available, else SuperLU), for the V0/V1 solves
-    at >~1e5 DOF where the dense free block would not fit in memory."""
-    import scipy.sparse as sp
+    scipy-sparse K once with SuperLU, for the V0/V1 solves at large DOF where the
+    dense free block would not fit in memory.
+
+    SuperLU (partial pivoting) is the SINGLE solver used for ALL sections, skin or
+    webbed.  PARDISO/pypardiso is deliberately NOT used: its static pivoting silently
+    returns a wrong factorization on the ill-conditioned reduced block at a web/skin
+    T-junction (verified -- it even made iterative refinement diverge), and the mesh
+    does not tell us in advance whether a section has webs.  SuperLU is correct for
+    every mesh."""
+    from scipy.sparse.linalg import splu
     ndof = K.shape[0]
     free = np.setdiff1d(np.arange(ndof), bdofs)
     Kcsr = K.tocsr()
     Kii = Kcsr[free][:, free].tocsc()
     Kib = Kcsr[free][:, bdofs]
-    try:
-        import pypardiso
-        solver = pypardiso.PyPardisoSolver(); solver.factorize(Kii)
-        return dict(kind="pardiso", solver=solver, Kii=Kii, Kib=Kib, free=free, ndof=ndof)
-    except Exception:
-        from scipy.sparse.linalg import splu
-        return dict(kind="splu", lu=splu(Kii), Kib=Kib, free=free, ndof=ndof)
+    return dict(kind="splu", lu=splu(Kii), Kib=Kib, free=free, ndof=ndof)
 
 
 def dirichlet_solve_sparse(fac, RHS, bdofs, bvals):
-    """dirichlet_solve on a dirichlet_factor_sparse() context (back-substitution)."""
+    """dirichlet_solve on a dirichlet_factor_sparse() context (back-substitution).
+
+    The PARDISO path is wrapped in Python-level iterative refinement: PARDISO's static-
+    pivoting factorization is only APPROXIMATE on the ill-conditioned reduced block from a
+    web/skin T-junction, so a single solve is wrong (the "sparse broken on webs" bug).
+    Refining with the same (fast) factorization drives the residual to machine level, giving
+    ONE robust+fast solver for skin and webbed sections alike.  (If the block were truly
+    singular the residual would stall -- it does not; it converges.)"""
     nc = RHS.shape[1]
     u = np.zeros((fac["ndof"], nc)); u[bdofs] = bvals
     rhs = np.asarray(RHS)[fac["free"]] - fac["Kib"] @ bvals
