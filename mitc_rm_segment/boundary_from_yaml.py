@@ -114,11 +114,14 @@ def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx,
     return len(comp), len(oedges)
 
 
-def extract(seg_yaml, out_npz, write_yaml=False):
+def extract(seg_yaml, out_npz, write_yaml=False, plot="auto"):
     """Extract the two end cross-sections into an .npz bundle (the solver runs the
     boundary Timoshenko IN-MEMORY from this bundle -- see solve_boundary_bundle).
     write_yaml=True additionally writes each end as a 1-D cross-section YAML
-    (FEniCS _create_1Dyaml layout) -- only needed for inspection / FEniCS diff."""
+    (FEniCS _create_1Dyaml layout) -- only needed for inspection / FEniCS diff.
+    plot: True = always draw the e1/e2/e3 orientation PNGs; 'auto' (default) = draw
+    only the ones not already on disk (the matplotlib 3-D quivers cost ~1.5 s and
+    dominated repeated solves); False = never."""
     seg = load_segment_yaml(seg_yaml)
     nodes = np.array(seg["nodes"], dtype=float)
     quads = [list(map(int, e)) for e in seg["elements"]]
@@ -132,8 +135,14 @@ def extract(seg_yaml, out_npz, write_yaml=False):
     tag = os.path.splitext(os.path.basename(out_npz))[0]
 
     ok, txt = frame_report(nodes, quads, e1s, e2s, e3s); print("segment " + txt)
-    orientation_png(nodes, quads, e1s, e2s, e3s, os.path.join(out_dir, "orient_%s_segment.png" % tag),
-                    title="%s segment e1/e2/e3" % tag, step=max(1, len(quads) // 300))
+
+    def _want(png):
+        return plot is True or (plot == "auto" and not os.path.exists(png))
+
+    png = os.path.join(out_dir, "orient_%s_segment.png" % tag)
+    if _want(png):
+        orientation_png(nodes, quads, e1s, e2s, e3s, png,
+                        title="%s segment e1/e2/e3" % tag, step=max(1, len(quads) // 300))
 
     free, owner = _free_edges(quads)
     comps, adj = _components(free)
@@ -183,8 +192,10 @@ def extract(seg_yaml, out_npz, write_yaml=False):
         re3 = np.array([e3s[q] for q in oq])                  # so this is unchanged for the cylinder)
         edge_sub = np.array([int(subdom[q]) for q in oq], np.int32)
         okr, txtr = frame_report(rx, rcells, re1, re2, re3); print("  %s-ring %s" % (side, txtr))
-        orientation_png_ring(rx, rcells, re2, re3, os.path.join(out_dir, "orient_%s_ring_%s.png" % (tag, side)),
-                             title="%s %s-ring e2/e3" % (tag, side))
+        png = os.path.join(out_dir, "orient_%s_ring_%s.png" % (tag, side))
+        if _want(png):
+            orientation_png_ring(rx, rcells, re2, re3, png,
+                                 title="%s %s-ring e2/e3" % (tag, side))
         bundle["%s_x" % side] = rx
         bundle["%s_cells" % side] = rcells
         bundle["%s_subdom" % side] = edge_sub

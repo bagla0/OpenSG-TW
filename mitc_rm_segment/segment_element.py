@@ -311,3 +311,24 @@ def dirichlet_solve(K, RHS, bdofs, bvals):
     rhs = RHS[free] - K[np.ix_(free, bdofs)] @ bvals
     u[free] = np.linalg.solve(Kii, rhs)
     return u
+
+
+def dirichlet_factor(K, bdofs):
+    """Factorize the interior block of dirichlet_solve once for reuse across load
+    sets sharing the SAME boundary dof set (the V0 and V1 solves use the same K
+    and bdofs; two full dense factorizations are one too many).  Same LAPACK
+    getrf/getrs path as np.linalg.solve."""
+    from scipy.linalg import lu_factor
+    ndof = K.shape[0]
+    free = np.setdiff1d(np.arange(ndof), bdofs)
+    return dict(lu=lu_factor(K[np.ix_(free, free)]),
+                free=free, Kib=K[np.ix_(free, bdofs)], ndof=ndof)
+
+
+def dirichlet_solve_fac(fac, RHS, bdofs, bvals):
+    """dirichlet_solve on a dirichlet_factor() context (back-substitution only)."""
+    from scipy.linalg import lu_solve
+    nc = RHS.shape[1]
+    u = np.zeros((fac["ndof"], nc)); u[bdofs] = bvals
+    u[fac["free"]] = lu_solve(fac["lu"], RHS[fac["free"]] - fac["Kib"] @ bvals)
+    return u

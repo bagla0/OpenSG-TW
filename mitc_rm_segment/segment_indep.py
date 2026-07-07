@@ -153,6 +153,144 @@ def _mitc_shear_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0, scheme="mitc4_g23
     return BGt
 
 
+# ---------------- BATCHED operator evaluation (vectorized over elements) ----------------
+# The scalar quad_ops_indep above is kept for external diagnostics/verification;
+# the assembly below evaluates the same closed-form operators for ALL elements at
+# once per quadrature point -- the per-element Python loop dominated the shell
+# wall time (5760 quad_ops_indep calls ~ 5 s of the 7 s square-thin solve).
+
+
+def _surf_frame_batch(Xe, e3e, xi, eta, cross, ax):
+    """Batched _surf_frame: Xe (ne,4,3), e3e (ne,3) -> N (4,), D1/D2 (ne,4),
+    dA (ne,), direction-cosine dict of (ne,) arrays.  Same algebra per element."""
+    N, dNx, dNe = _bilinear(xi, eta)
+    Jxi = np.einsum('a,eaj->ej', dNx, Xe)
+    Jeta = np.einsum('a,eaj->ej', dNe, Xe)
+    a2 = Jxi / np.linalg.norm(Jxi, axis=1, keepdims=True)
+    a1 = Jeta - np.sum(Jeta * a2, axis=1, keepdims=True) * a2
+    a1 = a1 / np.linalg.norm(a1, axis=1, keepdims=True)
+    n = np.cross(a1, a2)
+    flip = np.sum(n * e3e, axis=1) < 0.0
+    n[flip] = -n[flip]; a1[flip] = -a1[flip]
+    G11 = np.sum(a1 * Jxi, axis=1); G12 = np.sum(a1 * Jeta, axis=1)
+    G21 = np.sum(a2 * Jxi, axis=1); G22 = np.sum(a2 * Jeta, axis=1)
+    # [D1; D2] = inv(G^T) [dNx; dNe] with G = [[G11,G12],[G21,G22]]
+    det = G11 * G22 - G12 * G21
+    D1 = (G22[:, None] * dNx[None, :] - G21[:, None] * dNe[None, :]) / det[:, None]
+    D2 = (-G12[:, None] * dNx[None, :] + G11[:, None] * dNe[None, :]) / det[:, None]
+    dA = np.linalg.norm(np.cross(Jxi, Jeta), axis=1)
+    x = np.einsum('a,eaj->ej', N, Xe)
+    c = dict(
+        x11=a1[:, ax], x21=a1[:, cross[0]], x31=a1[:, cross[1]],
+        x12=a2[:, ax], x22=a2[:, cross[0]], x32=a2[:, cross[1]],
+        y1=n[:, ax], y2=n[:, cross[0]], y3=n[:, cross[1]],
+        x2=x[:, cross[0]], x3=x[:, cross[1]],
+    )
+    return N, D1, D2, dA, c
+
+
+def quad_ops_indep_batch(Xe, e3e, xi, eta, cross, ax):
+    """Batched quad_ops_indep (same rows; k22/kg do not enter these operators).
+    Returns BDe (ne,6,4), BDh/BDl (ne,6,24), BGe (ne,2,4), BGh/BGl (ne,2,24),
+    DRe (ne,4), DRh/DRl (ne,24), dA (ne,)."""
+    N, D1, D2, dA, c = _surf_frame_batch(Xe, e3e, xi, eta, cross, ax)
+    ne = Xe.shape[0]
+    x11, x12 = c["x11"], c["x12"]
+    xi1 = np.stack([x11, c["x21"], c["x31"]], axis=1)     # (ne,3) x_{i;1}
+    xi2 = np.stack([x12, c["x22"], c["x32"]], axis=1)     # (ne,3) x_{i;2}
+    yv = np.stack([c["y1"], c["y2"], c["y3"]], axis=1)    # (ne,3) C_{3i}
+    x2, x3, y1 = c["x2"], c["x3"], c["y1"]
+    Rn1 = x2 * c["x31"] - x3 * c["x21"]
+    Rn2 = x2 * c["x32"] - x3 * c["x22"]
+    swept = x2 * c["y3"] - x3 * c["y2"]
+    z = np.zeros(ne)
+
+    BDe = np.stack([
+        np.stack([x11**2, x11 * Rn1, x11**2 * x3, -(x11**2) * x2], 1),
+        np.stack([x12**2, x12 * Rn2, x12**2 * x3, -(x12**2) * x2], 1),
+        np.stack([2 * x11 * x12, x11 * Rn2 + x12 * Rn1,
+                  2 * x11 * x12 * x3, -2 * x11 * x12 * x2], 1),
+        np.stack([z, x11 * x12, x11 * c["x22"], x11 * c["x32"]], 1),
+        np.stack([z, -x12 * x11, -x12 * c["x21"], -x12 * c["x31"]], 1),
+        np.stack([z, x12**2 - x11**2, x12 * c["x22"] - x11 * c["x21"],
+                  x12 * c["x32"] - x11 * c["x31"]], 1),
+    ], axis=1)
+    BGe = np.stack([
+        np.stack([x11 * y1, x11 * swept, x11 * y1 * x3, -x11 * y1 * x2], 1),
+        np.stack([x12 * y1, x12 * swept, x12 * y1 * x3, -x12 * y1 * x2], 1),
+    ], axis=1)
+
+    # DOF blocks laid out (ne, row, node a, dof) -> reshape (ne, row, 24)
+    B = np.zeros((ne, 6, 4, NDOF6))
+    B[:, 0, :, 0:3] = D1[:, :, None] * xi1[:, None, :]
+    B[:, 1, :, 0:3] = D2[:, :, None] * xi2[:, None, :]
+    B[:, 2, :, 0:3] = D2[:, :, None] * xi1[:, None, :] + D1[:, :, None] * xi2[:, None, :]
+    B[:, 3, :, 3:6] = D1[:, :, None] * xi2[:, None, :]
+    B[:, 4, :, 3:6] = -D2[:, :, None] * xi1[:, None, :]
+    B[:, 5, :, 3:6] = D2[:, :, None] * xi2[:, None, :] - D1[:, :, None] * xi1[:, None, :]
+    BDh = B.reshape(ne, 6, 24)
+
+    Bl = np.zeros((ne, 6, 4, NDOF6))
+    Bl[:, 0, :, 0:3] = N[None, :, None] * (x11[:, None] * xi1)[:, None, :]
+    Bl[:, 1, :, 0:3] = N[None, :, None] * (x12[:, None] * xi2)[:, None, :]
+    Bl[:, 2, :, 0:3] = N[None, :, None] * (x11[:, None] * xi2 + x12[:, None] * xi1)[:, None, :]
+    Bl[:, 3, :, 3:6] = N[None, :, None] * (x11[:, None] * xi2)[:, None, :]
+    Bl[:, 4, :, 3:6] = N[None, :, None] * (-x12[:, None] * xi1)[:, None, :]
+    Bl[:, 5, :, 3:6] = N[None, :, None] * (x12[:, None] * xi2 - x11[:, None] * xi1)[:, None, :]
+    BDl = Bl.reshape(ne, 6, 24)
+
+    Bg = np.zeros((ne, 2, 4, NDOF6))
+    Bg[:, 0, :, 0:3] = D1[:, :, None] * yv[:, None, :]
+    Bg[:, 1, :, 0:3] = D2[:, :, None] * yv[:, None, :]
+    Bg[:, 0, :, 3:6] = N[None, :, None] * xi2[:, None, :]
+    Bg[:, 1, :, 3:6] = N[None, :, None] * (-xi1)[:, None, :]
+    BGh = Bg.reshape(ne, 2, 24)
+
+    Bgl = np.zeros((ne, 2, 4, NDOF6))
+    Bgl[:, 0, :, 0:3] = N[None, :, None] * (x11[:, None] * yv)[:, None, :]
+    Bgl[:, 1, :, 0:3] = N[None, :, None] * (x12[:, None] * yv)[:, None, :]
+    BGl = Bgl.reshape(ne, 2, 24)
+
+    DRe = np.zeros((ne, 4))
+    DRe[:, 1] = -0.5 * (x11 * Rn2 - x12 * Rn1)
+    Dr = np.zeros((ne, 4, NDOF6))
+    Dr[:, :, 0:3] = -0.5 * (D1[:, :, None] * xi2[:, None, :] - D2[:, :, None] * xi1[:, None, :])
+    Dr[:, :, 3:6] = N[None, :, None] * yv[:, None, :]
+    DRh = Dr.reshape(ne, 24)
+    Drl = np.zeros((ne, 4, NDOF6))
+    Drl[:, :, 0:3] = N[None, :, None] * (-0.5 * (x11[:, None] * xi2 - x12[:, None] * xi1))[:, None, :]
+    DRl = Drl.reshape(ne, 24)
+    return BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA
+
+
+def _tie_rows_batch(Xe, e3e, cross, ax):
+    """Shear rows at the Dvorkin-Bathe tying points, once per element set (they do
+    not depend on the quadrature point; the scalar path re-evaluated them per GP)."""
+    return {
+        "g13m": quad_ops_indep_batch(Xe, e3e, -1.0, 0.0, cross, ax)[4][:, 0:1, :],
+        "g13p": quad_ops_indep_batch(Xe, e3e, 1.0, 0.0, cross, ax)[4][:, 0:1, :],
+        "g23m": quad_ops_indep_batch(Xe, e3e, 0.0, -1.0, cross, ax)[4][:, 1:2, :],
+        "g23p": quad_ops_indep_batch(Xe, e3e, 0.0, 1.0, cross, ax)[4][:, 1:2, :],
+    }
+
+
+def _shear_batch(xi, eta, scheme, BGh_gauss, tie):
+    """Batched tied shear rows at (xi, eta) -- mirrors _mitc_shear_indep."""
+    g23 = 0.5 * (1.0 - eta) * tie["g23m"] + 0.5 * (1.0 + eta) * tie["g23p"]
+    if scheme in ("mitc4_both", "mitc4_wonly"):
+        g13 = 0.5 * (1.0 - xi) * tie["g13m"] + 0.5 * (1.0 + xi) * tie["g13p"]
+    else:
+        g13 = BGh_gauss[:, 0:1, :]
+    BGt = np.concatenate([g13, g23], axis=1)
+    if scheme == "mitc4_wonly":
+        rot = np.zeros(24, bool)
+        for a in range(4):
+            rot[NDOF6 * a + 3:NDOF6 * a + 6] = True
+        BGt = BGt.copy()
+        BGt[:, :, rot] = BGh_gauss[:, :, rot]
+    return BGt
+
+
 def _d_scale(D_by):
     """Characteristic ABD stiffness magnitude = max |diag(D)| over layups.  The drilling
     penalty is set to beta*this so it is dimensionally commensurate with the elastic
@@ -175,29 +313,59 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
         pen = pen_beta * _d_scale(D_by)
     if dof_map is None:
         dof_map = np.arange(len(nodes))
+    dof_map = np.asarray(dof_map, int)
+    nodes = np.asarray(nodes, float); quads = np.asarray(quads, int)
+    ne = len(quads)
     Nn = int(np.max(dof_map)) + 1; ndof = NDOF6 * Nn
-    Dhh = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 4)); Dee = np.zeros((4, 4))
-    Dhl = np.zeros((ndof, ndof)); Dll = np.zeros((ndof, ndof)); Dle = np.zeros((ndof, 4))
+    Xe = nodes[quads]; e3e = np.asarray(e3s, float)
+    sd = np.asarray(subdom, int)
+    keys = sorted(set(int(s) for s in sd))
+    Darr = np.stack([np.asarray(D_by[k], float) for k in keys])
+    Garr = np.stack([np.asarray(G_by[k], float) for k in keys])
+    pos = {k: i for i, k in enumerate(keys)}
+    sdi = np.array([pos[int(s)] for s in sd])
+    De = Darr[sdi]; Gm = Garr[sdi]                      # (ne,6,6), (ne,2,2)
+
+    g = (NDOF6 * dof_map[quads])[:, :, None] + np.arange(NDOF6)[None, None, :]
+    g = g.reshape(ne, 24)
+    tie = None if shear == "full" else _tie_rows_batch(Xe, e3e, cross, ax)
+
+    Ehh = np.zeros((ne, 24, 24)); Ehe = np.zeros((ne, 24, 4)); Dee = np.zeros((4, 4))
+    Ehl = np.zeros((ne, 24, 24)); Ell = np.zeros((ne, 24, 24)); Ele = np.zeros((ne, 24, 4))
     gpv = 1.0 / np.sqrt(3.0)
-    gp = [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]
-    for q, quad in enumerate(quads):
-        X = nodes[quad]; k22 = float(k22_e[q]); kg = float(kg_e[q]) if kg_e is not None else 0.0
-        D = D_by[int(subdom[q])]; G = G_by[int(subdom[q])]
-        g = np.concatenate([[NDOF6 * int(dof_map[nd]) + cc for cc in range(NDOF6)] for nd in quad])
-        gij = (g[:, None], g[None, :])
-        for (xi, eta) in gp:
-            BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA = quad_ops_indep(
-                X, e3s[q], xi, eta, k22, cross, ax, kg)
-            BGt = BGh if shear == "full" else _mitc_shear_indep(
-                X, e3s[q], xi, eta, k22, cross, ax, kg, scheme=shear)
-            w = dA
-            DRh2 = DRh[:, None]; DRl2 = DRl[:, None]
-            np.add.at(Dhh, gij, (BDh.T @ D @ BDh + BGt.T @ G @ BGt + pen * (DRh2 @ DRh2.T)) * w)
-            np.add.at(Dhe, g, (BDh.T @ D @ BDe + BGt.T @ G @ BGe + pen * (DRh2 @ DRe[None, :])).squeeze() * w)
-            Dee += (BDe.T @ D @ BDe + BGe.T @ G @ BGe + pen * np.outer(DRe, DRe)) * w
-            np.add.at(Dhl, gij, (BDh.T @ D @ BDl + BGt.T @ G @ BGl + pen * (DRh2 @ DRl2.T)) * w)
-            np.add.at(Dll, gij, (BDl.T @ D @ BDl + BGl.T @ G @ BGl + pen * (DRl2 @ DRl2.T)) * w)
-            np.add.at(Dle, g, (BDl.T @ D @ BDe + BGl.T @ G @ BGe + pen * (DRl2 @ DRe[None, :])).squeeze() * w)
+    for (xi, eta) in [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]:
+        BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA = quad_ops_indep_batch(
+            Xe, e3e, xi, eta, cross, ax)
+        BGt = BGh if shear == "full" else _shear_batch(xi, eta, shear, BGh, tie)
+        w = dA[:, None, None]
+        DB = np.einsum('eij,ejb->eib', De, BDh)
+        GB = np.einsum('eij,ejb->eib', Gm, BGt)
+        DBe = np.einsum('eij,ejb->eib', De, BDe)
+        GBe = np.einsum('eij,ejb->eib', Gm, BGe)
+        DBl = np.einsum('eij,ejb->eib', De, BDl)
+        GBl = np.einsum('eij,ejb->eib', Gm, BGl)
+        Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB)
+                    + pen * DRh[:, :, None] * DRh[:, None, :])
+        Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe)
+                    + pen * DRh[:, :, None] * DRe[:, None, :])
+        Dee += np.einsum('e,eab->ab', dA,
+                         np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe)
+                         + pen * DRe[:, :, None] * DRe[:, None, :])
+        Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl)
+                    + pen * DRh[:, :, None] * DRl[:, None, :])
+        Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl)
+                    + pen * DRl[:, :, None] * DRl[:, None, :])
+        Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe)
+                    + pen * DRl[:, :, None] * DRe[:, None, :])
+
+    Dhh = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 4))
+    Dhl = np.zeros((ndof, ndof)); Dll = np.zeros((ndof, ndof)); Dle = np.zeros((ndof, 4))
+    rc = (g[:, :, None], g[:, None, :])
+    np.add.at(Dhh, rc, Ehh)
+    np.add.at(Dhl, rc, Ehl)
+    np.add.at(Dll, rc, Ell)
+    np.add.at(Dhe, g.reshape(-1), Ehe.reshape(-1, 4))
+    np.add.at(Dle, g.reshape(-1), Ele.reshape(-1, 4))
     return Dhh, Dhe, Dee, Dhl, Dll, Dle
 
 
@@ -252,6 +420,28 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
     G = np.zeros((P, M)); Gl = np.zeros((P, M)); Ge = np.zeros((P, 4))
     gpv = 1.0 / np.sqrt(3.0)
     gp = [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]
+    if lam_space.startswith("elem"):
+        # batched: accumulate the element-integrated DR rows for all elements at
+        # once (the scalar per-element loop dominated the constraint assembly)
+        nodes = np.asarray(nodes, float); quadsA = np.asarray(quads, int)
+        ne = len(quadsA)
+        Xe = nodes[quadsA]; e3e = np.asarray(e3s, float)
+        gloc = (NDOF6 * np.asarray(dof_map, int)[quadsA])[:, :, None] \
+            + np.arange(NDOF6)[None, None, :]
+        gloc = gloc.reshape(ne, 24)
+        Gel = np.zeros((ne, 24)); Glel = np.zeros((ne, 24)); Geel = np.zeros((ne, 4))
+        for (xi, eta) in gp:
+            _, _, _, _, _, _, DRe, DRh, DRl, dA = quad_ops_indep_batch(
+                Xe, e3e, xi, eta, cross, ax)
+            Gel += DRh * dA[:, None]
+            Glel += DRl * dA[:, None]
+            Geel += DRe * dA[:, None]
+        keep = ~skip
+        rows = (row_of if lam_space == "elem_nofold" else np.arange(ne))[keep]
+        np.add.at(G, (rows[:, None], gloc[keep]), Gel[keep])
+        np.add.at(Gl, (rows[:, None], gloc[keep]), Glel[keep])
+        np.add.at(Ge, rows, Geel[keep])
+        return G, Gl, Ge
     for q, quad in enumerate(quads):
         if skip[q]:
             continue
@@ -260,38 +450,34 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
         for (xi, eta) in gp:
             N, _, _ = _bilinear(xi, eta)
             _, _, _, _, _, _, DRe, DRh, DRl, dA = quad_ops_indep(X, e3s[q], xi, eta, k22, cross, ax, kg)
-            if lam_space.startswith("elem"):
-                rr = row_of[q] if lam_space == "elem_nofold" else q
-                np.add.at(G[rr], gloc, DRh * dA)
-                np.add.at(Gl[rr], gloc, DRl * dA)
-                Ge[rr] += DRe * dA
-            else:
-                for a in range(4):
-                    nd = int(dof_map[quad[a]])
-                    np.add.at(G[nd], gloc, N[a] * DRh * dA)
-                    np.add.at(Gl[nd], gloc, N[a] * DRl * dA)
-                    Ge[nd] += N[a] * DRe * dA
+            for a in range(4):
+                nd = int(dof_map[quad[a]])
+                np.add.at(G[nd], gloc, N[a] * DRh * dA)
+                np.add.at(Gl[nd], gloc, N[a] * DRl * dA)
+                Ge[nd] += N[a] * DRe * dA
     return G, Gl, Ge
 
 
 def build_C_Psi_segment6(nodes, quads, cross):
     """6-DOF rigid-body kernel/constraints (om3 column = 0: drilling is not a rigid mode)."""
+    nodes = np.asarray(nodes, float); quads = np.asarray(quads, int)
     Nn = len(nodes); ndof = NDOF6 * Nn
     C = np.zeros((4, ndof)); Psi = np.zeros((ndof, 4))
     gpv = 1.0 / np.sqrt(3.0)
     qp = [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]
-    for quad in quads:
-        X = nodes[quad]
-        for (xi, eta) in qp:
-            Nn_, dNx, dNe = _bilinear(xi, eta)
-            dA = np.linalg.norm(np.cross(dNx @ X, dNe @ X))
-            for a, nd in enumerate(quad):
-                for cc in range(4):
-                    C[cc, NDOF6 * nd + cc] += Nn_[a] * dA
-    for nd in range(Nn):
-        y2, y3 = nodes[nd, cross[0]], nodes[nd, cross[1]]
-        Psi[NDOF6 * nd + 0, 0] = 1.0
-        Psi[NDOF6 * nd + 1, 1] = 1.0
-        Psi[NDOF6 * nd + 2, 2] = 1.0
-        Psi[NDOF6 * nd + 1, 3] = -y3; Psi[NDOF6 * nd + 2, 3] = y2; Psi[NDOF6 * nd + 3, 3] = -1.0
+    Xe = nodes[quads]
+    node_w = np.zeros(Nn)
+    for (xi, eta) in qp:
+        Nn_, dNx, dNe = _bilinear(xi, eta)
+        dA = np.linalg.norm(np.cross(np.einsum('a,eaj->ej', dNx, Xe),
+                                     np.einsum('a,eaj->ej', dNe, Xe)), axis=1)
+        np.add.at(node_w, quads, dA[:, None] * Nn_[None, :])
+    base = NDOF6 * np.arange(Nn)
+    for cc in range(4):
+        C[cc, base + cc] = node_w
+    y2 = nodes[:, cross[0]]; y3 = nodes[:, cross[1]]
+    Psi[base + 0, 0] = 1.0
+    Psi[base + 1, 1] = 1.0
+    Psi[base + 2, 2] = 1.0
+    Psi[base + 1, 3] = -y3; Psi[base + 2, 3] = y2; Psi[base + 3, 3] = -1.0
     return C, Psi

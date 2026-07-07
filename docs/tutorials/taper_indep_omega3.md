@@ -152,17 +152,29 @@ reference:
 
 ## Computational cost
 
-Wall-clock seconds per case, single core (32-core Linux server), reference mesh:
+Wall-clock seconds per case, single core (32-core Linux server), reference mesh.
+The operator evaluation is **vectorized over elements** (batched numpy `einsum`
+assembly; the former per-element/per-Gauss-point Python loop dominated the wall
+time), the orientation PNGs are drawn only when missing, and every direct
+factorization (segment Dirichlet, ring KKT) is built once and reused for the V0
+*and* V1 solves — certified identical to the scalar loop to ≤3·10⁻¹⁵ per matrix
+by `verify_shell_batch.py`. The solid column is the equally optimized FEniCS
+solver (cached MUMPS factorizations, shared JIT kernels):
 
 | case | extract | rings | segment | shell total | solid (boun+taper) |
 |---|---|---|---|---|---|
-| square thin iso | 1.0 | 2.0 | 4.9 | **7.9** | 6 |
-| square thick iso | 0.9 | 1.5 | 4.6 | **7.1** | 44 |
-| circle thin iso | 0.9 | 1.5 | 4.6 | **7.0** | 17 |
-| circle thick m45 | 0.8 | 1.5 | 4.5 | **6.8** | 16 |
+| square thin iso | 0.3 | 0.7 | 1.2 | **2.2**¹ | 1.6 |
+| square thick iso | 0.2 | 0.1 | 0.8 | **1.0** | 1.5 |
+| circle thin iso | 0.2 | 0.1 | 0.8 | **1.0** | 1.5 |
+| circle thick m45 | 0.4 | 0.1 | 0.7 | **1.2** | 1.5 |
+
+¹ first case in a process; carries the one-time JAX JIT warm-up.
 
 The shell cost is independent of geometry, thickness, and — unlike the solid, which
-must resolve every ply through the thickness — of the layup count.
+must resolve every ply through the thickness — of the layup count; at this
+single-ply benchmark both solvers land near one second, and the gap opens with
+mesh size and ply count (the 13.5k-node webbed solid already needs 4.4 s for its
+taper stage).
 
 ## Reproduce
 

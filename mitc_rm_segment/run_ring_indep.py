@@ -68,17 +68,19 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     Psi_a = np.zeros((naug, 4)); Psi_a[:M] = Psi6
     Dc_a = np.zeros((naug, 4)); Dc_a[:M] = C6.T
 
-    # full KKT: [Dhh_a, Dc_a; Dc_a^T, 0]
+    # full KKT: [Dhh_a, Dc_a; Dc_a^T, 0] -- factorized once for the V0 AND V1 solves
+    from scipy.linalg import lu_factor, lu_solve
     A = np.zeros((naug + 4, naug + 4))
     A[:naug, :naug] = Dhh_a; A[:naug, naug:] = Dc_a; A[naug:, :naug] = Dc_a.T
+    Alu = lu_factor(A)
     R0 = np.zeros((naug + 4, 4)); R0[:naug] = -Dhe_a
-    V0 = np.linalg.solve(A, R0)[:naug]
+    V0 = lu_solve(Alu, R0)[:naug]
     Deff = Dee + V0.T @ Dhe_a
     bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
         jnp.array(V0), jnp.array(Dhl_a), jnp.array(Dll_a), jnp.array(Dle_a),
         jnp.array(Psi_a), jnp.array(Dc_a))
     R1 = np.zeros((naug + 4, 4)); R1[:naug] = np.asarray(bb)
-    V1 = np.linalg.solve(A, R1)[:naug]
+    V1 = lu_solve(Alu, R1)[:naug]
     C6r, *_ = finalize_v1_and_compute_deff(
         jnp.array(V1), jnp.array(V0), jnp.array(Deff),
         V0DllV0, DhlV0, DhlTV0Dle, jnp.array(Psi_a), jnp.array(Dc_a))

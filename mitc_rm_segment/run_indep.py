@@ -81,7 +81,8 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     import io, contextlib, time
     import jax.numpy as jnp
     from boundary_from_yaml import extract
-    from segment_element import dirichlet_solve, compute_k22, compute_kg
+    from segment_element import (dirichlet_solve, dirichlet_factor,
+                                 dirichlet_solve_fac, compute_k22, compute_kg)
     from segment_indep import assemble_segment_indep, assemble_constraint, build_C_Psi_segment6
     from solve_segment_jax import _material_by_section
     from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
@@ -145,12 +146,18 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
                     bd.append(6 * int(sn) + c); bv.append(V[i, c, :])
         return np.array(bd), np.array(bv, float)
 
-    bd0, bv0 = scatter("V0"); V0 = dirichlet_solve(Dhh_a, -Dhe_a, bd0, bv0)
+    # V0 and V1 share the SAME operator and boundary dof set: factorize once
+    bd0, bv0 = scatter("V0")
+    fac = dirichlet_factor(Dhh_a, bd0)
+    V0 = dirichlet_solve_fac(fac, -Dhe_a, bd0, bv0)
     Lz = float(nodes[:, ax].max() - nodes[:, ax].min())
     EB = (np.asarray(Dee) + V0.T @ Dhe_a) / Lz
     bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
         jnp.array(V0), jnp.array(Dhl_a), jnp.array(Dll_a), jnp.array(Dle_a), jnp.array(Psi_a), jnp.array(Dc_a))
-    bd1, bv1 = scatter("V1"); V1 = dirichlet_solve(Dhh_a, np.asarray(bb), bd1, bv1)
+    bd1, bv1 = scatter("V1")
+    V1 = (dirichlet_solve_fac(fac, np.asarray(bb), bd1, bv1)
+          if np.array_equal(bd0, bd1) else
+          dirichlet_solve(Dhh_a, np.asarray(bb), bd1, bv1))
     S6, *_ = finalize_v1_and_compute_deff(
         jnp.array(V1), jnp.array(V0), jnp.array(EB),
         jnp.array(np.asarray(V0DllV0) / Lz), jnp.array(np.asarray(DhlV0) / Lz),
