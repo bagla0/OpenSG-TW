@@ -133,6 +133,44 @@ Full integration stays coherent (GJ exact, shears +8/+10% — a scheme-independe
 junction/model residual); canonical tying scatters the shears wildly. On webbed
 sections the shear treatment is not cosmetic.
 
+## Boundary cross-section: multi-cell homogenization and cost
+
+The boundary stage is itself a cross-sectional homogenization — each end ring is a
+span-invariant SG giving the section's Timoshenko stiffness $C^b_{ij}$ (superscript
+`b` = boundary/ring). For the **thick** ($t=0.2$) webbed ellipse this is a genuine
+multi-cell homogenization; every nonzero $C^b_{ij}$ vs the 3-D solid boundary
+(`time_boundary_3cases.py`):
+
+| $C^b_{ij}$ | solid ×10⁹ | shell ×10⁹ | %err |
+|---|---|---|---|
+| $C^b_{11}$ EA | 19.871 | 20.476 | +3.0 |
+| $C^b_{22}$ GA₂ | 5.234 | 5.294 | +1.1 |
+| $C^b_{33}$ GA₃ | 6.688 | 6.897 | +3.1 |
+| $C^b_{44}$ GJ | 4.512 | 4.563 | +1.1 |
+| $C^b_{55}$ EI₂ | 3.278 | 3.358 | +2.4 |
+| $C^b_{66}$ EI₃ | 6.642 | 6.729 | +1.3 |
+| $C^b_{13}$ | 1.823 | 2.029 | +11.3 |
+| $C^b_{14}$ | −2.403 | −2.513 | +4.6 |
+| $C^b_{25}$ | 1.378 | 1.429 | +3.7 |
+| $C^b_{36}$ | 1.128 | 1.219 | +8.1 |
+| $C^b_{46}$ | −0.162 | −0.176 | +8.4 |
+
+(Couplings below 0.5% of EA — $C^b_{16},C^b_{23},C^b_{34}$ — are near-zero, omitted.)
+Diagonals within 3.1%, ply couplings within 3.7–11.3%.
+
+The boundary (two end cross-sections) is also cheap vs the solid — RM ring (6 DOF/
+contour node) vs solid boundary (3 DOF/node of the hoop × 4-thick end face), warm,
+mesh I/O excluded:
+
+| section (thick m45) | shell #DOF | shell s | solid #DOF | solid s | speed-up |
+|---|---|---|---|---|---|
+| square | 288 | 0.07 | 720 | 0.22 | 3.4× |
+| circle | 288 | 0.07 | 720 | 0.26 | 3.4× |
+| webbed ellipse | 378 | 0.09 | 1935 | 0.29 | 3.4× |
+
+The shell boundary is 2.5–5× smaller and ~3.4× faster, the ratio holding as the
+webs enlarge the solid face.
+
 ## Mesh convergence
 
 Proportional refinement 24×5 → 96×20, thin wall, strong taper, fixed solid
