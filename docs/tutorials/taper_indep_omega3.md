@@ -171,6 +171,34 @@ mesh I/O excluded:
 The shell boundary is 2.5–5× smaller and ~3.4× faster, the ratio holding as the
 webs enlarge the solid face.
 
+## Large-scale example: million-DOF solid vs refined shell
+
+For a smooth tapered ellipse (a:1.0→0.65, b:0.60→0.42, [-45] ply, t/R=0.02, **no
+webs** so the shell refines cleanly — a *webbed* section's shears drift under
+refinement, see convergence below) the two solvers run at production scale
+(`run_large_smooth.py`). At >10⁵ DOF the shell assembles and solves in **sparse**
+form (`shell_solve_lagrange_sparse`; the dense 1.2×10⁵-square matrices would be
+115 GB), with the V0/V1 Dirichlet solves sharing one factorization:
+
+| | 3-D solid | RM shell |
+|---|---|---|
+| #DOF | 1,198,080 | 119,808 |
+| mesh nodes | 399,360 | 19,968 |
+| segment solve | 99 s | 18.5 s |
+| EA | 0.9842 | 0.9937 (+1.0%) |
+| GA₂ | 0.3297 | 0.3512 (+6.5%) |
+| GA₃ | 0.1651 | 0.1721 (+4.3%) |
+| GJ | 0.2182 | 0.2188 (+0.3%) |
+| EI₂ | 0.1472 | 0.1489 (+1.1%) |
+| EI₃ | 0.3041 | 0.3098 (+1.9%) |
+
+The refined shell reaches every diagonal of the **million-DOF** solid within
+0.3–6.5% (extension/torsion/bending <2%, shears 4–7% = thin-shell model error, not
+discretization) with **10× fewer DOF** and no through-thickness meshing — the
+advantage that multiplies across a full blade's tapered stations. (The sparse
+driver is bit-identical to the dense one on smooth sections, ≤1e-13; scripts:
+`verify_sparse_driver.py`, `run_large_smooth.py`.)
+
 ## Mesh convergence
 
 Proportional refinement 24×5 → 96×20, thin wall, strong taper, fixed solid

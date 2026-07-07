@@ -301,7 +301,7 @@ def _d_scale(D_by):
 
 def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, ax,
                            kg_e=None, pen=None, pen_beta=0.1, dof_map=None,
-                           shear="full"):
+                           shear="full", sparse=False):
     """6-DOF assembly with the finite drilling-residual penalty pen*DR^2.
     pen defaults to pen_beta * max|diag(D)| (D-scaled; robust across materials/thickness).
     shear: 'full' (default) integrates both transverse-shear rows untied -- with the
@@ -358,19 +358,29 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
         Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe)
                     + pen * DRl[:, :, None] * DRe[:, None, :])
 
-    Dhh = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 4))
-    Dhl = np.zeros((ndof, ndof)); Dll = np.zeros((ndof, ndof)); Dle = np.zeros((ndof, 4))
+    Dhe = np.zeros((ndof, 4)); Dle = np.zeros((ndof, 4))
+    np.add.at(Dhe, g.reshape(-1), Ehe.reshape(-1, 4))
+    np.add.at(Dle, g.reshape(-1), Ele.reshape(-1, 4))
+    if sparse:
+        # COO triplets from the per-element 24x24 blocks (dense ndof x ndof would be
+        # TB at ~1e6 DOF); duplicates summed by tocsr().  Dhe/Dle stay dense (thin).
+        from scipy.sparse import coo_matrix
+        rr = np.broadcast_to(g[:, :, None], (ne, 24, 24)).ravel()
+        cc = np.broadcast_to(g[:, None, :], (ne, 24, 24)).ravel()
+        Dhh = coo_matrix((Ehh.ravel(), (rr, cc)), shape=(ndof, ndof)).tocsr()
+        Dhl = coo_matrix((Ehl.ravel(), (rr, cc)), shape=(ndof, ndof)).tocsr()
+        Dll = coo_matrix((Ell.ravel(), (rr, cc)), shape=(ndof, ndof)).tocsr()
+        return Dhh, Dhe, Dee, Dhl, Dll, Dle
+    Dhh = np.zeros((ndof, ndof)); Dhl = np.zeros((ndof, ndof)); Dll = np.zeros((ndof, ndof))
     rc = (g[:, :, None], g[:, None, :])
     np.add.at(Dhh, rc, Ehh)
     np.add.at(Dhl, rc, Ehl)
     np.add.at(Dll, rc, Ell)
-    np.add.at(Dhe, g.reshape(-1), Ehe.reshape(-1, 4))
-    np.add.at(Dle, g.reshape(-1), Ele.reshape(-1, 4))
     return Dhh, Dhe, Dee, Dhl, Dll, Dle
 
 
 def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
-                        lam_space="elem", dof_map=None):
+                        lam_space="elem", dof_map=None, sparse=False):
     """Weak drilling-constraint operators for the Lagrange multiplier field.
 
     lam_space='elem' (default): one PIECEWISE-CONSTANT multiplier per element,
@@ -417,7 +427,7 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
         P = int((~skip).sum())
     else:
         P = Nd
-    G = np.zeros((P, M)); Gl = np.zeros((P, M)); Ge = np.zeros((P, 4))
+    Ge = np.zeros((P, 4))
     gpv = 1.0 / np.sqrt(3.0)
     gp = [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]
     if lam_space.startswith("elem"):
@@ -438,10 +448,19 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
             Geel += DRe * dA[:, None]
         keep = ~skip
         rows = (row_of if lam_space == "elem_nofold" else np.arange(ne))[keep]
+        np.add.at(Ge, rows, Geel[keep])
+        if sparse:
+            from scipy.sparse import coo_matrix
+            Rk = np.broadcast_to(rows[:, None], (int(keep.sum()), 24)).ravel()
+            Ck = gloc[keep].ravel()
+            G = coo_matrix((Gel[keep].ravel(), (Rk, Ck)), shape=(P, M)).tocsr()
+            Gl = coo_matrix((Glel[keep].ravel(), (Rk, Ck)), shape=(P, M)).tocsr()
+            return G, Gl, Ge
+        G = np.zeros((P, M)); Gl = np.zeros((P, M))
         np.add.at(G, (rows[:, None], gloc[keep]), Gel[keep])
         np.add.at(Gl, (rows[:, None], gloc[keep]), Glel[keep])
-        np.add.at(Ge, rows, Geel[keep])
         return G, Gl, Ge
+    G = np.zeros((P, M)); Gl = np.zeros((P, M))
     for q, quad in enumerate(quads):
         if skip[q]:
             continue

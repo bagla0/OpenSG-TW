@@ -332,3 +332,34 @@ def dirichlet_solve_fac(fac, RHS, bdofs, bvals):
     u = np.zeros((fac["ndof"], nc)); u[bdofs] = bvals
     u[fac["free"]] = lu_solve(fac["lu"], RHS[fac["free"]] - fac["Kib"] @ bvals)
     return u
+
+
+def dirichlet_factor_sparse(K, bdofs):
+    """Sparse analogue of dirichlet_factor: factorize the free-free block of a
+    scipy-sparse K once (PARDISO if available, else SuperLU), for the V0/V1 solves
+    at >~1e5 DOF where the dense free block would not fit in memory."""
+    import scipy.sparse as sp
+    ndof = K.shape[0]
+    free = np.setdiff1d(np.arange(ndof), bdofs)
+    Kcsr = K.tocsr()
+    Kii = Kcsr[free][:, free].tocsc()
+    Kib = Kcsr[free][:, bdofs]
+    try:
+        import pypardiso
+        solver = pypardiso.PyPardisoSolver(); solver.factorize(Kii)
+        return dict(kind="pardiso", solver=solver, Kii=Kii, Kib=Kib, free=free, ndof=ndof)
+    except Exception:
+        from scipy.sparse.linalg import splu
+        return dict(kind="splu", lu=splu(Kii), Kib=Kib, free=free, ndof=ndof)
+
+
+def dirichlet_solve_sparse(fac, RHS, bdofs, bvals):
+    """dirichlet_solve on a dirichlet_factor_sparse() context (back-substitution)."""
+    nc = RHS.shape[1]
+    u = np.zeros((fac["ndof"], nc)); u[bdofs] = bvals
+    rhs = np.asarray(RHS)[fac["free"]] - fac["Kib"] @ bvals
+    if fac["kind"] == "pardiso":
+        u[fac["free"]] = fac["solver"].solve(fac["Kii"], rhs)
+    else:
+        u[fac["free"]] = fac["lu"].solve(rhs)
+    return u

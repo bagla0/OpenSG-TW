@@ -170,6 +170,100 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     return S6
 
 
+def shell_solve_lagrange_sparse(tg, mesh_dir, res_dir, lam_space="elem", return_full=False):
+    """SPARSE-assembly / sparse-solve variant of shell_solve_lagrange for large
+    (>~1e5 DOF) refined meshes, where the dense ndof x ndof operators would not fit
+    in memory.  Identical formulation and Dirichlet-transfer as the dense driver;
+    Dhh/Dhl/Dll and the constraint rows are scipy-sparse, the two Dirichlet solves
+    reuse one PARDISO/SuperLU factorization, and the thin condensation products are
+    computed in scipy sparse.  Verified to match the dense driver to ~1e-9."""
+    import io, contextlib, time
+    import jax.numpy as jnp
+    import scipy.sparse as sp
+    from boundary_from_yaml import extract
+    from segment_element import (compute_k22, compute_kg,
+                                 dirichlet_factor_sparse, dirichlet_solve_sparse)
+    from segment_indep import assemble_segment_indep, assemble_constraint, build_C_Psi_segment6
+    from solve_segment_jax import _material_by_section
+    from run_ring_indep import ring_indep
+    from opensg_jax.fe_jax.msg_solver import finalize_v1_and_compute_deff
+
+    t0 = time.perf_counter()
+    npz = os.path.join(res_dir, "shell_%s.npz" % tg)
+    with contextlib.redirect_stdout(io.StringIO()):
+        extract(os.path.join(mesh_dir, "shell_%s.yaml" % tg), npz, plot=False)
+    b = np.load(npz, allow_pickle=True)
+    ax = int(b["axis"]); cross = tuple(j for j in range(3) if j != ax)
+    nodes = np.asarray(b["seg_x"]); quads = np.asarray(b["seg_cells"]); sd = np.asarray(b["seg_subdom"])
+    e1s, e2s, e3s = np.asarray(b["seg_e1"]), np.asarray(b["seg_e2"]), np.asarray(b["seg_e3"])
+    D_by, G_by = _material_by_section(json.loads(str(b["sections"])), json.loads(str(b["materials"])), center_ref=True)
+    cents = nodes[quads].mean(1)
+    k22_e = compute_k22(cents, e2s, e3s, quads); kg_e = compute_kg(cents, e1s, e2s, e3s, quads)
+    t_extract = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    rings = {}
+    for side in ("L", "R"):
+        rx = np.asarray(b["%s_x" % side]); rc = np.asarray(b["%s_cells" % side])
+        rs = np.asarray(b["%s_subdom" % side]); re3 = np.asarray(b["%s_e3" % side])
+        kr = compute_k22(rx[rc].mean(1), np.asarray(b["%s_e2" % side]), re3, rc)
+        C6r, V0r, V1r = ring_indep(rx, rc, rs, re3, D_by, G_by, kr, ax, list(cross),
+                                   lam_space=lam_space, return_fields=True)
+        rings[side] = dict(C6=C6r, V0=V0r, V1=V1r)
+    t_rings = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
+        nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0,
+        shear="full", sparse=True)
+    Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
+                                     lam_space=lam_space, sparse=True)
+    M = Dhh.shape[0]; P = Gc.shape[0]; naug = M + P
+    ZPP = sp.csr_matrix((P, P)); ZMP = sp.csr_matrix((M, P)); ZPM = sp.csr_matrix((P, M))
+    Dhh_a = sp.bmat([[Dhh, Gc.T], [Gc, ZPP]]).tocsr()
+    Dhl_a = sp.bmat([[Dhl, ZMP], [Gl, ZPP]]).tocsr()
+    Dll_a = sp.bmat([[Dll, ZMP], [ZPM, ZPP]]).tocsr()
+    Dhe_a = np.zeros((naug, 4)); Dhe_a[:M] = Dhe; Dhe_a[M:] = Ge
+    Dle_a = np.zeros((naug, 4)); Dle_a[:M] = Dle
+    C, Psi = build_C_Psi_segment6(nodes, quads, cross); Psi[3::6, 3] *= -1.0
+    Psi_a = np.zeros((naug, 4)); Psi_a[:M] = Psi
+    Dc_a = np.zeros((naug, 4)); Dc_a[:M] = C.T
+
+    def scatter(key):
+        bd, bv = [], []
+        for side in ("L", "R"):
+            V = rings[side][key].reshape(-1, 6, 4)
+            for i, sn in enumerate(np.asarray(b["%s_node2seg" % side])):
+                for c in range(6):
+                    bd.append(6 * int(sn) + c); bv.append(V[i, c, :])
+        return np.array(bd), np.array(bv, float)
+
+    bd0, bv0 = scatter("V0")
+    fac = dirichlet_factor_sparse(Dhh_a, bd0)
+    V0 = dirichlet_solve_sparse(fac, -Dhe_a, bd0, bv0)
+    Lz = float(nodes[:, ax].max() - nodes[:, ax].min())
+    EB = (np.asarray(Dee) + V0.T @ Dhe_a) / Lz
+    # prepare_v1_rhs (sparse; thin M x 4 products)
+    DhlV0 = Dhl_a @ V0
+    V0DllV0 = V0.T @ (Dll_a @ V0)
+    DhlTV0Dle = Dhl_a.T @ V0 + Dle_a
+    b_unproj = DhlV0 - DhlTV0Dle
+    tmp = np.linalg.inv(Psi_a.T @ Dc_a) @ (Psi_a.T @ b_unproj)
+    bb = Dc_a @ tmp - b_unproj
+    bd1, bv1 = scatter("V1")
+    V1 = dirichlet_solve_sparse(fac, bb, bd1, bv1)
+    S6, *_ = finalize_v1_and_compute_deff(
+        jnp.array(V1), jnp.array(V0), jnp.array(EB),
+        jnp.array(V0DllV0 / Lz), jnp.array(DhlV0 / Lz),
+        jnp.array(DhlTV0Dle / Lz), jnp.array(Psi_a), jnp.array(Dc_a))
+    S6 = 0.5 * (np.asarray(S6) + np.asarray(S6).T)
+    t_seg = time.perf_counter() - t0
+    if return_full:
+        return dict(S6=S6, C6L=rings["L"]["C6"], C6R=rings["R"]["C6"], ndof=M,
+                    t_extract=t_extract, t_rings=t_rings, t_seg=t_seg)
+    return S6
+
+
 def show6(mat="m45", regime="thin", aR=0.7, pen_beta=0.1):
     """Full 6x6 Timoshenko (independent-omega3 shell) with per-entry %err vs the
     3-D solid taper, for the square section."""
