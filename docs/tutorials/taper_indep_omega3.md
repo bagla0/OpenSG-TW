@@ -184,7 +184,7 @@ form (`shell_solve_lagrange_sparse`; the dense 1.2×10⁵-square matrices would 
 |---|---|---|
 | #DOF | 1,198,080 | 119,808 |
 | mesh nodes | 399,360 | 19,968 |
-| segment solve | 99 s | 18.5 s |
+| homogenization (warm) | 99.9 s | 18.8 s |
 | EA | 0.9842 | 0.9937 (+1.0%) |
 | GA₂ | 0.3297 | 0.3512 (+6.5%) |
 | GA₃ | 0.1651 | 0.1721 (+4.3%) |
@@ -225,25 +225,26 @@ time), the orientation PNGs are drawn only when missing, and every direct
 factorization (segment Dirichlet, ring KKT) is built once and reused for the V0
 *and* V1 solves — certified identical to the scalar loop to ≤3·10⁻¹⁵ per matrix
 by `verify_shell_batch.py`. The solid column is the equally optimized FEniCS
-solver (cached MUMPS factorizations, shared JIT kernels). Shell DOFs = 6×nodes,
-solid DOFs = 3×nodes; shell total = extract+rings+segment, solid total is the
-full wall time (boundary+taper shown):
+solver (cached MUMPS factorizations, shared JIT kernels). Times are the OpenSG
+**homogenization compute only** — rings+segment (shell), boundary+taper (solid) —
+timed **warm** (first-run JIT dropped) and **excluding runtime mesh
+construction/extraction** (`retime_all.py`). Shell DOF = 6×nodes, solid DOF =
+3×nodes:
 
-| case | shell #DOF | extract | rings | segment | shell total | solid #DOF | boun | taper | solid total |
-|---|---|---|---|---|---|---|---|---|---|
-| square thick m45 | 3168 | 0.4 | 0.1 | 0.7 | **1.2** | 7920 | 0.3 | 1.3 | 1.8 |
-| circle thick m45 | 3168 | 0.2 | 0.1 | 0.7 | **1.0** | 7920 | 0.2 | 1.2 | 1.8 |
-| webbed ellipse m45 | 4158 | 0.3 | 0.1 | 1.0 | **1.5** | 40635 | 0.3 | 4.4 | 7.0 |
+| case | shell #DOF | rings | segment | shell total | solid #DOF | boun | taper | solid total |
+|---|---|---|---|---|---|---|---|---|
+| square thick m45 | 3168 | 0.09 | 0.74 | **0.83** | 7920 | 0.34 | 1.26 | 1.60 |
+| circle thick m45 | 3168 | 0.08 | 0.74 | **0.83** | 7920 | 0.24 | 1.29 | 1.52 |
+| webbed ellipse m45 | 4158 | 0.11 | 1.06 | **1.17** | 40635 | 0.31 | 4.35 | 4.67 |
 
 The decisive quantity is the DOF count: the shell carries 6 warping DOFs per
 mid-surface node, the solid 3 per through-thickness-resolved node. On the
-square/circle both land near a second (3168 vs 7920 DOF); on the webbed ellipse
-the shell resolves the four-cell section with **4158 DOF vs the solid's 40635**,
-and the wall-clock separates (1.5 s vs 7.0 s). The shell cost is additionally
-independent of the layup count — the wall enters only through the precomputed
-8×8 laminate stiffness 𝒦, with no through-thickness meshing of tapered,
-layup-dropping walls. (The first shell case in a process also carries a ~1 s
-one-time JAX JIT warm-up, excluded above.)
+square/circle both homogenize near a second (3168 vs 7920 DOF); on the webbed
+ellipse the shell resolves the four-cell section with **4158 DOF vs the solid's
+40635**, and the compute separates (1.2 s vs 4.7 s). The shell cost is
+additionally independent of the layup count — the wall enters only through the
+precomputed 8×8 laminate stiffness 𝒦, with no through-thickness meshing of
+tapered, layup-dropping walls.
 
 ## Reproduce
 
