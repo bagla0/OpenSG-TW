@@ -136,9 +136,14 @@ sections the shear treatment is not cosmetic.
 ## Boundary cross-section: multi-cell homogenization and cost
 
 The boundary stage is itself a cross-sectional homogenization — each end ring is a
-span-invariant SG giving the section's Timoshenko stiffness $C^b_{ij}$ (superscript
-`b` = boundary/ring). For the **thick** ($t=0.2$) webbed ellipse this is a genuine
-multi-cell homogenization; every nonzero $C^b_{ij}$ vs the 3-D solid boundary
+span-invariant SG giving the section's **beam** Timoshenko stiffness $C^b_{ij}$
+(superscript `b` = beam). The RM shell solves it as a 1-D mid-surface ring; the
+solid as a 2-D through-thickness-resolved end face (`render_ell_boundary.py`):
+
+![ellipse boundary cross-section: shell ring vs solid end face](_img/ell_boundary_mesh.png)
+
+For the **thick** ($t=0.2$) webbed ellipse this is a genuine multi-cell
+homogenization; every nonzero $C^b_{ij}$ vs the 3-D solid boundary
 (`time_boundary_3cases.py`):
 
 | $C^b_{ij}$ | solid ×10⁹ | shell ×10⁹ | %err |
@@ -231,11 +236,11 @@ timed **warm** (first-run JIT dropped) and **excluding runtime mesh
 construction/extraction** (`retime_all.py`). Shell DOF = 6×nodes, solid DOF =
 3×nodes:
 
-| case | shell #DOF | rings | segment | shell total | solid #DOF | boun | taper | solid total |
-|---|---|---|---|---|---|---|---|---|
-| square thick m45 | 3168 | 0.09 | 0.74 | **0.83** | 7920 | 0.34 | 1.26 | 1.60 |
-| circle thick m45 | 3168 | 0.08 | 0.74 | **0.83** | 7920 | 0.24 | 1.29 | 1.52 |
-| webbed ellipse m45 | 4158 | 0.11 | 1.06 | **1.17** | 40635 | 0.31 | 4.35 | 4.67 |
+| case | shell #DOF | shell time | solid #DOF | solid time |
+|---|---|---|---|---|
+| square thick m45 | 3168 | **0.83** | 7920 | 1.60 |
+| circle thick m45 | 3168 | **0.83** | 7920 | 1.52 |
+| webbed ellipse m45 | 4158 | **1.17** | 40635 | 4.67 |
 
 The decisive quantity is the DOF count: the shell carries 6 warping DOFs per
 mid-surface node, the solid 3 per through-thickness-resolved node. On the
