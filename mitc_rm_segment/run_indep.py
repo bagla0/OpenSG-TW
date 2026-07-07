@@ -112,8 +112,12 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     t_rings = time.perf_counter() - t0
 
     t0 = time.perf_counter()
+    # PRODUCTION shear scheme (segment): 'mitc4_wonly' -- both rows tied at the
+    # Dvorkin-Bathe points (both carry y_i w_{i|a}) with every ROTATION column kept
+    # at its full-integration value (protects the algebraic drilling content).
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
-        nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0)   # NO penalty
+        nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0,
+        shear="mitc4_wonly")
     Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
                                      lam_space=lam_space)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))

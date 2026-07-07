@@ -39,12 +39,12 @@ the square's physical shear symmetry by construction):
 
 | case | EA | GA₂ | GA₃ | GJ | EI₂ | EI₃ |
 |---|---|---|---|---|---|---|
-| square thin iso | +1.0% | −2.9% | −2.9% | −2.4% | +1.0% | +1.0% |
-| square thin [-45] | +1.3% | **−1.8%** | **−1.8%** | −4.4% | +2.2% | +2.2% |
-| square thick iso | +0.7% | −4.6% | −4.6% | −4.4% | −0.3% | −0.3% |
+| square thin iso | +1.0% | −2.9% | −2.9% | −2.5% | +1.0% | +1.0% |
+| square thin [-45] | +1.3% | **−1.7%** | **−1.7%** | −4.4% | +2.3% | +2.3% |
+| square thick iso | +0.7% | −4.5% | −4.5% | −4.5% | −0.3% | −0.3% |
 | square thick [-45] | +0.8% | +1.9% | +1.9% | −6.1% | +1.7% | +1.7% |
 | circle thin iso | +1.2% | +3.8% | +3.8% | +1.2% | +1.3% | +1.3% |
-| circle thin [-45] | +0.8% | +5.1% | +5.1% | +0.0% | +2.1% | +2.1% |
+| circle thin [-45] | +0.8% | +5.1% | +5.1% | +0.0% | +2.0% | +2.0% |
 | circle thick iso | +1.0% | +2.2% | +2.2% | +0.7% | +0.2% | +0.2% |
 | circle thick [-45] | +0.3% | +3.5% | +3.5% | −1.1% | +0.9% | +0.9% |
 
@@ -66,27 +66,29 @@ spurious prismatic GJ on flat walls):
 | **GJ** | **+9.6%** | **−3.8%** | **+9.0%** | **+1.4%** |
 | EI₂=EI₃ | −0.0% | −0.0% | +0.5% | +0.6% |
 
-On the ring the transverse-shear treatment is immaterial (full = tie-γ₂₃ = tie-both
-to 0.1%): span-invariance makes the assumed shear field exact, so MITC tying is
-inert there.
+Both rings use their production shear treatments; on the span-invariant strip the
+assumed γ₂₃ field reproduces the true shear exactly, so the treatment is exact
+there by construction.
 
-## MITC and the six-parameter element (segment)
+## Transverse-shear treatment
 
-On the genuinely 2-D tapered segment the standard Dvorkin–Bathe tying **must not**
-be applied: the shear rows carry the rotations *algebraically*
-($2\gamma_{13}\supset x_{k;2}\,\omega_k$), and tying aliases that drilling-carried
-shear. Ablation at the reference mesh ($C_{22}=C_{33}$ error):
+The production scheme ties the rows that carry the displacement flux
+$y_i\,w_{i|\alpha}$, always keeping the **rotation columns at their
+full-integration values** (the shear rows carry the rotations algebraically —
+$2\gamma_{13}\supset x_{k;2}\,\omega_k$ — and interpolating that director content
+would de-penalize it):
 
-| case | full | tie γ₂₃ | tie both |
-|---|---|---|---|
-| square thin iso | −2.9% | −4.2% | **−29.0%** |
-| square thin [-45] | −1.8% | −5.5% | **−46.6%** |
-| circle thin [-45] | +5.1% | +5.1% | +4.8% |
+- **boundary rings**: tie **γ₂₃ only** — under span invariance γ₁₃ has no
+  $w_i$ derivatives (it is algebraic in the directors);
+- **tapered segment**: tie **both rows** (both carry the flux) at the standard
+  Dvorkin–Bathe points.
 
-Full integration is locking-free: on a prismatic isotropic circle at the coarsest
-mesh (24×5) the errors vs the closed-form constants are **identical at t/R = 0.02
-and t/R = 0.002** (GA within 0.2%, GJ within 1.9%) — thickness-independence of the
-discretization error being the definitive absence-of-locking signature.
+The scheme is locking-free: on a prismatic isotropic circle at the coarsest mesh
+(24×5) the errors vs the closed-form constants are **identical at t/R = 0.02 and
+t/R = 0.002** (GA within 0.2%, GJ within 1.9%) — thickness-independence of the
+discretization error being the definitive absence-of-locking signature. A 5-DOF
+control is equally clean, showing the immunity is a property of the
+section-strain load structure of the homogenization problem itself.
 
 ## Mesh convergence
 
@@ -111,10 +113,10 @@ Wall-clock seconds per case, single core (32-core Linux server), reference mesh:
 
 | case | extract | rings | segment | shell total | solid (boun+taper) |
 |---|---|---|---|---|---|
-| square thin iso | 1.0 | 1.3 | 5.1 | **7.4** | 6 |
-| square thick iso | 0.9 | 0.7 | 4.7 | **6.3** | 44 |
-| circle thin iso | 1.0 | 0.7 | 4.6 | **6.3** | 17 |
-| circle thick m45 | 0.8 | 0.7 | 4.5 | **6.1** | 16 |
+| square thin iso | 1.0 | 2.0 | 11.6 | **14.7** | 6 |
+| square thick iso | 0.9 | 1.5 | 11.2 | **13.6** | 44 |
+| circle thin iso | 1.0 | 1.5 | 11.2 | **13.6** | 17 |
+| circle thick m45 | 0.8 | 1.5 | 11.1 | **13.4** | 16 |
 
 The shell cost is independent of geometry, thickness, and — unlike the solid, which
 must resolve every ply through the thickness — of the layup count.

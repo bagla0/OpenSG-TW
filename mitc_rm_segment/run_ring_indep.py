@@ -17,11 +17,15 @@ BENCH = os.path.join(REPO, "examples", "data", "benchmark")
 
 
 def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
-               shear="full", lam_space="elem", return_fields=False):
+               shear="mitc4_g23", lam_space="elem", return_fields=False):
     """Constrained 6-DOF ring SG.  Returns the ring Timoshenko C6 (6,6); with
     return_fields=True also the zeroth/first-order warping fields V0, V1 (6m x 4,
     multiplier rows stripped) for the segment Dirichlet transfer -- including the
-    drilling omega_3 boundary values."""
+    drilling omega_3 boundary values.
+
+    PRODUCTION shear scheme (ring): 'mitc4_g23' -- tie ONLY gamma_23.  Under span
+    invariance gamma_13 carries no fluctuation gradient (it is algebraic in the
+    directors), so only gamma_23 pairs a differentiated displacement with rotations."""
     import jax.numpy as jnp
     from segment_indep import (assemble_segment_indep, assemble_constraint, NDOF6)
     from opensg_jax.fe_jax.msg_rm_timo import build_C_Psi
