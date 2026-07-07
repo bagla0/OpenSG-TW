@@ -112,12 +112,14 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     t_rings = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    # PRODUCTION shear scheme (segment): 'mitc4_wonly' -- both rows tied at the
-    # Dvorkin-Bathe points (both carry y_i w_{i|a}) with every ROTATION column kept
-    # at its full-integration value (protects the algebraic drilling content).
+    # PRODUCTION shear scheme (segment): FULL integration.  Verified locking-free in
+    # the worst case (prismatic flat-wall identity seg==ring to +-0.00% down to
+    # t/R=2e-4, all meshes); canonical MITC tying breaks flat-walled/webbed sections
+    # (square -29/-47%, webbed ellipse -17/+29%) by aliasing the algebraic drilling
+    # content, and flux-only tying is numerically identical to full integration.
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0,
-        shear="mitc4_wonly")
+        shear="full")
     Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
                                      lam_space=lam_space)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))

@@ -1,0 +1,14 @@
+gen /home/roger/a/bagla0/claude_tmp/tw6dof/mitc_rm_segment/out/ell3w/solid_mesh: shell 2709 nodes 2640 quads | solid 13545 nodes 10560 hexes
+
+ Computing Only Boundary Stiffness 
+
+solid done 23s  EA(seg)=1.5980e+09
+gen /home/roger/a/bagla0/claude_tmp/tw6dof/mitc_rm_segment/out/ell3w/shell_48x10: shell 693 nodes 660 quads | solid 3465 nodes 2640 hexes
+
+ELLIPSE + 3 TAPERED WEBS, m45 thin: segment %err vs 3-D solid (96x20,nw12,x4)
+scheme                        EA     GA2     GA3      GJ     EI2     EI3
+no MITC (full int.)        +3.8    +8.0   +10.1    +0.0    +6.7    +2.3 
+flux-tied                  +3.8    +8.0   +10.1    +0.0    +6.7    +2.3 
+canonical MITC             +4.4   -16.7   +28.9    -0.1    +2.6    +3.3 
+
+solid seg diag (x1e9): [1.598  0.3227 0.5036 0.2349 0.1823 0.3665]

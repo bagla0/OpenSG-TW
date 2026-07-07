@@ -12,9 +12,10 @@ rate squared, and is insensitive to any regularization of the $1/C_{33}$ drillin
 reciprocal. This page shows the production resolution used by OpenSG-TW's tapered
 pipeline: a **single six-parameter element** — the drilling rotation kept as an
 independent DOF, the in-plane symmetry enforced exactly by element-wise Lagrange
-multipliers, full shear integration — used for **both** the boundary rings and the
-tapered segment, with the ring warping fields (including $\omega_3$) transferred to
-the segment as Dirichlet data.
+multipliers, full shear integration on the segment (the rings retain the exact
+γ₂₃ tie) — used for **both** the boundary rings and the tapered segment, with the
+ring warping fields (including $\omega_3$) transferred to the segment as
+Dirichlet data.
 
 All inputs, the driver scripts, and the full-$6\times6$ `.dat` are bundled under
 [`mitc_rm_segment/taper_indep_study/`](https://github.com/bagla0/OpenSG-TW/tree/main/mitc_rm_segment/taper_indep_study).
@@ -39,7 +40,7 @@ the square's physical shear symmetry by construction):
 
 | case | EA | GA₂ | GA₃ | GJ | EI₂ | EI₃ |
 |---|---|---|---|---|---|---|
-| square thin iso | +1.0% | −2.9% | −2.9% | −2.5% | +1.0% | +1.0% |
+| square thin iso | +1.0% | −2.9% | −2.9% | −2.4% | +1.0% | +1.0% |
 | square thin [-45] | +1.3% | **−1.7%** | **−1.7%** | −4.4% | +2.3% | +2.3% |
 | square thick iso | +0.7% | −4.5% | −4.5% | −4.5% | −0.3% | −0.3% |
 | square thick [-45] | +0.8% | +1.9% | +1.9% | −6.1% | +1.7% | +1.7% |
@@ -70,25 +71,67 @@ Both rings use their production shear treatments; on the span-invariant strip th
 assumed γ₂₃ field reproduces the true shear exactly, so the treatment is exact
 there by construction.
 
-## Transverse-shear treatment
+## Transverse shear: no MITC required (and canonical MITC is harmful)
 
-The production scheme ties the rows that carry the displacement flux
-$y_i\,w_{i|\alpha}$, always keeping the **rotation columns at their
-full-integration values** (the shear rows carry the rotations algebraically —
-$2\gamma_{13}\supset x_{k;2}\,\omega_k$ — and interpolating that director content
-would de-penalize it):
+The production scheme is **full 2×2 integration of both shear rows on the tapered
+segment**, with the Dvorkin–Bathe **γ₂₃ tie retained only on the boundary rings**
+(where it is exact by construction on the span-invariant strip — and verified
+*inert*, see below). No assumed-strain protection is needed anywhere, for two
+structural reasons:
 
-- **boundary rings**: tie **γ₂₃ only** — under span invariance γ₁₃ has no
-  $w_i$ derivatives (it is algebraic in the directors);
-- **tapered segment**: tie **both rows** (both carry the flux) at the standard
-  Dvorkin–Bathe points.
+1. **The discrete shear constraint restricts only the rotations.** The rows carry
+   the rotations algebraically through the full-rank tangential traces
+   ($2\gamma_{13}\supset x_{i;2}\,\omega_i$, $2\gamma_{23}\supset-x_{i;1}\,\omega_i$),
+   so for any displacement field the thin-limit condition is solvable pointwise
+   for the rotations — the constraint never eliminates a displacement mode.
+2. **The SG fluctuation problem is never bending-dominated.** The Kirchhoff-mode
+   content is carried analytically by the section-strain columns and by the ring
+   Dirichlet data; the shear/twist load columns demand genuinely *finite* shear.
 
-The scheme is locking-free: on a prismatic isotropic circle at the coarsest mesh
-(24×5) the errors vs the closed-form constants are **identical at t/R = 0.02 and
-t/R = 0.002** (GA within 0.2%, GJ within 1.9%) — thickness-independence of the
-discretization error being the definitive absence-of-locking signature. A 5-DOF
-control is equally clean, showing the immunity is a property of the
-section-strain load structure of the homogenization problem itself.
+Certification (worst cases, all on the server):
+
+- **Prismatic flat-wall identity** (`run_locksq.py`): the square segment
+  reproduces its own ring to **±0.00% on every constant at t/R = 2·10⁻², 2·10⁻³,
+  2·10⁻⁴**, both meshes, every shear scheme.
+- **Boundary rings, square vs ellipse** (`run_ringboun.py`): full integration vs
+  γ₂₃-tied agree within **0.05 points** on every constant, every mesh (48→384
+  hoop), and every thickness over two decades — errors decay ∝ nc⁻² and are
+  thickness-invariant, i.e. pure discretization, no locking signature on flat
+  *or* curved boundaries. The MITC requirement reported for the 5-DOF
+  eliminated-drilling cross-sectional element does **not** carry over to the
+  6-DOF constrained element.
+- **Prismatic circle probe**: errors vs closed form identical at t/R = 0.02 and
+  0.002; a 5-DOF full-integration control is equally clean.
+
+Conversely, **canonical MITC tying (whole rows, rotation columns included) must
+not be used** with the 6-DOF element: it aliases the algebraic drilling content
+(x₃;₂ω₃ — the role ω₂ plays prismatically) and collapses the flat-wall shears
+(thin square −29/−47%; webbed ellipse −17/+29%, next section). A flux-only tie
+(rotation columns kept at Gauss values) reproduces full integration to machine
+precision — there is no flux-side locking to remove.
+
+## Blade-like example: tapered ellipse with three webs
+
+The discriminating validation case: a differentially tapered elliptical skin
+(a: 1.0→0.65, b: 0.60→0.42 over L = 2.0, hoop curvature varying around *and*
+along), three flat webs tapering with the section at x = ±a/2 and x = 0 (six
+T-junction lines), t = 0.02, single [-45] ply — a four-cell blade-like layout,
+compared against a fresh conforming 3-D solid (96×20×4, web end columns sharing
+the skin through-thickness columns):
+
+![webbed ellipse shell mesh (cutaway)](_img/taper_ell3w_shell_mesh.png)
+![webbed ellipse solid mesh](_img/taper_ell3w_solid_mesh.png)
+
+Segment diagonal %err vs solid (shell 48×10 skin + 6 elements/web, `run_ell3w.py`):
+
+| scheme | EA | GA₂ | GA₃ | GJ | EI₂ | EI₃ |
+|---|---|---|---|---|---|---|
+| **full integration (production)** | +3.8 | +8.0 | +10.1 | **+0.0** | +6.7 | +2.3 |
+| canonical MITC (both rows) | +4.4 | **−16.7** | **+28.9** | −0.1 | +2.6 | +3.3 |
+
+Full integration stays coherent (GJ exact, shears +8/+10% — a scheme-independent
+junction/model residual); canonical tying scatters the shears wildly. On webbed
+sections the shear treatment is not cosmetic.
 
 ## Mesh convergence
 
@@ -113,10 +156,10 @@ Wall-clock seconds per case, single core (32-core Linux server), reference mesh:
 
 | case | extract | rings | segment | shell total | solid (boun+taper) |
 |---|---|---|---|---|---|
-| square thin iso | 1.0 | 2.0 | 11.6 | **14.7** | 6 |
-| square thick iso | 0.9 | 1.5 | 11.2 | **13.6** | 44 |
-| circle thin iso | 1.0 | 1.5 | 11.2 | **13.6** | 17 |
-| circle thick m45 | 0.8 | 1.5 | 11.1 | **13.4** | 16 |
+| square thin iso | 1.0 | 2.0 | 4.9 | **7.9** | 6 |
+| square thick iso | 0.9 | 1.5 | 4.6 | **7.1** | 44 |
+| circle thin iso | 0.9 | 1.5 | 4.6 | **7.0** | 17 |
+| circle thick m45 | 0.8 | 1.5 | 4.5 | **6.8** | 16 |
 
 The shell cost is independent of geometry, thickness, and — unlike the solid, which
 must resolve every ply through the thickness — of the layup count.
@@ -131,6 +174,10 @@ python run_paper_convergence.py      # 5-level mesh sweep -> paper_convergence.{
 python run_extras.py                 # shear ablation + locking probe
 python plot_paper_convergence.py     # -> fig_convergence.png + timing_summary.dat
 python run_ring_indep.py             # 5-DOF vs 6-DOF ring comparison
+python run_locksq.py                 # prismatic flat-wall identity, t/R -> 2e-4
+python run_ringboun.py               # ring locking experiment: square vs ellipse
+python run_ell3w.py                  # webbed-ellipse benchmark (+ fresh solid ref)
+python render_ell3w.py               # cutaway mesh figures
 ```
 
 Solver entry points: `run_indep.shell_solve_lagrange` (segment, all-6-DOF) and
