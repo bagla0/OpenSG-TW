@@ -41,6 +41,10 @@ source_suffix = {".md": "myst-nb", ".ipynb": "myst-nb", ".rst": "restructuredtex
 master_doc = "index"
 exclude_patterns = [
     "_build", "Thumbs.db", ".DS_Store", "tutorials/_img/*",
+    # myst-nb execution-output scratch dir: it is a build artifact, not source -- if it is
+    # present (from a prior local build) Sphinx would read its .ipynb as orphan source docs
+    # and warn "not included in any toctree", failing the CI -W build.
+    "jupyter_execute",
     # internal dev notes kept in docs/ for reference but not part of the rendered site
     # (their content is folded into theory/reissner_mindlin.md and theory/msg_structure_genome.md)
     "MITC_transverse_shear.md", "MSG_TW_Beam_Formulation.md",

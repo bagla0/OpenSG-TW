@@ -1,6 +1,6 @@
 # Tutorials
 
-Six **executed** notebooks — each loads (or generates) an OpenSG YAML, draws the $e_1/e_2/e_3$ material
+Eight **executed** notebooks — each loads (or generates) an OpenSG YAML, draws the $e_1/e_2/e_3$ material
 orientation, prints the **full Timoshenko $6\times6$**, and reports the per-term **%-diff on every non-zero
 $C_{ij}$** (not just the diagonal) against a benchmark. They are committed pre-run, so the numbers and figures
 you see are the real outputs. Every input is bundled in the repo under
@@ -71,6 +71,48 @@ thin + thick tables and convergence plot vs the 3-D solid.
 :::
 ::::
 
+### Tapered square tube (flat-wall companion)
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 7 · Square taper (isotropic)
+:link: taper_square_iso
+:link-type: doc
+Flat-walled square tube ($k_{22}=0$ on faces) — full 6×6, red-dotted center-reference solid,
+and the three element bugs the square exposed and fixed. Ran on the SSH server.
+:::
+
+:::{grid-item-card} 8 · Square taper ([-45] aniso)
+:link: taper_square_m45
+:link-type: doc
+The −45° square: square-vs-circle coupling comparison showing C26/C35 is curvature-independent,
+plus the strain-by-strain paper certification.
+:::
+::::
+
+### Independent-$\omega_3$ transverse-shear (GA3) fix
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 9 · Independent-$\omega_3$ GA3 fix (square + circle)
+:link: taper_indep_omega3
+:link-type: doc
+The flat-wall GA3 (C33) deficit and its fix: carry the drilling $\omega_3$ as an independent
+DOF with the in-plane symmetry imposed by a Lagrange multiplier. All 8 cases
+(square/circle × thin/thick × iso/−45) at strong taper, general vs fixed vs 3-D solid.
+:::
+
+:::{grid-item-card} 10 · MITC 5-DOF vs 6-DOF element (executed)
+:link: mitc_5dof_vs_6dof
+:link-type: doc
+Head-to-head executed comparison of the eliminated-drilling 5-DOF/MITC element and the
+constrained 6-DOF element: ring SGs (GJ repair on flat walls), MITC-tying ablation on the
+tapered segment, and the extreme-thinness locking probe.
+:::
+::::
+
 ```{list-table} Cross-sections and benchmarks used
 :header-rows: 1
 :widths: 22 26 26 26
@@ -99,6 +141,14 @@ thin + thick tables and convergence plot vs the 3-D solid.
   - `data/taper_study/meshes/*.yaml` (generated in-notebook)
   - `taper_study.gen_case` + `ring_general` + `assemble_segment_general`
   - 3-D solid `data/benchmark/taper_study_solid_{iso,m45}.npz`
+* - Square taper (iso / −45)
+  - `data/taper_square/meshes/*.yaml` (generated in-notebook)
+  - `taper_square.gen_square_case` + `assemble_segment_general`
+  - 3-D solid `data/benchmark/taper_square_solid_{iso,m45}.npz`
+* - Independent-$\omega_3$ GA3 fix
+  - `mitc_rm_segment/taper_indep_study/meshes/*.yaml` (square + circle, bundled)
+  - `segment_indep.py` + `run_indep.shell_solve_lagrange`
+  - 3-D solid `data/benchmark/taper_{square,study}_solid_{iso,m45}.npz`
 ```
 
 All paths are relative to [`examples/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples).

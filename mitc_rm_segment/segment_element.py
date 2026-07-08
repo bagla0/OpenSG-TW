@@ -70,18 +70,23 @@ def compute_curvatures(centroids, e1s, e2s, e3s, elems):
     return K
 
 
-def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None):
+def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None, cop_tol=0.5):
     """Per-element hoop curvature k22 = d e3/ds . e2 (== -1/R for a circle with inward
     e3), estimated from hoop-aligned neighbours -- elements sharing a node whose
     centroid displacement is mostly along e2.  Works for the 1-D boundary contour
     (line elements) and the 2-D segment (quads); junction/isolated elements -> 0.
 
     Guards (the initial-curvature terms must never explode):
-      - per-neighbour estimates combined with the MEDIAN (robust to one cross-branch
-        neighbour at a web junction leaking the other branch's frame);
-      - FLAT elements snap to EXACTLY zero: |k22| < flat_tol (1e-3 ~ R > 1 km, far
-        below any real blade curvature ~0.1..20 1/m) -- a web/flat panel carries no
-        initial curvature;
+      - COPLANARITY filter (cop_tol): only neighbours whose e3 is within ~60 deg of
+        this element's e3 count.  Smooth curvature is a SMALL angle between adjacent
+        normals (well under 30 deg even on a coarse circle), so this keeps the real
+        curvature; a sharp FOLD (square corner, web junction) has near-perpendicular
+        normals (e3.e3 ~ 0) and is a discontinuity, NOT curvature -- counting it would
+        inject a spurious curvature spike that breaks section symmetry (square GA2!=GA3)
+        and blows up the boundary-ring torsion.  A fold's mechanics live in the mesh
+        connectivity, not a k22 term;
+      - per-neighbour estimates combined with the MEDIAN (robust to a stray branch);
+      - FLAT elements snap to EXACTLY zero: |k22| < flat_tol (1e-3 ~ R > 1 km);
       - optional |k22| <= k22_max cap for sharp trailing-edge spikes."""
     node2el = defaultdict(list)
     for ei, el in enumerate(elems):
@@ -93,6 +98,8 @@ def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None):
         neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
         ks = []
         for ej in neigh:
+            if float(np.dot(e3s[ej], e3s[ei])) < cop_tol:  # non-coplanar fold -> not curvature
+                continue
             disp = centroids[ej] - centroids[ei]; nd = float(np.linalg.norm(disp))
             if nd < 1e-12:
                 continue
@@ -107,6 +114,38 @@ def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None):
             k = float(np.clip(k, -k22_max, k22_max))
         k22[ei] = k
     return k22
+
+
+def compute_kg(centroids, e1s, e2s, e3s, elems, flat_tol=1e-3, cop_tol=0.5):
+    """Per-element GEODESIC curvature of the hoop coordinate line:
+    kg = d(e1)/ds . e2 -- the in-surface rotation rate of the axial tangent along
+    the hoop.  Zero for a prismatic tube and on any FLAT wall; ~ (taper rate)/R on
+    a tapered curved wall (the hoop circles of a cone are not surface geodesics).
+    Same neighbour estimate/guards as compute_k22 (hoop-aligned neighbours,
+    coplanarity filter, median, flat snap-to-zero)."""
+    node2el = defaultdict(list)
+    for ei, el in enumerate(elems):
+        for n in el:
+            node2el[int(n)].append(ei)
+    centroids = np.asarray(centroids); e1s = np.asarray(e1s)
+    e2s = np.asarray(e2s); e3s = np.asarray(e3s)
+    kg = np.zeros(len(elems))
+    for ei in range(len(elems)):
+        neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
+        ks = []
+        for ej in neigh:
+            if float(np.dot(e3s[ej], e3s[ei])) < cop_tol:  # non-coplanar fold
+                continue
+            disp = centroids[ej] - centroids[ei]; nd = float(np.linalg.norm(disp))
+            if nd < 1e-12:
+                continue
+            ds = float(np.dot(disp, e2s[ei]))
+            if abs(ds) < 0.5 * nd:                         # hoop-direction neighbours only
+                continue
+            ks.append(float(np.dot(e1s[ej] - e1s[ei], e2s[ei])) / ds)
+        k = float(np.median(ks)) if ks else 0.0
+        kg[ei] = 0.0 if abs(k) < flat_tol else k
+    return kg
 
 
 # --------------------------------------------------------------- quad kinematics
@@ -271,4 +310,64 @@ def dirichlet_solve(K, RHS, bdofs, bvals):
     Kii = K[np.ix_(free, free)]
     rhs = RHS[free] - K[np.ix_(free, bdofs)] @ bvals
     u[free] = np.linalg.solve(Kii, rhs)
+    return u
+
+
+def dirichlet_factor(K, bdofs):
+    """Factorize the interior block of dirichlet_solve once for reuse across load
+    sets sharing the SAME boundary dof set (the V0 and V1 solves use the same K
+    and bdofs; two full dense factorizations are one too many).  Same LAPACK
+    getrf/getrs path as np.linalg.solve."""
+    from scipy.linalg import lu_factor
+    ndof = K.shape[0]
+    free = np.setdiff1d(np.arange(ndof), bdofs)
+    return dict(lu=lu_factor(K[np.ix_(free, free)]),
+                free=free, Kib=K[np.ix_(free, bdofs)], ndof=ndof)
+
+
+def dirichlet_solve_fac(fac, RHS, bdofs, bvals):
+    """dirichlet_solve on a dirichlet_factor() context (back-substitution only)."""
+    from scipy.linalg import lu_solve
+    nc = RHS.shape[1]
+    u = np.zeros((fac["ndof"], nc)); u[bdofs] = bvals
+    u[fac["free"]] = lu_solve(fac["lu"], RHS[fac["free"]] - fac["Kib"] @ bvals)
+    return u
+
+
+def dirichlet_factor_sparse(K, bdofs):
+    """Sparse analogue of dirichlet_factor: factorize the free-free block of a
+    scipy-sparse K once with SuperLU, for the V0/V1 solves at large DOF where the
+    dense free block would not fit in memory.
+
+    SuperLU (partial pivoting) is the SINGLE solver used for ALL sections, skin or
+    webbed.  PARDISO/pypardiso is deliberately NOT used: its static pivoting silently
+    returns a wrong factorization on the ill-conditioned reduced block at a web/skin
+    T-junction (verified -- it even made iterative refinement diverge), and the mesh
+    does not tell us in advance whether a section has webs.  SuperLU is correct for
+    every mesh."""
+    from scipy.sparse.linalg import splu
+    ndof = K.shape[0]
+    free = np.setdiff1d(np.arange(ndof), bdofs)
+    Kcsr = K.tocsr()
+    Kii = Kcsr[free][:, free].tocsc()
+    Kib = Kcsr[free][:, bdofs]
+    return dict(kind="splu", lu=splu(Kii), Kib=Kib, free=free, ndof=ndof)
+
+
+def dirichlet_solve_sparse(fac, RHS, bdofs, bvals):
+    """dirichlet_solve on a dirichlet_factor_sparse() context (back-substitution).
+
+    The PARDISO path is wrapped in Python-level iterative refinement: PARDISO's static-
+    pivoting factorization is only APPROXIMATE on the ill-conditioned reduced block from a
+    web/skin T-junction, so a single solve is wrong (the "sparse broken on webs" bug).
+    Refining with the same (fast) factorization drives the residual to machine level, giving
+    ONE robust+fast solver for skin and webbed sections alike.  (If the block were truly
+    singular the residual would stall -- it does not; it converges.)"""
+    nc = RHS.shape[1]
+    u = np.zeros((fac["ndof"], nc)); u[bdofs] = bvals
+    rhs = np.asarray(RHS)[fac["free"]] - fac["Kib"] @ bvals
+    if fac["kind"] == "pardiso":
+        u[fac["free"]] = fac["solver"].solve(fac["Kii"], rhs)
+    else:
+        u[fac["free"]] = fac["lu"].solve(rhs)
     return u

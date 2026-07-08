@@ -183,7 +183,7 @@ def red_ref_png(tg, mesh_dir=None, out_dir=None):
         p.add_mesh(pv.PolyData(ring), color="red", point_size=6, render_points_as_spheres=True)
     p.add_text("SOLID square taper : %s\nred = mid-surface (center reference)" % tg, font_size=11)
     p.add_axes(line_width=3)
-    p.camera_position = [(6.4, -6.4, 3.2), (0, 0, 1.0), (0, 0, 1)]
+    ts._iso_cam(p)
     fn = os.path.join(out_dir, "%s_solid_ref.png" % tg)
     p.screenshot(fn); p.close()
     return fn
@@ -195,10 +195,13 @@ def cmd_gen(nc=None, nl=None):
             for aR in TAPERS:
                 tg = gen_square_case(regime, mat, aR, nc=nc, nl=nl)
                 print("mesh", tg, "(NC=%d NL=%d)" % (nc or NC, nl or NL))
-    for regime in ("thin", "thick"):
-        for mat in ("iso", "m45"):
-            red_ref_png(ts.tag_of(regime, mat, 0.7))
-    print("red-ref PNGs ->", ORI)
+    try:
+        for regime in ("thin", "thick"):
+            for mat in ("iso", "m45"):
+                red_ref_png(ts.tag_of(regime, mat, 0.7))
+        print("red-ref PNGs ->", ORI)
+    except ImportError as e:
+        print("skip red-ref PNGs (%s) -- render locally where pyvista is available" % e)
 
 
 def cmd_shell(mat):

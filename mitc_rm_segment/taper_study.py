@@ -136,6 +136,15 @@ def gen_case(regime, mat, aR, mesh_dir=None, nc=None, nl=None, nr=None):
     return tg
 
 
+def _iso_cam(p):
+    """Consistent SPANWISE ISOMETRIC camera for every taper render: parallel
+    (orthographic) projection so the taper is shown without perspective
+    foreshortening, beam axis z kept up, same view angle across all figures."""
+    p.enable_parallel_projection()
+    p.camera_position = [(6.0, -6.0, 4.3), (0.0, 0.0, 1.0), (0.0, 0.0, 1.0)]
+    p.reset_camera()
+
+
 def arrow_pngs(tg, mesh_dir=None, ori_dir=None):
     mesh_dir = mesh_dir or MESH; ori_dir = ori_dir or ORI
     os.makedirs(ori_dir, exist_ok=True)
@@ -165,7 +174,7 @@ def arrow_pngs(tg, mesh_dir=None, ori_dir=None):
             p.add_mesh(pv.PolyData(nodes), color="#bbbbbb", point_size=2.0,
                        render_points_as_spheres=True)
             p.add_axes(line_width=3)
-            p.camera_position = [(5.5, -5.5, 4.5), (0, 0, 1.0), (0, 0, 1)]
+            _iso_cam(p)
             note = "  (e3.r_hat = %+.2f -> INWARD)" % e3dot if vec == "e3" else ""
             p.add_text("%s %s : %s%s" % (kind.upper(), vec, tg, note), font_size=11)
             p.screenshot(os.path.join(ori_dir, "%s_%s_%s.png" % (tg, kind, vec)))
@@ -205,7 +214,7 @@ def arrow_strip(tg, kind, mesh_dir=None, out_dir=None):
         p.add_mesh(pv.PolyData(nodes), color="#cccccc", point_size=1.5, render_points_as_spheres=True)
         note = "  (e3.rhat=%+.2f, inward)" % e3dot if vec == "e3" else ""
         p.add_text("%s  %s%s" % (kind.upper(), vec, note), font_size=10)
-        p.camera_position = [(5.5, -5.5, 4.5), (0, 0, 1.0), (0, 0, 1)]
+        _iso_cam(p)
     fn = os.path.join(out_dir, "%s_%s_strip.png" % (tg, kind))
     p.screenshot(fn); p.close()
     return fn
@@ -232,7 +241,7 @@ def tapered_mesh_png(tg, kind, mesh_dir=None, out_dir=None):
     p.add_mesh(grid, color=col, show_edges=True, edge_color="#404040", line_width=0.6, opacity=1.0)
     p.add_text("%s tapered mesh : %s" % (kind.upper(), tg), font_size=11)
     p.add_axes(line_width=3)
-    p.camera_position = [(6.2, -6.2, 3.2), (0, 0, 1.0), (0, 0, 1)]
+    _iso_cam(p)
     fn = os.path.join(out_dir, "%s_%s_mesh.png" % (tg, kind))
     p.screenshot(fn); p.close()
     return fn
@@ -245,7 +254,7 @@ def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
     import io, contextlib
     import jax.numpy as jnp
     from boundary_from_yaml import extract
-    from segment_element import dirichlet_solve, compute_k22, build_C_Psi_segment
+    from segment_element import dirichlet_solve, compute_k22, compute_kg, build_C_Psi_segment
     from segment_element_general import assemble_segment_general, ring_general
     from solve_segment_jax import _material_by_section
     from opensg_jax.fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
@@ -259,7 +268,9 @@ def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
     e1s, e2s, e3s = np.asarray(b["seg_e1"]), np.asarray(b["seg_e2"]), np.asarray(b["seg_e3"])
     D_by, G_by = _material_by_section(json.loads(str(b["sections"])),
                                       json.loads(str(b["materials"])), center_ref=True)
-    k22_e = compute_k22(nodes[quads].mean(1), e2s, e3s, quads)
+    cents = nodes[quads].mean(1)
+    k22_e = compute_k22(cents, e2s, e3s, quads)
+    kg_e = compute_kg(cents, e1s, e2s, e3s, quads)        # hoop geodesic curvature (taper)
 
     rings = {}
     for side in ("L", "R"):
@@ -271,7 +282,7 @@ def shell_solve(tg, shear="mitc4_both", mesh_dir=None, res_dir=None):
         np.save(os.path.join(res_dir, "rm_%s_%s.npy" % (tg, side)), C6r)
 
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_general(
-        nodes, quads, sd, e1s, e2s, e3s, D_by, G_by, k22_e, cross, shear=shear)
+        nodes, quads, sd, e1s, e2s, e3s, D_by, G_by, k22_e, cross, shear=shear, kg_e=kg_e)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))
 
     def scatter(key):

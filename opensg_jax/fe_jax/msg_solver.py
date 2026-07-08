@@ -124,6 +124,14 @@ def finalize_v1_and_compute_deff(V1s_raw, V0, D_eff, V0DllV0,
     tmp = jnp.linalg.inv(Dc.T @ Psi) @ (Dc.T @ V1s_raw)
     V1s = V1s_raw - (Psi @ tmp)
 
+    # D_eff is a symmetric stiffness by construction (Hessian of the EB energy).  A
+    # Dirichlet-constrained TAPER segment solve produces a small (2-6%) antisymmetric
+    # ARTIFACT in D_eff (V0 is fixed at the boundary rings, so Dee+V0.T@Dhe is not the
+    # exact symmetric Schur complement).  Ainv=inv(D_eff) would carry that asymmetry
+    # into Q_tim -> the ANTISYMMETRIC shear-bending coupling (C26/C35), inflating it by
+    # up to +78% on anisotropic tapers while leaving the symmetric terms untouched.
+    # Enforcing the physical invariant here is a no-op for prismatic/symmetric D_eff.
+    D_eff = 0.5 * (D_eff + D_eff.T)
     Ainv = jnp.linalg.inv(D_eff)
     B_tim = DhlTV0Dle.T @ V0
 

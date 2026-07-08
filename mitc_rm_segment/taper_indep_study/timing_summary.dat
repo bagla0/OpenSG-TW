@@ -1,0 +1,21 @@
+# geom mat NC NL  t_rings_s  t_seg_s  t_total_s
+circle iso 24 5 0.4 1.0 1.3
+circle iso 36 8 0.5 2.6 3.2
+circle iso 48 10 0.7 4.5 5.2
+circle iso 72 15 1.1 11.5 12.6
+circle iso 96 20 1.5 26.5 28.0
+circle m45 24 5 0.4 1.0 1.4
+circle m45 36 8 0.6 2.7 3.2
+circle m45 48 10 0.7 4.6 5.3
+circle m45 72 15 1.1 11.6 12.7
+circle m45 96 20 1.5 26.6 28.1
+square iso 24 5 0.9 1.4 2.2
+square iso 36 8 0.9 3.1 4.0
+square iso 48 10 1.1 4.9 6.1
+square iso 72 15 1.5 12.0 13.5
+square iso 96 20 1.9 26.6 28.5
+square m45 24 5 0.4 1.0 1.3
+square m45 36 8 0.5 2.6 3.2
+square m45 48 10 0.7 4.5 5.2
+square m45 72 15 1.1 11.6 12.7
+square m45 96 20 1.5 26.3 27.8
