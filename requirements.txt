@@ -9,3 +9,5 @@ matplotlib
 mpi4py
 fenics-basix
 psutil
+pypardiso
+pyyaml
