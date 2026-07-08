@@ -36,11 +36,19 @@ LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
 
 
 def shear_for(stage, tR):
-    """Thin/thick shear rule (6-DOF everywhere)."""
-    thin = tR <= 0.02 + 1e-9
+    """Settled 6-DOF shear scheme.
+
+    Tapered segment: FULL integration at every thickness -- the independent-omega3 element is
+    locking-free under full integration, and assumed-strain (MITC) tying aliases the
+    drilling-carried shear on flat walls (square thin taper collapses to -47% under mitc).
+
+    Boundary ring: gamma23-tie (mitc4_g23) for thin walls, full for thick.  Circle/square are
+    indifferent to the ring scheme; on the webbed multi-cell ring the gamma23-tie is the better
+    choice for thin walls (GA2 -17% vs full's +29%).
+    """
     if stage == "taper":
-        return "mitc4_both" if thin else "full"
-    return "mitc4_g23" if thin else "full"          # boundary ring
+        return "full"
+    return "mitc4_g23" if tR <= 0.02 + 1e-9 else "full"
 
 
 def solve_boundary(mesh_dir, tg, res_dir, shear):

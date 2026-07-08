@@ -21,12 +21,18 @@ the solid. Together the three scripts cover the **12 cases** of the paper (3 geo
 
 | stage | thin `t/R ≤ 0.02` | thick `t/R > 0.02` |
 |-------|-------------------|--------------------|
-| tapered segment | MITC (`mitc4_both`) | full 2×2 Gauss |
+| tapered segment | **full 2×2 Gauss** | full 2×2 Gauss |
 | boundary ring   | γ₂₃-tie (`mitc4_g23`) | full |
 
-MITC controls transverse-shear locking where the wall is thin; full integration is used on
-the thick walls where locking is absent (and MITC would alias the drilling rotation on flat
-walls / webs). Selected by `_rm_common.shear_for(stage, tR)`.
+The independent-ω₃ element is **locking-free under full integration**, so the tapered segment
+uses full integration at every thickness. Assumed-strain (MITC) tying is *not* used on the
+segment because it aliases the drilling-carried shear on flat walls — e.g. the square thin
+taper collapses to `GA ≈ -47%` under `mitc4_both`, versus `-1.7%` under full integration.
+
+For the boundary ring, circle and square are indifferent to the scheme (all schemes ≤3%); on
+the webbed multi-cell ring the γ₂₃-tie is the better choice for thin walls (`GA₂ ≈ -17%` vs
+full's `+29%`), so thin rings use `mitc4_g23` and thick rings use full. Selected by
+`_rm_common.shear_for(stage, tR)`.
 
 ## Data
 
