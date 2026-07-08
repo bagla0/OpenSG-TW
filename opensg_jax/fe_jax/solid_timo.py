@@ -298,7 +298,8 @@ def compute_timo_from_yaml(yaml_path, verbose=True):
 
     fe_type = FiniteElementType(cell_type=_CELL[sg["elem_type"]], family=ElementFamily.P, basis_degree=1,
                                 lagrange_variant=LagrangeVariant.equispaced,
-                                quadrature_type=QuadratureType.default, quadrature_degree=2)
+                                quadrature_type=getattr(QuadratureType, "Default", None)
+                                or getattr(QuadratureType, "default"), quadrature_degree=2)
     xi_qp, W_q = get_quadrature(fe_type=fe_type)
     phi_qn, dphi_dxi_qnp = eval_basis_and_derivatives(fe_type=fe_type, xi_qp=xi_qp)
     Q = xi_qp.shape[0]

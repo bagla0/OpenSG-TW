@@ -23,9 +23,9 @@ from fe_jax.orient_plot import plot_orient
 from opensg_jax.fe_jax.gradient_kirchhoff import gradient_junction_kirchhoff
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-SHELL = os.path.join(CC, "tests", "research", "tube_thesis_314", "data", "shell_center.yaml")
-SOLIDY = os.path.join(CC, "tests", "research", "tube_thesis_314", "data", "solid_m45.yaml")
-BENCH = os.path.join(CC, "tests", "research", "tube_thesis_314", "data", "C6_solid_314.txt")
+SHELL = os.path.join(CC, "examples", "data", "1d_yaml", "tube_m45_shell.yaml")
+SOLIDY = os.path.join(CC, "examples", "data", "2d_yaml", "tube_m45_solid.yaml")
+BENCH = os.path.join(CC, "examples", "data", "benchmark", "tube_m45_solid_ref.txt")
 
 
 def sym(M):

@@ -74,8 +74,8 @@ def run(yaml_path, FF):
 
 
 if __name__ == "__main__":
-    default_yaml = os.path.join(
-        r"C:\Users\bagla0\OpenSG\examples\data\Shell_1DSG", "1Dshell_0.yaml")
+    _CC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_yaml = os.path.join(_CC, "examples", "data", "1d_yaml", "mh104_shell.yaml")
     yaml_path = sys.argv[1] if len(sys.argv) > 1 else default_yaml
     # Example load: axial + bending-2 (edit for your case).
     FF = np.array([1.0e5, 0.0, 0.0, 0.0, 1.0e4, 0.0])

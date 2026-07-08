@@ -171,7 +171,7 @@ def run_cross_section(yaml_path):
 
 
 if __name__ == "__main__":
-    default_yaml = os.path.join(
-        r"C:\Users\bagla0\OpenSG\examples\data\Shell_1DSG", "1Dshell_0.yaml")
+    _CC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_yaml = os.path.join(_CC, "examples", "data", "1d_yaml", "mh104_shell.yaml")
     yaml_path = sys.argv[1] if len(sys.argv) > 1 else default_yaml
     run_cross_section(yaml_path)

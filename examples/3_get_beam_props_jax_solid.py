@@ -22,9 +22,9 @@ from fe_jax.orient_plot import plot_orient
 from opensg_jax.fe_jax.solid_timo import compute_timo_from_yaml
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-SOLIDY = os.path.join(CC, "tests", "research", "prevabs_mh104", "2Dsolid_VABS_mh_104.yaml")
-SHELL = os.path.join(CC, "tests", "research", "prevabs_mh104", "mh104_shell.yaml")
-KFILE = os.path.join(CC, "tests", "research", "training data", "opensg-FEniCS", "data", "mh104_training", "mh104.sg.K")
+SOLIDY = os.path.join(CC, "examples", "data", "2d_yaml", "mh104_solid.yaml")
+SHELL = os.path.join(CC, "examples", "data", "1d_yaml", "mh104_shell.yaml")
+KFILE = os.path.join(CC, "examples", "data", "benchmark", "mh104.sg.K")
 
 
 def sym(M):
