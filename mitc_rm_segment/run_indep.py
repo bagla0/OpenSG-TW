@@ -79,10 +79,14 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     exactly via element-constant Lagrange multipliers.  The segment Dirichlet data
     includes the drilling omega_3 ring values.  return_full=True additionally
     returns the ring 6x6s and per-stage wall times.  shear selects the segment
-    transverse-shear scheme: 'full' (production, 2x2 Gauss; locking-free for
-    t/R>=0.02) or an assumed-strain MITC tie ('mitc4_g23'|'mitc4_both'|'mitc4_wonly').
-    Full integration shear-locks for extreme-thin webbed walls (t/R<=0.01) where the
-    Timoshenko shear correction is negligible anyway -- use Kirchhoff-Love there."""
+    transverse-shear scheme: 'full' (2x2 Gauss) or an assumed-strain MITC tie
+    ('mitc4_both' ties BOTH transverse shears; also 'mitc4_g23'|'mitc4_wonly').
+    RULE (webbed sections): 'full' is the robust default and is used for thick and
+    moderately thin walls (t/R>=0.05), where full and MITC coincide to <1 point on
+    every stiffness; reserve 'mitc4_both' for VERY thin walls (t/R~0.02), where it
+    trims the GA3 locking onset (+29->+23%) at a modest GA2 web-aliasing cost
+    (-2->-12%).  Below the RM validity range the shear correction ~EI/(GA*L^2) is
+    negligible -- use Kirchhoff-Love."""
     import io, contextlib, time
     import jax.numpy as jnp
     from boundary_from_yaml import extract
