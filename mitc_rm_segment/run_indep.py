@@ -72,12 +72,17 @@ def shell_solve_indep(tg, mesh_dir, res_dir, pen=None, pen_beta=0.1):
     return 0.5 * (np.asarray(S6) + np.asarray(S6).T)
 
 
-def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=False):
+def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=False,
+                         shear="full"):
     """ALL-6-DOF tapered segment homogenization: constrained (independent-omega3)
     element for BOTH the boundary rings and the segment interior, DR=0 imposed
     exactly via element-constant Lagrange multipliers.  The segment Dirichlet data
     includes the drilling omega_3 ring values.  return_full=True additionally
-    returns the ring 6x6s and per-stage wall times."""
+    returns the ring 6x6s and per-stage wall times.  shear selects the segment
+    transverse-shear scheme: 'full' (production, 2x2 Gauss; locking-free for
+    t/R>=0.02) or an assumed-strain MITC tie ('mitc4_g23'|'mitc4_both'|'mitc4_wonly').
+    Full integration shear-locks for extreme-thin webbed walls (t/R<=0.01) where the
+    Timoshenko shear correction is negligible anyway -- use Kirchhoff-Love there."""
     import io, contextlib, time
     import jax.numpy as jnp
     from boundary_from_yaml import extract
@@ -120,7 +125,7 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     # content, and flux-only tying is numerically identical to full integration.
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0,
-        shear="full")
+        shear=shear)
     Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
                                      lam_space=lam_space)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))
@@ -170,7 +175,8 @@ def shell_solve_lagrange(tg, mesh_dir, res_dir, lam_space="elem", return_full=Fa
     return S6
 
 
-def shell_solve_lagrange_sparse(tg, mesh_dir, res_dir, lam_space="elem", return_full=False):
+def shell_solve_lagrange_sparse(tg, mesh_dir, res_dir, lam_space="elem", return_full=False,
+                                shear="full"):
     """SPARSE-assembly / sparse-solve variant of shell_solve_lagrange for large
     (>~1e5 DOF) refined meshes, where the dense ndof x ndof operators would not fit
     in memory.  Identical formulation and Dirichlet-transfer as the dense driver;
@@ -215,7 +221,7 @@ def shell_solve_lagrange_sparse(tg, mesh_dir, res_dir, lam_space="elem", return_
     t0 = time.perf_counter()
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e, pen=0.0,
-        shear="full", sparse=True)
+        shear=shear, sparse=True)
     Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax, kg_e=kg_e,
                                      lam_space=lam_space, sparse=True)
     M = Dhh.shape[0]; P = Gc.shape[0]; naug = M + P
