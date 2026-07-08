@@ -38,6 +38,20 @@ region; the **circular taper convergence study** is a clean verification benchma
 RM taper kinematics against an analytic / 3-D-solid reference on a tube. They are separate tutorials — start
 with whichever matches your goal (production geometry vs. formulation verification).
 
+### Full paper reproduction — RM_taper
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} ★ · Tapered thin-walled beams (circle, square, webbed ellipse)
+:link: rm_taper
+:link-type: doc
+The complete reproduction of the tapered RM paper's 12 cases — boundary rings **and** tapered
+segments, thin + thick wall, for the circular, square, and webbed-ellipse tubes — with a single
+6-DOF RM shell vs the conforming 3-D solid. Runnable from `examples/RM_taper/{circle,square,ellipse}.py`.
+:::
+::::
+
 ### Wind-blade tapered segment (real geometry)
 
 ::::{grid} 1 1 2 2
