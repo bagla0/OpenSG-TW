@@ -53,7 +53,9 @@ tutorials/st15_solid_vs_shell
 :hidden:
 :caption: Tapered 3-D segments
 
-tutorials/rm_taper
+tutorials/rm_taper_circle
+tutorials/rm_taper_square
+tutorials/rm_taper_ellipse
 tutorials/taper_3dsg_segment
 tutorials/taper_convergence_iso
 tutorials/taper_convergence_m45

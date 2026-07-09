@@ -38,17 +38,31 @@ region; the **circular taper convergence study** is a clean verification benchma
 RM taper kinematics against an analytic / 3-D-solid reference on a tube. They are separate tutorials — start
 with whichever matches your goal (production geometry vs. formulation verification).
 
-### Full paper reproduction — RM_taper
+### Full paper reproduction — RM_taper (one notebook per geometry)
 
-::::{grid} 1 1 2 2
+Each notebook renders the shell mesh + $e_2/e_3$ orientation and prints the Timoshenko $6\times6$
+for **both the boundary ring and the tapered segment** (thin + thick wall) against the conforming
+3-D solid — the paper's 12 cases. Runnable from `examples/RM_taper/{circle,square,ellipse}.py`.
+
+::::{grid} 1 1 3 3
 :gutter: 3
 
-:::{grid-item-card} ★ · Tapered thin-walled beams (circle, square, webbed ellipse)
-:link: rm_taper
+:::{grid-item-card} ★ · Circular tube
+:link: rm_taper_circle
 :link-type: doc
-The complete reproduction of the tapered RM paper's 12 cases — boundary rings **and** tapered
-segments, thin + thick wall, for the circular, square, and webbed-ellipse tubes — with a single
-6-DOF RM shell vs the conforming 3-D solid. Runnable from `examples/RM_taper/{circle,square,ellipse}.py`.
+Smoothly curved single-cell tube — boundary + taper 6×6, every term within a few percent.
+:::
+
+:::{grid-item-card} ★ · Square tube
+:link: rm_taper_square
+:link-type: doc
+Flat-walled companion — full integration restores the flat-wall transverse shear (thin taper $GA=-1.7\%$).
+:::
+
+:::{grid-item-card} ★ · Webbed ellipse
+:link: rm_taper_ellipse
+:link-type: doc
+Blade-like multi-cell with three shear webs — the demanding case, vs the conforming hex solid.
 :::
 ::::
 

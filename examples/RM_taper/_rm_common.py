@@ -84,6 +84,49 @@ def solve_taper(mesh_dir, tg, res_dir, shear):
     return np.asarray(S6)
 
 
+def render_orientation(mesh_dir, tg, res_dir, title=""):
+    """Render the actual computed shell mesh (from boundary_from_yaml.extract) in 3-D --
+    quad edges coloured by subdomain (skin grey, web crimson) with subsampled e2 (blue) and
+    e3 (black) orientation arrows. Returns a matplotlib Figure for inline display."""
+    import io
+    import contextlib
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+    from boundary_from_yaml import extract
+    os.makedirs(res_dir, exist_ok=True)
+    npz = os.path.join(res_dir, "shell_%s.npz" % tg)
+    with contextlib.redirect_stdout(io.StringIO()):
+        extract(os.path.join(mesh_dir, "shell_%s.yaml" % tg), npz)
+    b = np.load(npz, allow_pickle=True)
+    X = np.asarray(b["seg_x"]); Q = np.asarray(b["seg_cells"])
+    e2 = np.asarray(b["seg_e2"]); e3 = np.asarray(b["seg_e3"]); sd = np.asarray(b["seg_subdom"])
+    cen = X[Q].mean(1)
+    fig = plt.figure(figsize=(10, 4.2))
+    ax = fig.add_subplot(111, projection="3d")
+    web = sd != sd.min()
+    for q, w in zip(Q, web):
+        loop = list(q) + [int(q[0])]
+        ax.plot(X[loop, 2], X[loop, 0], X[loop, 1], color=("crimson" if w else "0.75"), lw=0.35)
+    L = 0.09 * float((X.max(0) - X.min(0)).max())
+    st = max(1, len(Q) // 180)
+    for k in range(0, len(Q), st):
+        c = cen[k]
+        ax.quiver(c[2], c[0], c[1], e2[k, 2], e2[k, 0], e2[k, 1], length=L, color="blue", lw=0.7)
+        ax.quiver(c[2], c[0], c[1], e3[k, 2], e3[k, 0], e3[k, 1], length=L, color="black", lw=0.7)
+    ax.set_xlabel("span z"); ax.set_ylabel("x"); ax.set_zlabel("y")
+    ax.set_title(title)
+    try:
+        ax.set_box_aspect((3, 1, 1))
+    except Exception:
+        pass
+    ax.view_init(elev=18, azim=-70)
+    fig.tight_layout()
+    png = os.path.join(res_dir, "orient_%s.png" % tg)
+    fig.savefig(png, dpi=95, bbox_inches="tight")
+    plt.close(fig)
+    return png
+
+
 def report(title, So, Sh, shear):
     So = 0.5 * (So + So.T); Sh = 0.5 * (Sh + Sh.T)
     print("\n" + "-" * 66)
