@@ -28,7 +28,9 @@ def show(title, S):
 
 
 def pct_err(S, R):
-    cut = np.abs(R).max() / 1e6
+    # VABS max/1000 neglect rule (repo convention, benchmark_vabs.py): terms below
+    # max|entry|/1000 are numerical noise (unstructured-mesh asymmetry), not physics.
+    cut = np.abs(R).max() / 1e3
     E = np.full((6, 6), np.nan)
     m = np.abs(R) > cut
     E[m] = 100.0 * (S[m] - R[m]) / R[m]
