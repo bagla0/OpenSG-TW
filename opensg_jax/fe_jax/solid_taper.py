@@ -433,8 +433,48 @@ def solve_segment(seg, bL, bR, V0L, V1L, V0R, V1R):
 # ============================================================================= top level
 def compute_timo_taper_solid(yaml_path, verbose=True):
     """JAX solid taper: YAML -> (Deff_L 6x6, Deff_R 6x6, Deff_segment 6x6, info)."""
+    return compute_timo_taper_solid_seg(read_solid_segment_yaml(yaml_path), verbose)
+
+
+def hex_to_tets(conn8):
+    """Split hex8 connectivity (n,8) into 6 tet4 each via the main-diagonal (0-6) scheme.
+    In a structured grid with consistent local orderings the implied face diagonals MATCH
+    between adjacent split hexes (bottom 0-2 / top 4-6 / sides 0-5, 1-6, 3-6, 0-7), so the
+    tet region is conforming; the hex|tet interface (quad face vs 2 tris on the same 4
+    nodes) is the standard node-tied hex-dominant transition."""
+    c = np.asarray(conn8)
+    T = [(0, 1, 2, 6), (0, 2, 3, 6), (0, 3, 7, 6), (0, 7, 4, 6), (0, 4, 5, 6), (0, 5, 1, 6)]
+    return np.concatenate([c[:, list(t)] for t in T], axis=0)
+
+
+def split_batches_to_tets(seg, mask=None):
+    """New seg dict with the masked hex8 elements (default: all) split into tet4 (6 each,
+    inheriting material + frame).  mask: bool (n_hex,) selecting hexes to split."""
+    out = dict(seg)
+    batches = dict(seg["batches"])
+    conn, mat, frm = batches["hex8"]
+    m = np.ones(len(conn), bool) if mask is None else np.asarray(mask, bool)
+    new_tets = hex_to_tets(conn[m])
+    tet_mat = np.tile(mat[m], 6)
+    tet_frm = np.tile(frm[m], (6, 1))
+    if "tet4" in batches:
+        t0, m0, f0 = batches["tet4"]
+        new_tets = np.concatenate([t0, new_tets]); tet_mat = np.concatenate([m0, tet_mat])
+        tet_frm = np.concatenate([f0, tet_frm])
+    batches["tet4"] = (new_tets, tet_mat, tet_frm)
+    if m.all():
+        batches.pop("hex8")
+    else:
+        batches["hex8"] = (conn[~m], mat[~m], frm[~m])
+    out["batches"] = batches
+    out["nelem"] = sum(len(b[0]) for b in batches.values())
+    return out
+
+
+def compute_timo_taper_solid_seg(seg, verbose=True):
+    """As compute_timo_taper_solid but from an in-memory seg dict (read_solid_segment_yaml
+    format) -- used for hybrid hex+tet variants built by split_batches_to_tets."""
     t0 = time.time()
-    seg = read_solid_segment_yaml(yaml_path)
     bL = extract_boundary_submesh(seg, "L")
     bR = extract_boundary_submesh(seg, "R")
     t_read = time.time() - t0

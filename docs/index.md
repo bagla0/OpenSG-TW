@@ -63,6 +63,7 @@ tutorials/taper_square_iso
 tutorials/taper_square_m45
 tutorials/taper_indep_omega3
 tutorials/mitc_5dof_vs_6dof
+tutorials/solid_taper_jax
 ```
 
 ```{toctree}

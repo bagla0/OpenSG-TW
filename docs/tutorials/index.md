@@ -141,6 +141,22 @@ tapered segment, and the extreme-thinness locking probe.
 :::
 ::::
 
+### JAX 3-D solid taper (mixed hex+tet)
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 11 · JAX solid taper — hybrid hex+tet
+:link: solid_taper_jax
+:link-type: doc
+The 3-D **solid** tapered segment homogenized entirely in JAX with element-type batches
+(hex8 + tet4 in one system; mixed quad+tri boundaries extracted from the segment).
+Tube $-45°$ thick case: all-hex vs hybrid vs all-tet (0.6 % apart), boundary + taper
+$6\times6$ vs the RM shell ring and shell segment, with wall times. Validated vs FEniCS
+`compute_stiffness(Taper=True)`: 0.008 % (hex), 0.63 % (tet ellipse).
+:::
+::::
+
 ```{list-table} Cross-sections and benchmarks used
 :header-rows: 1
 :widths: 22 26 26 26
