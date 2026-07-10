@@ -82,6 +82,40 @@ def read_solid_segment_yaml(path):
                 nelem=nelem)
 
 
+def write_solid_segment_yaml(path, nodes_xyz, elems, mat_of_name, frames_xyz, mat_blocks):
+    """Write an OpenSG 3-D solid segment YAML with MIXED elements (8-node hex and/or
+    4-node tet rows), string/1-based, readable by read_solid_segment_yaml (and by the
+    patched FEniCS SolidSegmentMesh).  Args are in the ORIGINAL (x, y, z=beam) order:
+    nodes_xyz (N,3); elems = list of 0-based connectivity lists (len 8 or 4); mat_of_name
+    (nelem,) material name per element; frames_xyz (nelem, 9) [e1,e2,e3] flattened;
+    mat_blocks = [{'name', 'E':[3], 'G':[3], 'nu':[3], 'rho'}]."""
+    class _Flow(list):
+        pass
+
+    yaml.add_representer(_Flow, lambda d, x: d.represent_sequence(
+        "tag:yaml.org,2002:seq", x, flow_style=True))
+    doc = {"nodes": [], "elements": [], "sets": {"element": []},
+           "elementOrientations": [], "materials": []}
+    for p in np.asarray(nodes_xyz):
+        doc["nodes"].append(_Flow(["%.10f %.10f %.10f" % (p[0], p[1], p[2])]))
+    for c in elems:
+        doc["elements"].append(_Flow([" ".join(str(int(n) + 1) for n in c)]))
+    mat_of_name = [str(m) for m in mat_of_name]            # numpy str_ -> plain str (yaml-safe)
+    names = sorted(set(mat_of_name))
+    for nm in names:
+        doc["sets"]["element"].append(
+            {"name": nm, "labels": _Flow([k + 1 for k, m in enumerate(mat_of_name) if m == nm])})
+    for fr in np.asarray(frames_xyz):
+        doc["elementOrientations"].append(_Flow([float(v) for v in fr]))
+    for mb in mat_blocks:
+        doc["materials"].append({"name": mb["name"], "E": _Flow(list(mb["E"])),
+                                 "G": _Flow(list(mb["G"])), "nu": _Flow(list(mb["nu"])),
+                                 "rho": float(mb.get("rho", 1.0))})
+    with open(path, "w") as f:
+        yaml.dump(doc, f, sort_keys=False, default_flow_style=False)
+    return path
+
+
 # ================================================================ boundary submesh extraction
 _HEXF = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
 _TETF = [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3)]
