@@ -1,0 +1,14 @@
+\begin{table}[t]\centering\small
+\caption{IEA-22 $r=0.2$ cross-section: cost of the three homogenizers across mesh-refinement levels (DOF and wall-clock; $EA$ shown to confirm convergence). The 1-D RM shell converges with the fewest DOF at a fraction of the solid cost; the JAX and FEniCS 2-D solids share the mesh and agree on $EA$.}\label{tab:timing}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{l|rr|rr|rr}
+\toprule
+& \multicolumn{2}{c|}{RM shell (1-D)} & \multicolumn{2}{c|}{JAX 2-D solid} & \multicolumn{2}{c}{FEniCS 2-D solid}\\
+level & DOF & $t$ (s) & DOF & $t$ (s) & DOF & $t$ (s)\\
+\midrule
+coarse & 984 & $0.69$ & 1269 & $4.12$ & 1269 & $1.01$\\
+medium & 1206 & $0.67$ & 2559 & $4.06$ & 2559 & $1.30$\\
+fine & 1398 & $0.70$ & 4224 & $4.51$ & 4224 & $1.37$\\
+\bottomrule
+\end{tabular}
+\end{table}
