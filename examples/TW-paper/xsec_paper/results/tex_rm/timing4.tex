@@ -1,5 +1,5 @@
 \begin{table}[t]\centering\small
-\caption{Wall-clock cost of the three homogenizers on the four examples: the RM 6-DOF shell ring (1-D contour), the OpenSG-JAX 2-D solid, and the OpenSG-FEniCS 2-D solid (same mesh). JAX time is the compiled-kernel solve; its one-off JIT compilation is excluded. The blade row sums all eight stations.}\label{tab:timing4}
+\caption{Wall-clock solver cost of the three homogenizers on the four examples: the RM 6-DOF shell ring (1-D contour), the OpenSG-JAX 2-D solid, and the OpenSG-FEniCS 2-D solid (same mesh). JAX time is the compiled-kernel solve; its one-off JIT compilation and all mesh generation are excluded. DOF counts are the displacement/rotation unknowns (the RM ring additionally carries one Lagrange multiplier per element); the $r/R=0.2$ row times the medium ($206$-node) contour of the convergence study, not the $312$-node reference contour. The blade row sums all eight stations.}\label{tab:timing4}
 \setlength{\tabcolsep}{5pt}
 \begin{tabular}{l|rr|rr|rr}
 \toprule

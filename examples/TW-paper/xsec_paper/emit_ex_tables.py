@@ -27,18 +27,22 @@ def sym(M):
     return 0.5 * (np.asarray(M) + np.asarray(M).T)
 
 
+COUP_CUT = 1e-3   # drop off-diagonal couplings > 10^3x smaller than the leading stiffness
+
+
 def rows_of(*Ss):
-    """union of physically nonzero (i,j): diagonals always; couplings if >2% of sqrt(Cii*Cjj)
-    in ANY of the given matrices."""
+    """diagonals always; an off-diagonal coupling is kept only if its magnitude is at
+    least COUP_CUT times the largest diagonal term of the table (on the common scale),
+    i.e. couplings more than three orders of magnitude below the leading stiffness are
+    dropped."""
+    gmax = max(abs(S[k, k]) for S in Ss for k in range(6))
     ij = []
     for i in range(6):
         for j in range(i, 6):
             if i == j:
                 ij.append((i, j)); continue
-            for S in Ss:
-                rel = abs(S[i, j]) / (np.sqrt(abs(S[i, i] * S[j, j])) + 1e-30)
-                if rel > 0.02:
-                    ij.append((i, j)); break
+            if max(abs(S[i, j]) for S in Ss) >= COUP_CUT * gmax:
+                ij.append((i, j))
     return ij
 
 
@@ -49,11 +53,11 @@ def fmt(x, scale):
     return "$%.4g$" % v
 
 
-def block_table(fname, caption, label, blocks, scale, exp):
+def block_table(fname, caption, label, blocks, scale, exp, diag_only=False):
     """blocks = [(header, solid6x6, shell6x6), ...] -> one table, per-block (solid|RM|%err)."""
     Ss = [sym(s) for _h, s, _r in blocks]
     Rs = [sym(r) for _h, _s, r in blocks]
-    ij = rows_of(*Ss)
+    ij = [(k, k) for k in range(6)] if diag_only else rows_of(*Ss)
     ncol = len(blocks)
     lines = [r"\begin{table}[htpb]", r"\centering", r"\small",
              r"\caption{%s ($\times10^{%d}$).}" % (caption, exp), r"\label{%s}" % label,
@@ -62,10 +66,11 @@ def block_table(fname, caption, label, blocks, scale, exp):
              " & " + " & ".join(r"\multicolumn{3}{c%s}{%s}" % ("|" if k < ncol - 1 else "", h)
                                 for k, (h, _s, _r) in enumerate(blocks)) + r" \\",
              r"$C^{b}_{ij}$" + " & solid & shell & \\%err" * ncol + r" \\", r"\hline"]
+    gmax = max(abs(S[k, k]) for S in Ss for k in range(6))
     for (i, j) in ij:
         cells = []
         for S, C in zip(Ss, Rs):
-            if abs(S[i, j]) / (np.sqrt(abs(S[i, i] * S[j, j])) + 1e-30) <= 0.02 and i != j:
+            if i != j and abs(S[i, j]) < COUP_CUT * gmax:
                 cells += [r"$\sim\!0$", r"$\sim\!0$", "---"]
             else:
                 e = 100.0 * (C[i, j] - S[i, j]) / S[i, j]
@@ -88,7 +93,8 @@ def conv_fig(x, E, xlabel, fname, logx=True):
     if logx:
         ax.set_xscale("log")
     ax.set_xlabel(xlabel); ax.set_ylabel("diagonal % error vs 2-D solid")
-    ax.grid(alpha=0.3); ax.legend(fontsize=9, frameon=False, ncol=2)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=9, frameon=False, ncol=1, loc="center left", bbox_to_anchor=(1.02, 0.5))
     fig.tight_layout(); fig.savefig(os.path.join(FIG, fname), dpi=200, bbox_inches="tight")
     plt.close(fig); print("wrote", fname)
 
@@ -106,11 +112,15 @@ conv_fig(c["N"], c["diag_err"], "circumferential elements $N$", "conv_twocell.pn
 # ================= Ex2: ellipse =================
 d = np.load(os.path.join(RES, "ex2_ellipse.npz"))
 for mk, mname in (("iso", "isotropic"), ("m45", r"$[-45^\circ]$")):
-    block_table("ex2_ell_%s.tex" % mk,
-                r"Elliptic four-cell tube (%s): RM 6-DOF shell vs.\ the 2-D solid, thin "
-                r"($t/a=0.02$) and thick ($t/a=0.12$) wall" % mname, "tab:ell%s" % mk,
+    cap = (r"Elliptic four-cell tube (%s): RM 6-DOF shell vs.\ the 2-D solid, thin "
+           r"($t/a=0.02$) and thick ($t/a=0.12$) wall" % mname)
+    if mk == "m45":
+        cap += r" (diagonal constants; the sign-odd couplings depend on the web " \
+               r"through-thickness convention and are omitted)"
+    block_table("ex2_ell_%s.tex" % mk, cap, "tab:ell%s" % mk,
                 [("thin", d["%s_thin_solid" % mk], d["%s_thin_ring" % mk]),
-                 ("thick", d["%s_thick_solid" % mk], d["%s_thick_ring" % mk])], 1e9, 9)
+                 ("thick", d["%s_thick_solid" % mk], d["%s_thick_ring" % mk])], 1e9, 9,
+                diag_only=(mk == "m45"))
 
 # ================= Ex3: IEA r0.2 / r0.3 (OML) =================
 d = np.load(os.path.join(RES, "ex31_full_blade.npz"))
@@ -124,16 +134,15 @@ for rr, tag in ((0.2, "iea020"), (0.3, "iea030")):
 cv = np.load(os.path.join(RES, "ex3_iea_conv.npz"))
 conv_fig(cv["nnode"], cv["diag_err"], "contour nodes", "conv_iea_r020.png")
 
-# ================= Ex3.1: full blade table =================
-E = d["diag_err"]; R = d["r"]; T = d["times"]
+# ================= Ex4: full blade table =================
+E = d["diag_err"]; R = d["r"]
 lines = [r"\begin{table}[t]\centering\small",
          r"\caption{Full IEA-22 blade (OML reference): RM 6-DOF shell cross-section vs.\ "
-         r"2-D solid at every span station --- diagonal \%\,error and ring solve time.}\label{tab:fullblade}",
-         r"\begin{tabular}{lrrrrrrr}", r"\toprule",
-         r"$r$ & $EA$ & $GA_2$ & $GA_3$ & $GJ$ & $EI_2$ & $EI_3$ & time (s)\\", r"\midrule"]
+         r"2-D solid at every span station --- diagonal \%\,error.}\label{tab:fullblade}",
+         r"\begin{tabular}{lrrrrrr}", r"\toprule",
+         r"$r$ & $EA$ & $GA_2$ & $GA_3$ & $GJ$ & $EI_2$ & $EI_3$\\", r"\midrule"]
 for k in range(len(R)):
-    lines.append("$%.1f$ & " % R[k] + " & ".join("$%+.1f$" % E[k, i] for i in range(6))
-                 + " & $%.2f$" % T[k] + r"\\")
+    lines.append("$%.1f$ & " % R[k] + " & ".join("$%+.1f$" % E[k, i] for i in range(6)) + r"\\")
 lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
 open(os.path.join(TEX, "fullblade.tex"), "w").write("\n".join(lines))
 print("wrote fullblade.tex")
@@ -143,10 +152,14 @@ t = np.load(os.path.join(RES, "timing4.npz"))
 names = {"two_cell": "two-cell tube", "ellipse": "elliptic four-cell",
          "iea_r020": r"IEA-22 $r/R=0.2$", "full_blade": "full IEA-22 blade (8 stations)"}
 lines = [r"\begin{table}[t]\centering\small",
-         r"\caption{Wall-clock cost of the three homogenizers on the four examples: the RM "
-         r"6-DOF shell ring (1-D contour), the OpenSG-JAX 2-D solid, and the OpenSG-FEniCS "
-         r"2-D solid (same mesh). JAX time is the compiled-kernel solve; its one-off JIT "
-         r"compilation is excluded. The blade row sums all eight stations.}\label{tab:timing4}",
+         r"\caption{Wall-clock solver cost of the three homogenizers on the four examples: "
+         r"the RM 6-DOF shell ring (1-D contour), the OpenSG-JAX 2-D solid, and the "
+         r"OpenSG-FEniCS 2-D solid (same mesh). JAX time is the compiled-kernel solve; its "
+         r"one-off JIT compilation and all mesh generation are excluded. DOF counts are the "
+         r"displacement/rotation unknowns (the RM ring additionally carries one Lagrange "
+         r"multiplier per element); the $r/R=0.2$ row times the medium ($206$-node) contour "
+         r"of the convergence study, not the $312$-node reference contour. The blade row "
+         r"sums all eight stations.}\label{tab:timing4}",
          r"\setlength{\tabcolsep}{5pt}",
          r"\begin{tabular}{l|rr|rr|rr}", r"\toprule",
          r"& \multicolumn{2}{c|}{RM shell (1-D)} & \multicolumn{2}{c|}{JAX 2-D solid} & "
