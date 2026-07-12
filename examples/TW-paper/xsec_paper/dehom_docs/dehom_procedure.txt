@@ -1,0 +1,180 @@
+================================================================================
+ MSG THIN-WALLED DEHOMOGENIZATION -- FROM BEAM FORCE TO POINTWISE 3-D STRESS
+ opensg_jax/fe_jax/msg_dehom.py :  recover_shell_strains / dehomogenize / stress_at_points
+ opensg_jax/fe_jax/msg_materials.py : plate_stress_at_depth / plate_dehom_strain
+================================================================================
+
+GOAL
+----
+Given (a) a homogenized cross-section (Timoshenko 6x6 C_eff, the EB warping V0 and
+the shear warping V1, per-element geometry and layups) and (b) an applied beam force
+FF, recover the full 3-D stress sigma(y2,y3,z) at any point of the cross-section --
+including through the wall thickness.  This inverts the homogenization: homogenization
+maps 3-D -> beam 6x6; dehomogenization maps (beam force, point) -> 3-D stress.
+
+Two nested SGs are involved:
+  * the CROSS-SECTION SG (the 1-D contour of shell elements) -> the beam warping V0,V1;
+  * the PLATE SG (the 1-D through-thickness line inside each wall element) -> the
+    plate warping (the "warp" object from compute_ABD_matrix, PART A of the 8x8 doc).
+Dehom reuses BOTH, in their recovery (transpose) direction.  It is energy-consistent
+with the homogenization to machine precision.
+
+CONVENTIONS
+  VABS beam-force order    FF = [F1,F2,F3,M1,M2,M3] = [axial, shear-2, shear-3,
+                                torsion, bending-2, bending-3]  (from BeamDyn reactions
+                                FF = [rf[2], -rf[1], rf[0], rf[5], -rf[4], rf[3]]).
+  laminate Voigt order     [e11, e22, e33, 2e23, 2e13, 2e12]  (plate/ply frame)
+  reference surface        frac = 0 OML / 0.5 mid / 1 IML  (matches the homogenization)
+
+
+================================================================================
+ STEP 1 -- BEAM FORCE  ->  SHELL (PLATE) STRAINS ALONG THE CONTOUR
+           recover_shell_strains(bundle, beam_force_vabs=FF)  [msg_dehom.py]
+================================================================================
+
+1a. BEAM STRAIN (line 131)
+        st = C_eff^{-1} @ FF               (Timoshenko 6x6 inverse; st in VABS order)
+    st = [e11, 2e12, 2e13, k1, k2, k3] = the 1-D beam strain state that FF produces.
+
+1b. MACRO + DERIVATIVE RECOVERY  (_macro_recovery, line 133)
+        st, st_m, st_cl1, st_cl2 = _macro_recovery(C_eff, st)
+    st_m       : the classical (Euler-Bernoulli) part of the beam strain.
+    st_cl1,2   : the two Timoshenko DERIVATIVE-recovery terms.  These carry the
+                 x1-derivative (spanwise-gradient) information that a shear force
+                 implies -- the same 'recov' chain the OpenSG solid stress_recov.
+                 local_strain uses, with the fixed operator R1 = recov([1,0,0,0,0,0]).
+    (This makes the shell recovery identical in structure to the validated solid one.)
+
+1c. SECTION-WARPING COMBINATIONS (lines 135-138)
+        a1 = V0 @ st_m     EB warping                w_1
+        a2 = V1 @ st_cl1   shear warping (order 1)    w1s_1
+        a3 = V1 @ st_cl2   shear warping (order 2)    w1s_2
+        a4 = V0 @ st_cl1   EB-of-derivative           w_2
+    V0 = EB warping (n_primal x 4), V1 = finalized shear warping -- BOTH are outputs
+    of the cross-section homogenization (solve_tw_from_yaml).
+
+1d. THE 6 PLATE STRAINS PER CONTOUR ELEMENT (loop lines 150-162)
+    For each contour element e (corner nodes n0,n1), the Hermite shell strain
+    operators eps_h, eps_l, eps_e (hermite_strain_operators; carry k22 curvature,
+    length L, tangent xd2,xd3) assemble the plate strain at each arc quadrature xi:
+
+        shell[e] = eps_h(a1) + eps_e(st_m)          (EB / zeroth order)
+                 + eps_h(a2) + eps_l(a4) + eps_l(a3)(Timoshenko / first order)
+
+    -> shell[e] = [eps11, eps22, 2eps12, kappa11, kappa22, 2kappa12]  (6 plate strains)
+       at every point along the contour.  (This is the KL 6-strain set; the RM
+       transverse-shear strains 2g13,2g23 are added in STEP 3.)
+
+    Returns {shell_strain (E,P,6), x2,x3 (point coords), tang, macro=st, st_m}.
+
+
+================================================================================
+ STEP 2 -- PLATE STRAINS  ->  3-D STRESS AT A THROUGH-THICKNESS DEPTH
+           plate_stress_at_depth(warp, shell_strain, z)  [msg_materials.py 326-363]
+================================================================================
+
+For a query point that projects to arc position (element e) and through-thickness
+depth z, using THE SAME plate warping V0 that built that laminate's ABD (PART A):
+
+    e, xi   = locate the plate sub-element / local coord containing z   (lines 348-353)
+    B(z)    = _plate_B(nodes_xi, xi, he)   the through-thickness gamma_h operator
+    Ge(z)   = macro map [[1,0,0,z,0,0],[0,1,0,0,z,0], 0,0,0, [0,0,1,0,0,z]] (357-360)
+    SC(z)   = B(z) @ V0_e + Ge(z)          strain-concentration (6x6)     (line 361)
+    Gam(z)  = SC(z) @ shell_strain         3-D strain [e11,e22,e33,2e23,2e13,2e12]
+    Sig(z)  = C_layer @ Gam(z)             3-D stress, FULL 3-D ply stiffness (line 363)
+    angle   = ply fiber angle at z         (for rotation to the material frame)
+
+KEY POINTS
+  * SC = B V0 + Ge is the EXACT TRANSPOSE of the operators that assembled the ABD
+    (K=INT B^T C B, F=INT B^T C Ge).  Hence
+        INT Gam:Sig dz == shell_strain^T . ABD . shell_strain   (machine precision)
+    i.e. the recovered field carries exactly the plate energy -- this is the MSG
+    dehom guarantee, the reason the in-plane sigma11/sigma22/sigma12 match VABS <1%.
+  * Sig uses the FULL 3-D anisotropic C_layer (6x6), so e33 (transverse normal) and
+    its stress are recovered from the warping -- NOT assumed zero (not plane stress).
+  * plate_dehom_strain(warp, shell_strain) (lines 257-308) is the same evaluated on a
+    SWEEP of depths (through-thickness profile) instead of one z.
+
+
+================================================================================
+ STEP 3 -- RM 8x8: RECOVER THE TRANSVERSE SHEAR sigma13, sigma23
+================================================================================
+
+STEP 2's plate law is the 6x6 KIRCHHOFF ABD (solve_tw_from_yaml is the Hermite C1 /
+KL shell), so the transverse shears sigma13,sigma23 from the LOCAL plate concentration
+are ~0 (they are a higher-order equilibrium effect: d sigma13/dz = -d sigma11/dx1,
+i.e. they need the ARC-gradient of the in-plane stress).  Physically at st15 they are
+~0.04 MPa vs 167 MPa in-plane -- negligible -- but the RM 8x8 recovers them properly
+using the SAME shear-flow shapes that built the 2x2 G (8x8 doc PART 2):
+
+    Gmat, recover, (zs, ghat_x, ghat_y) = transverse_shear_stiffness(thick,ang,mat,db)
+    sigma13(z) = ghat_x(z) * Q1        ghat_x(z) = g_x(z)/D_eff_x  (parabolic, 0 at faces)
+    sigma23(z) = ghat_y(z) * Q2        Q1,Q2 = transverse-shear stress resultants (N/m)
+
+  where the resultants are the RM plate transverse shears
+        [Q1, Q2] = G_2x2 @ [2gamma13, 2gamma23]
+  and [2gamma13, 2gamma23] are the wall transverse-shear strains of the RM shell.
+  These come from the RM cross-section solve (ring_indep: 2gamma13 = omega2,
+  2gamma23 = a3.w' - omega1); the KL Hermite bundle does not carry them, so the RM
+  8x8 recovery drives Q1,Q2 from the RM ring's per-element transverse shear (or, as a
+  first approximation, from the beam shear force FF[1],FF[2] distributed by the shear
+  flow).  The through-thickness PROFILE (parabolic, traction-free at both surfaces) is
+  set by ghat and is correct by construction; the magnitude scales with Q.
+
+  IMPLEMENTATION: stress_at_points(..., rm8x8=True) adds sigma13,sigma23 = ghat(z)*Q
+  to the STEP-2 stress before the frame rotation.  [dehom_st15_figs.py --rm8x8]
+
+
+================================================================================
+ STEP 4 -- FRAME + POINT QUERY (stress_at_points, msg_dehom.py 260-...)
+================================================================================
+  * For each 2-D query point, find nearest contour element + through-thickness depth
+    by projecting the point onto the element reference line + normal (proj, dep).
+  * frame="global" -> stress in (y1,y2,y3);  "material"/"local" -> rotate by the ply
+    angle into the ply/fiber frame (rotation_6x6(-angle) @ Sig).
+  * returns {stress (P,6)=[S11,S22,S33,S23,S13,S12], strain, elem, xi, depth, proj}.
+
+
+================================================================================
+ ALGORITHM (pseudocode)
+================================================================================
+  # homogenize once
+  bundle = solve_tw_from_yaml(shell_yaml, frac=0)        # C_eff, V0, V1, geometry
+  for each unique laminate: warp[laminate] = compute_ABD_matrix(..., return_warping=True)
+  Gsh[laminate], ghat[laminate] = transverse_shear_stiffness(...)   # RM 8x8 addition
+
+  # STEP 1: beam force -> shell strains along the contour
+  st = inv(C_eff) @ FF
+  st_m, st_cl1, st_cl2 = macro_recovery(C_eff, st)
+  a1,a2,a3,a4 = V0@st_m, V1@st_cl1, V1@st_cl2, V0@st_cl1
+  for e in contour_elements:
+      shell[e] = eps_h(a1)+eps_e(st_m)+eps_h(a2)+eps_l(a4)+eps_l(a3)   # 6 plate strains
+
+  # STEP 2+3: at each query point -> 3-D stress
+  for p in points:
+      e, z = locate(p)                                   # element + through-thickness depth
+      SC   = B(z) @ warp[lam(e)].V0_e + Ge(z)
+      Gam  = SC @ shell[e](arc(p));  Sig = C_layer(e,z) @ Gam        # in-plane + e33
+      Q    = Gsh[lam(e)] @ [2g13(e), 2g23(e)]            # RM transverse-shear resultant
+      Sig[S13] += ghat_x(z)*Q1;  Sig[S23] += ghat_y(z)*Q2           # STEP 3
+      stress[p] = rotate(Sig, ply_angle) if frame=="material" else Sig
+
+  # validate vs VABS .SM (nearest gauss point) along a path
+
+
+================================================================================
+ VALIDATION (station 15, BAR-URC)  -- dehom_st15_figs.py
+================================================================================
+  cap-CENTRE through-thickness:  in-plane sigma11 tracks VABS to <1% (166.8 vs 167.4
+    MPa peak) at 15/16 points; the one interface point at 38.8 mm straddles the
+    cap/skin ply boundary (shell samples cap -153, nearest VABS gauss point skin -29).
+  circumferential (around section): sigma11,sigma12 track VABS everywhere except the
+    discrete web-junction arc positions, where the 1-D shell reference folds
+    (topology, not a dehom error).
+  LP spar-cap LEFT-EDGE: ~10x low in-plane -- the path runs down the cap/web CORNER
+    where the shell reference folds; a solid "thickness column" there is NOT a
+    through-thickness line of the shell; sample the cap interior instead.
+  out-of-plane sigma33 ~0.01 MPa, sigma13/sigma23 recovered by STEP 3 (~0.04 MPa),
+    both ~4000x below the in-plane -> physically negligible at this station.
+
+RIGOR VERIFICATION: opensg-msg-expert review appended below (PART R) once returned.
