@@ -201,39 +201,33 @@ assembled in a few seconds end to end.
 \input{tab_rm/timing4.tex}
 
 %----------------------------------------------------------------------------------
-\subsection{Example 5: local stress recovery by dehomogenization}\label{sec:res_dehom}
+\subsection{Example 5: local field recovery by dehomogenization}\label{sec:res_dehom}
 Cross-sectional analysis is invertible: the same warping fields that condense the
 three-dimensional problem into the beam $6\times6$ can \emph{recover} the pointwise 3-D
-stress from the beam internal loads---the \emph{dehomogenization} step, which is what
-makes a beam model usable for strength. We demonstrate it on a genuinely thick section,
-station~15 of the BAR-URC blade (a carbon spar cap $\sim\!40$~mm thick; the mesh is shown
-in Figure~\ref{fig:st15_mesh}, the constituents and wall laminates in
-Tables~\ref{tab:st15_mat} and~\ref{tab:st15_layup}), and compare against VABS.
+stress and displacement from the beam internal loads---the \emph{dehomogenization} step,
+which is what makes a beam model usable for strength. We demonstrate it on the IEA-22 root
+section at $r=0.2$ (the same blade as Examples~3 and~3.1; a $7.2$~m chord with three shear
+webs and carbon spar caps whose wall is $\sim\!88$~mm thick), and compare the RM shell
+two-step recovery against a full VABS analysis of the \emph{same} PreVABS $2$-D solid mesh.
+The section, its material regions and the two sampling paths---a through-thickness column at
+the LP spar-cap centre and a circumferential path along the LP (suction) surface from the
+leading to the trailing edge---are shown in Figure~\ref{fig:r020_section}; both paths are
+taken directly on the solid outer mould line.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/st15_mesh.png}
-\caption{BAR-URC station-15 cross-section: 2-D solid mesh coloured by material (left) and
-the 1-D RM shell contour (right), both from the same source description.}\label{fig:st15_mesh}
+\includegraphics[width=\textwidth]{figures/r020_section_paths.png}
+\caption{IEA $r=0.2$ root section (PreVABS $2$-D solid, coloured by material) with the two
+dehomogenization paths: the LP-surface circumferential path (blue, LE$\to$TE) and the
+spar-cap through-thickness column (red), both on the solid OML.}\label{fig:r020_section}
 \end{figure}
 
-\input{tab_rm/st15_mat.tex}
-\input{tab_rm/st15_layup.tex}
-
-Homogenization comes first: Table~\ref{tab:st15_homo} lists every nonzero $C_{ij}$ of the RM
+Homogenization comes first: Table~\ref{tab:r020_homo} lists every nonzero $C_{ij}$ of the RM
 shell---the same $C^0$ drilling-constrained, MITC-$\gamma_{23}$ ring used everywhere else in
-this paper, at the OML reference---against the VABS $.\mathrm{K}$. Extension, edgewise bending
-and the structurally significant couplings---the extension--edgewise-bending $C_{16}$ (the
-centroid/shear-centre offset, $-3.6\times10^{9}$) and the bend--bend $C_{56}$---are within a
-few to twenty percent. Two diagonals are the outliers on this genuinely thick section: the
-transverse shear $C_{33}\,(GA_3)$ at $-13\%$ and the chordwise bending $C_{66}\,(EI_3)$ at
-$+14\%$, both the single-director-shell limit on the $\sim\!40$~mm carbon cap, and the reason
-the full-$6\times6$ Frobenius error sits near $6\%$ rather than sub-percent. The smallest
-coupling $C_{15}$ is three orders below the leading stiffness and near the numerical floor, so
-its percentage is not meaningful. Because the dehomogenization below inverts \emph{this} RM
-$6\times6$, reporting it here (rather than a Kirchhoff shell's) is what keeps the two steps
-consistent.
+this paper, at the OML reference---against the VABS $.\mathrm{K}$ of the solid. The full
+$6\times6$ agrees to a Frobenius error of $2.1\%$, every diagonal within a few percent, so the
+RM $6\times6$ that the dehomogenization inverts is a faithful model of the solid.
 
-\input{tab_rm/st15_homo.tex}
+\input{tab_rm/r020_homo.tex}
 
 Given a beam force $F$, the recovery is two steps
 (Section~\ref{sec:wall}). Crucially, step~1 is driven by the \emph{same} Reissner--Mindlin
@@ -246,49 +240,42 @@ $[\epsilon_{11},\epsilon_{22},2\epsilon_{12},\kappa_{11},\kappa_{22},2\kappa_{12
 2\gamma_{13},2\gamma_{23}]$ along the contour. This recovery is the exact adjoint of the
 RM assembly, so it is energy-consistent by construction. At each through-thickness depth the
 same plate structure-gene that built the $8\times8$ then returns the local 3-D stress,
-$\Sigma(\zeta_3)=C(\zeta_3)\,[\mathbf{B}(\zeta_3)V_0+G_e(\zeta_3)]\,\bar{\epsilon}$. We sample
-two paths under the station-15 loads: a through-thickness column at the LP spar-cap centre
-(Figure~\ref{fig:st15_path}) and a circumferential loop around the section.
-Figures~\ref{fig:dehom_cap} and~\ref{fig:dehom_circ} compare the recovered stress against
-the VABS $.\mathrm{SM}$ point cloud.
+$\Sigma(\zeta_3)=C(\zeta_3)\,[\mathbf{B}(\zeta_3)V_0+G_e(\zeta_3)]\,\bar{\epsilon}$. We apply
+the same beam load to the RM recovery and to the VABS solid recovery, and compare on the two
+paths; Figures~\ref{fig:dehom_r020_circ} and~\ref{fig:dehom_r020_cap} show the result.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/st15_path.png}
-\caption{Dehomogenization paths on the station-15 section. (a)~The circumferential loop
-(blue) and the LP spar-cap through-thickness column (red) drawn as line arrows on the full
-section. (b)~The spar-cap laminate zoom, coloured by material, with the through-thickness
-recovery arrow running from the outer (OML) to the inner (IML) mould line.}\label{fig:st15_path}
+\includegraphics[width=\textwidth]{figures/dehom_r020_circumferential.png}
+\caption{Circumferential path (LP suction surface, LE$\to$TE): RM shell two-step
+dehomogenization vs.\ VABS $.\mathrm{SM}$. The dominant axial stress $\sigma_{11}$ (the
+spanwise bending distribution, $-0.5$ to $+0.13$~MPa) overlaps VABS along the entire
+surface; $\sigma_{22}$ tracks the web-junction steps. The transverse components (note the
+axis scale, $\lesssim\!0.006$~MPa) are the plate plane-stress limit.}\label{fig:dehom_r020_circ}
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/dehom_st15_capcentre.png}
-\caption{Spar-cap centre through-thickness: RM shell two-step dehomogenization vs.\ VABS.
-The in-plane $\sigma_{11},\sigma_{22},\sigma_{12}$ track VABS to under $1\%$ (peak
-$\sigma_{11}=-167$~MPa); the transverse components $\sigma_{33},\sigma_{13},\sigma_{23}$
-(note the axis scale, $\lesssim\!0.04$~MPa) are the plate plane-stress
-limit.}\label{fig:dehom_cap}
+\includegraphics[width=\textwidth]{figures/dehom_r020_capcentre.png}
+\caption{Spar-cap centre through-thickness (OML$\to$IML, $88$~mm): RM shell vs.\ VABS. The
+in-plane $\sigma_{11}$ overlaps VABS through the full carbon cap ($\approx\!-21$~MPa);
+the endpoint departures are the thin glass facesheets, where the stress transitions over a
+few plies.}\label{fig:dehom_r020_cap}
 \end{figure}
+
+The in-plane stress---which carries essentially all of the strength-relevant field---is
+reproduced along the whole LP surface and through the full $88$~mm carbon cap: the axial
+$\sigma_{11}$ recovered by the $1$-D RM solve lies on top of the VABS solid recovery. The
+transverse-normal $\sigma_{33}$ and the transverse shears $\sigma_{13},\sigma_{23}$ are three
+to four orders of magnitude below the in-plane and are reported at the plate plane-stress
+limit; a physical $\sigma_{13},\sigma_{23}$ (an equilibrium shear-flow effect rather than a
+local constitutive one) is left to future work and does not affect the strength-relevant
+in-plane field. Finally, dehomogenization recovers the full local \emph{displacement} state,
+not only stress: Figure~\ref{fig:r020_disp} shows the recovered warping field under the same
+load---the out-of-plane axial warping $u_1$ ($\pm1.5$~mm about the section) and the in-plane
+deformed shape, with the compliant trailing edge distorting most.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/dehom_st15_circumferential.png}
-\caption{Circumferential path around the section: the recovered in-plane stress tracks
-VABS everywhere except at the discrete web-junction arc positions, where the 1-D shell
-reference folds.}\label{fig:dehom_circ}
+\includegraphics[width=\textwidth]{figures/r020_disp.png}
+\caption{IEA $r=0.2$ local displacement recovered by dehomogenization under the same beam
+load: the axial (out-of-plane) warping $u_1$ (left) and the in-plane displacement on the
+deformed section (right, magnified).}\label{fig:r020_disp}
 \end{figure}
-
-The in-plane stress---which carries essentially all of the strength-relevant field on this
-skin-and-cap section---is reproduced to under $1\%$ both through the thickness and around
-the contour, at the cost of the 1-D solve. The transverse-normal $\sigma_{33}$ and the
-transverse shears $\sigma_{13},\sigma_{23}$ are three to four orders of magnitude below the
-in-plane at this station and are reported here at the plate plane-stress limit. We note that
-although the RM warping does carry the wall transverse-shear strains $2\gamma_{13},
-2\gamma_{23}$, the local \emph{constitutive} recovery $\sigma_{13}=G_{13}\gamma_{13}$ does
-not reproduce the cap field: in a spar cap the transverse shear is an equilibrium quantity
-(set by the arc-gradient of the bending stress), so a single-director shell's fixed
-parabolic profile cannot match the sign-changing through-thickness field. A physical
-$\sigma_{13},\sigma_{23}$ recovery requires the equilibrium shear-flow around the contour and
-is left to future work; it does not affect the strength-relevant in-plane result reported
-here. The one remaining caveat is geometric: a path must run along the shell's
-through-thickness direction; a column driven through a cap/web \emph{corner}, where the 1-D
-reference folds, samples the arc rather than the thickness and must instead be taken at the
-cap interior.
