@@ -113,31 +113,41 @@ def load_vabs_timo(path):
             break
     return np.array(rows)
 
-K = load_vabs_timo(KF)
-J = {r: np.asarray(solve_tw_from_yaml(SHELL, frac=f)["Timo"])
+K = 0.5 * (load_vabs_timo(KF) + load_vabs_timo(KF).T)
+J = {r: (lambda M: 0.5 * (M + M.T))(np.asarray(solve_tw_from_yaml(SHELL, frac=f)["Timo"]))
      for r, f in (("OML", 0.0), ("cen", 0.5), ("IML", 1.0))}
-LBL = ["EA", "GA_2", "GA_3", "GJ", "EI_2", "EI_3"]
-UN = ["N", "N", "N", "N\\,m$^2$", "N\\,m$^2$", "N\\,m$^2$"]
+# all nonzero terms of the VABS .K: 6 diagonals + couplings > 1e-3 of the leading stiffness
+gmax = max(abs(K[k, k]) for k in range(6))
+NZ = [(i, j) for i in range(6) for j in range(i, 6)
+      if i == j or abs(K[i, j]) >= 1e-3 * gmax]
+DIAG = {0: "EA", 1: "GA_2", 2: "GA_3", 3: "GJ", 4: "EI_2", 5: "EI_3"}
 lines = [r"\begin{table}[htpb]\centering\small",
-         r"\caption{Station-15 Timoshenko $6\times6$: RM shell (three references) vs the VABS "
-         r"$.\mathrm{K}$ (section axes). The thick carbon spar cap makes the chordwise "
-         r"bending $EI_3$ the hardest mode for a single-director shell.}\label{tab:st15_homo}",
+         r"\caption{Station-15 Timoshenko $6\times6$: every nonzero $C_{ij}$ of the RM shell "
+         r"vs.\ the VABS $.\mathrm{K}$ (section axes), at the OML reference, with the \%\,error "
+         r"at all three references. VABS order $[1\!=\!\mathrm{ext},2,3\!=\!\mathrm{shear},"
+         r"4\!=\!\mathrm{twist},5,6\!=\!\mathrm{bend}]$; the thick carbon spar cap makes the "
+         r"chordwise bending $C_{66}$ the hardest mode for a single-director shell.}"
+         r"\label{tab:st15_homo}",
          r"\begin{tabular}{lrrrrr}", r"\toprule",
-         r"term & VABS $.\mathrm{K}$ & RM (OML) & \%err OML & \%err cen & \%err IML \\",
+         r"$C_{ij}$ & VABS $.\mathrm{K}$ & RM (OML) & \%\,OML & \%\,cen & \%\,IML \\",
          r"\midrule"]
-for i in range(6):
-    v = K[i, i]
+for (i, j) in NZ:
+    nm = "C_{%d%d}" % (i + 1, j + 1)
+    if i == j:
+        nm += "\\,(%s)" % DIAG[i]
+    v = K[i, j]
     lines.append("$%s$ & $%.3e$ & $%.3e$ & $%+.1f$ & $%+.1f$ & $%+.1f$ \\\\"
-                 % (LBL[i], v, J["OML"][i, i], 100*(J["OML"][i,i]-v)/v,
-                    100*(J["cen"][i,i]-v)/v, 100*(J["IML"][i,i]-v)/v))
+                 % (nm, v, J["OML"][i, j], 100*(J["OML"][i,j]-v)/v,
+                    100*(J["cen"][i,j]-v)/v, 100*(J["IML"][i,j]-v)/v))
 fro = np.linalg.norm(J["OML"] - K) / np.linalg.norm(K) * 100
 lines += [r"\midrule",
           r"\multicolumn{6}{l}{\small full-$6\times6$ Frobenius error at OML $=%.1f\%%$} \\" % fro,
           r"\bottomrule", r"\end{tabular}", r"\end{table}"]
 open(os.path.join(TEX, "st15_homo.tex"), "w").write("\n".join(lines))
-print("wrote st15_homo.tex (Frobenius %.2f%%)" % fro)
+print("wrote st15_homo.tex (%d nonzero terms, Frobenius %.2f%%)" % (len(NZ), fro))
 
-# ---------------- mesh figure: 2-D solid (by material) + 1-D shell contour ----------------
+# ---------------- mesh figure: 2-D solid (by material, with legend) + 1-D shell contour ------
+from matplotlib.patches import Patch
 dsol = yaml.safe_load(open(SOLID))
 nd = np.array([rd(n)[:2] for n in dsol["nodes"]])
 mat = np.zeros(len(dsol["elements"]), int)
@@ -154,7 +164,16 @@ for k, e in enumerate(dsol["elements"]):
 nsh = np.array([rd(n)[:2] for n in ds["nodes"]])
 segs = [[int(round(x)) - 1 for x in rd(e)][:2] for e in ds["elements"]]
 
-fig, ax = plt.subplots(1, 2, figsize=(11, 3.8))
+# name each solid material index by matching its E1 to the (named) shell materials
+sh_E1 = {m["name"]: m.get("elastic", m)["E"][0] for m in ds["materials"]}
+def solid_name(mi):
+    mm = dsol["materials"][mi]
+    E1 = mm.get("elastic", mm)["E"][0]
+    best = min(sh_E1, key=lambda k: abs(sh_E1[k] - E1))
+    return NICE.get(best, best)
+MNAME = {mi: solid_name(mi) for mi in sorted(set(cidx))}
+
+fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
 pc = PolyCollection(polys, facecolors=[FILL[c % len(FILL)] for c in cidx], edgecolors="none")
 ax[0].add_collection(pc); ax[0].set_title("2-D solid (by material)", fontsize=10)
 for ii in segs:
@@ -162,35 +181,62 @@ for ii in segs:
 ax[1].set_title("1-D RM shell contour", fontsize=10)
 for a in ax:
     a.set_aspect("equal"); a.autoscale(); a.axis("off")
-fig.tight_layout(); fig.savefig(os.path.join(FIG, "st15_mesh.png"), dpi=190, bbox_inches="tight")
+handles = [Patch(facecolor=FILL[mi % len(FILL)], edgecolor="0.4", label=MNAME[mi])
+           for mi in sorted(MNAME)]
+fig.legend(handles=handles, loc="lower center", ncol=len(handles), fontsize=8.5,
+           frameon=False, bbox_to_anchor=(0.5, -0.02))
+fig.tight_layout(rect=[0, 0.06, 1, 1])
+fig.savefig(os.path.join(FIG, "st15_mesh.png"), dpi=190, bbox_inches="tight")
 plt.close(fig); print("wrote st15_mesh.png (solid %d elems / shell %d segs)" % (len(polys), len(segs)))
 
-# ---------------- section + dehom path drawn as an arrow (with a cap zoom inset) ----------------
+# ---------------- path figure: (a) section w/ line arrows across both paths, (b) cap zoom ----
 cc = np.loadtxt(os.path.join(DEH, "solid.lp_sparcap_center_thickness_015.coords"))[:, :2]
 cx, cy = cc[:, 0].mean(), cc[:, 1].mean()
-fig, ax = plt.subplots(figsize=(8.4, 3.6))
-ax.add_collection(PolyCollection(polys, facecolors="#e2e8f0", edgecolors="none"))
+circ = np.loadtxt(os.path.join(DEH, "solid.circumferential_015.coords"))[:, :2]
+
+fig, ax = plt.subplots(1, 2, figsize=(11, 3.9),
+                       gridspec_kw={"width_ratios": [2.0, 1.0]})
+# (a) full section with both dehom paths drawn as line arrows
+ax[0].add_collection(PolyCollection(polys, facecolors="#e2e8f0", edgecolors="none"))
 for ii in segs:
-    ax.plot(nsh[ii, 0], nsh[ii, 1], "-", color="0.35", lw=0.8)
-# marker box at the cap + leader to the zoom inset
-ax.add_patch(plt.Rectangle((cx - 0.13, cc[:, 1].min() - 0.02), 0.26,
-             np.ptp(cc[:, 1]) + 0.04, fill=False, ec="#d62728", lw=1.4))
-ax.set_aspect("equal"); ax.autoscale(); ax.axis("off")
-ax.set_title("Station-15 section", fontsize=10, loc="left")
-# zoom inset of the cap with the OML->IML arrow through the thickness
-axin = fig.add_axes([0.66, 0.20, 0.30, 0.62])
-axin.add_collection(PolyCollection(polys, facecolors=[FILL[c % len(FILL)] for c in cidx],
-                                   edgecolors="none"))
-axin.annotate("", xy=cc[-1], xytext=cc[0],
-              arrowprops=dict(arrowstyle="-|>", color="#d62728", lw=2.4, mutation_scale=16))
-axin.plot(cc[:, 0], cc[:, 1], ".", color="#d62728", ms=3)
-axin.text(cc[0, 0] + 0.02, cc[0, 1], "OML", color="#d62728", fontsize=8, va="center")
-axin.text(cc[-1, 0] + 0.02, cc[-1, 1], "IML", color="#d62728", fontsize=8, va="center")
-pad = max(np.ptp(cc, 0)) * 0.7 + 0.02
-axin.set_xlim(cx - pad, cx + pad); axin.set_ylim(cc[:, 1].min() - 0.02, cc[:, 1].max() + 0.02)
-axin.set_aspect("equal"); axin.set_xticks([]); axin.set_yticks([])
-for sp in axin.spines.values():
+    ax[0].plot(nsh[ii, 0], nsh[ii, 1], "-", color="0.45", lw=0.7)
+# circumferential path = blue polyline around the section, with a direction arrow
+ax[0].plot(circ[:, 0], circ[:, 1], "-", color="#1f77b4", lw=2.0, zorder=5)
+nq = int(len(circ) * 0.32)  # place the direction arrow toward the LE, clear of the cap
+ax[0].annotate("", xy=circ[nq + 1], xytext=circ[nq - 1],
+               arrowprops=dict(arrowstyle="-|>", color="#1f77b4", lw=2.0, mutation_scale=18),
+               zorder=6)
+# label dropped below the skin into open interior, with a thin leader to the path
+ax[0].annotate("circumferential path", xy=circ[nq], xytext=(circ[nq, 0], circ[nq, 1] - 0.42),
+               color="#1f77b4", fontsize=9, ha="center",
+               arrowprops=dict(arrowstyle="-", color="#1f77b4", lw=0.7), zorder=6)
+# cap-centre through-thickness path = short red line arrow at the LP spar cap
+d = cc[-1] - cc[0]; n = d / (np.hypot(*d) + 1e-12)
+p0, p1 = cc[0] - 0.25 * d, cc[-1] + 0.25 * d
+ax[0].annotate("", xy=p1, xytext=p0,
+               arrowprops=dict(arrowstyle="-|>", color="#d62728", lw=2.2, mutation_scale=16),
+               zorder=6)
+ax[0].annotate("spar-cap path\n(see (b))", xy=(cx, cy), xytext=(cx - 0.05, cy - 0.55),
+               color="#d62728", fontsize=9, ha="center",
+               arrowprops=dict(arrowstyle="-", color="#d62728", lw=0.8))
+ax[0].set_aspect("equal"); ax[0].autoscale(); ax[0].axis("off")
+ax[0].text(0.01, 0.02, "(a) station-15 section", transform=ax[0].transAxes,
+           fontsize=10, va="bottom")
+# (b) separate cap-laminate zoom with the OML -> IML through-thickness arrow
+ax[1].add_collection(PolyCollection(polys, facecolors=[FILL[c % len(FILL)] for c in cidx],
+                                    edgecolors="none"))
+ax[1].annotate("", xy=cc[-1], xytext=cc[0],
+               arrowprops=dict(arrowstyle="-|>", color="#d62728", lw=2.6, mutation_scale=18))
+ax[1].plot(cc[:, 0], cc[:, 1], ".", color="#d62728", ms=3)
+ax[1].text(cc[0, 0] + 0.015, cc[0, 1], "OML", color="#d62728", fontsize=9, va="center")
+ax[1].text(cc[-1, 0] + 0.015, cc[-1, 1], "IML", color="#d62728", fontsize=9, va="center")
+pad = max(np.ptp(cc, 0)) * 0.8 + 0.02
+ax[1].set_xlim(cx - pad, cx + pad)
+ax[1].set_ylim(cc[:, 1].min() - 0.03, cc[:, 1].max() + 0.03)
+ax[1].set_aspect("equal"); ax[1].set_xticks([]); ax[1].set_yticks([])
+for sp in ax[1].spines.values():
     sp.set_edgecolor("#d62728")
-axin.set_title("cap zoom", fontsize=8, color="#d62728")
+ax[1].set_title("(b) spar-cap zoom", fontsize=10, loc="left", color="#d62728")
+fig.tight_layout()
 fig.savefig(os.path.join(FIG, "st15_path.png"), dpi=190, bbox_inches="tight")
-plt.close(fig); print("wrote st15_path.png")
+plt.close(fig); print("wrote st15_path.png (with circumferential + cap paths)")
