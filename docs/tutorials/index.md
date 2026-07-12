@@ -31,6 +31,21 @@ A thick-web blade station from both solid and shell — solid exact (quad mesh),
 :::
 ::::
 
+## Dehomogenization (3-D stress recovery)
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 3b · st15 dehomogenization vs VABS
+:link: st15_dehomogenization
+:link-type: doc
+Recover the pointwise 3-D stress from the RM shell cross-section (two-step MSG dehom) and
+compare against VABS `.SM` along the cap-centre and circumferential paths — in-plane within
+1%. Runs standalone from `examples/data/dehom_st15/`. See the `dehom_docs/` write-ups and the
+RM 8×8 plate `.dat`.
+:::
+::::
+
 ## Tapered 3-D segments
 
 Two independent tracks. The **wind-blade tapered segment** homogenizes a real, layup-varying BAR-URC blade
@@ -177,6 +192,10 @@ $6\times6$ vs the RM shell ring and shell segment, with wall times. Validated vs
   - `data/1d_yaml/st15_shell.yaml` + `data/2d_yaml/st15_solid.yaml` (quad)
   - KL + RM + `compute_timo_from_yaml`
   - VABS `data/benchmark/st15_vabs.K`
+* - st15 dehomogenization
+  - `data/1d_yaml/st15_shell.yaml` + `data/dehom_st15/*.coords`
+  - `solve_tw_from_yaml` + `stress_at_points`
+  - VABS `.K` + `data/dehom_st15/bar_urc-15-t-0.in.SM`
 * - 3D-SG tapered segment
   - `data/3d_yaml/BAR_URC_numEl_52_segment_{5,12,15}.yaml`
   - `boundary_from_yaml.extract` + `solve_boundary_bundle` + `compute_timo_taper`

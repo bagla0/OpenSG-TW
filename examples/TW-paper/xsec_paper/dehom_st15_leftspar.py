@@ -25,7 +25,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 from opensg_jax.fe_jax import solve_tw_from_yaml, stress_at_points
 
-DEH = os.path.expanduser("~/claude_tmp/dehom_st15")
+DEH = os.path.join(HERE, "..", "..", "..", "examples", "data", "dehom_st15")
 SHELL15 = os.path.expanduser("~/OpenSG-TW-claude/tests/data/1Dshell_15.yaml")
 SM = os.path.join(DEH, "bar_urc-15-t-0.in.SM")
 COORDS = os.path.join(DEH, "solid.lp_sparcap_left_edge_thickness_015.coords")

@@ -18,7 +18,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 from opensg_jax.fe_jax import solve_tw_from_yaml, stress_at_points
 
-DEH = os.path.expanduser("~/claude_tmp/dehom_st15")
+DEH = os.path.join(HERE, "..", "..", "..", "examples", "data", "dehom_st15")
 SHELL15 = os.path.expanduser("~/OpenSG-TW-claude/tests/data/1Dshell_15.yaml")
 FIG = os.path.join(HERE, "figures"); os.makedirs(FIG, exist_ok=True)
 COMP = ["S11", "S22", "S33", "S23", "S13", "S12"]
