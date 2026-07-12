@@ -114,8 +114,12 @@ def load_vabs_timo(path):
     return np.array(rows)
 
 K = 0.5 * (load_vabs_timo(KF) + load_vabs_timo(KF).T)
-J = {r: (lambda M: 0.5 * (M + M.T))(np.asarray(solve_tw_from_yaml(SHELL, frac=f)["Timo"]))
-     for r, f in (("OML", 0.0), ("cen", 0.5), ("IML", 1.0))}
+# RM ring (C0 Lagrange 6-DOF, MITC-tied g23) -- the SAME model as the paper's other tables and
+# the dehom (dehom_rm), NOT the KL Hermite shell.  Reported at the OML reference (the airfoil
+# convention, center_ref=False), which is where the dehom recovers and what VABS .K compares to.
+sys.path.insert(0, HERE)
+from oml_ring import load_ring_ref, c6
+J = {"OML": c6(load_ring_ref(SHELL, "oml"))}
 # all nonzero terms of the VABS .K: 6 diagonals + couplings > 1e-3 of the leading stiffness
 gmax = max(abs(K[k, k]) for k in range(6))
 NZ = [(i, j) for i in range(6) for j in range(i, 6)
@@ -123,25 +127,25 @@ NZ = [(i, j) for i in range(6) for j in range(i, 6)
 DIAG = {0: "EA", 1: "GA_2", 2: "GA_3", 3: "GJ", 4: "EI_2", 5: "EI_3"}
 lines = [r"\begin{table}[htpb]\centering\small",
          r"\caption{Station-15 Timoshenko $6\times6$: every nonzero $C_{ij}$ of the RM shell "
-         r"vs.\ the VABS $.\mathrm{K}$ (section axes), at the OML reference, with the \%\,error "
-         r"at all three references. VABS order $[1\!=\!\mathrm{ext},2,3\!=\!\mathrm{shear},"
+         r"(the $C^0$ drilling-constrained ring with MITC-tied $\gamma_{23}$, at the OML "
+         r"reference---the same model the dehomogenization inverts) vs.\ the VABS $.\mathrm{K}$ "
+         r"(section axes). VABS order $[1\!=\!\mathrm{ext},2,3\!=\!\mathrm{shear},"
          r"4\!=\!\mathrm{twist},5,6\!=\!\mathrm{bend}]$; the thick carbon spar cap makes the "
          r"chordwise bending $C_{66}$ the hardest mode for a single-director shell.}"
          r"\label{tab:st15_homo}",
-         r"\begin{tabular}{lrrrrr}", r"\toprule",
-         r"$C_{ij}$ & VABS $.\mathrm{K}$ & RM (OML) & \%\,OML & \%\,cen & \%\,IML \\",
+         r"\begin{tabular}{lrrr}", r"\toprule",
+         r"$C_{ij}$ & VABS $.\mathrm{K}$ & RM shell & \%\,err \\",
          r"\midrule"]
 for (i, j) in NZ:
     nm = "C_{%d%d}" % (i + 1, j + 1)
     if i == j:
         nm += "\\,(%s)" % DIAG[i]
     v = K[i, j]
-    lines.append("$%s$ & $%.3e$ & $%.3e$ & $%+.1f$ & $%+.1f$ & $%+.1f$ \\\\"
-                 % (nm, v, J["OML"][i, j], 100*(J["OML"][i,j]-v)/v,
-                    100*(J["cen"][i,j]-v)/v, 100*(J["IML"][i,j]-v)/v))
+    lines.append("$%s$ & $%.3e$ & $%.3e$ & $%+.1f$ \\\\"
+                 % (nm, v, J["OML"][i, j], 100*(J["OML"][i, j] - v) / v))
 fro = np.linalg.norm(J["OML"] - K) / np.linalg.norm(K) * 100
 lines += [r"\midrule",
-          r"\multicolumn{6}{l}{\small full-$6\times6$ Frobenius error at OML $=%.1f\%%$} \\" % fro,
+          r"\multicolumn{4}{l}{\small full-$6\times6$ Frobenius error $=%.1f\%%$} \\" % fro,
           r"\bottomrule", r"\end{tabular}", r"\end{table}"]
 open(os.path.join(TEX, "st15_homo.tex"), "w").write("\n".join(lines))
 print("wrote st15_homo.tex (%d nonzero terms, Frobenius %.2f%%)" % (len(NZ), fro))
