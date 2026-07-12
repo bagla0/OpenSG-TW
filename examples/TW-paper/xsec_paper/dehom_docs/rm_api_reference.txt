@@ -1,0 +1,2820 @@
+================================================================================
+ RM OpenSG-TW  --  CROSS-SECTION HOMOGENIZATION + DEHOMOGENIZATION  API REFERENCE
+================================================================================
+ Sphinx-style function reference for the Reissner-Mindlin (RM) thin-walled
+ cross-section pipeline: the C0 drilling-constrained 6-DOF ring element, the
+ boundary-ring homogenizer, and the two-step dehomogenization (beam force ->
+ pointwise 3-D stress).  Every function is listed with its file, signature,
+ purpose, arguments, returns, and notes.  (Generated 2026-07-12.)
+
+ Companion docs:  dehom_procedure.txt  (the theory + step-by-step algorithm)
+                  rm_8x8_homogenization.txt  (the plate 8x8 line-by-line)
+
+
+================================================================================
+ 1.  WHAT THE PIPELINE DOES  (the 30-second picture)
+================================================================================
+ A wind-blade cross-section is a 1-D closed contour of laminated shell walls.
+ MSG (Mechanics of Structure Genome) condenses that 2-D wall problem into a
+ beam 6x6 (HOMOGENIZATION), and inverts it to recover pointwise 3-D stress from
+ a beam force (DEHOMOGENIZATION).  The shell model is Reissner-Mindlin: a C0
+ Lagrange 4-node strip element with 6 DOF/node (3 displacement + 3 rotation,
+ including an INDEPENDENT drilling omega_3 fixed by a Lagrange multiplier), and
+ MITC-tied gamma_23 transverse shear.
+
+     YAML contour + laminates
+        |  load_ring_ref                         (oml_ring.py)
+        v
+     ring arrays  rx, cells, rsub, re3, D_by, G_by, k22, ax, cross
+        |  ring_indep(return_fields=True)        (run_ring_indep.py)
+        |     -> assemble_segment_indep          (segment_indep.py)
+        |          -> quad_ops_indep              (8-strain element operators)
+        |          -> _mitc_shear_indep           (tied gamma_23)
+        |     -> assemble_constraint (drilling Lagrange), build_C_Psi (rigid kernel)
+        |     -> KKT solve V0; prepare_v1_rhs/finalize_v1_and_compute_deff (msg_solver.py)
+        v
+     C6_RM (Timoshenko 6x6),  V0,V1 (warping, 6m x 4)
+        |  build_rm_bundle                        (dehom_rm.py)   <-- HOMOGENIZE ONCE
+        v
+     bundle {Timo=C6_RM, V0, V1, strip, corners, red_cells, k22, re3,
+             layup_per_elem, layup_db, material_db, frac}
+        |  stress_at_points(bundle, points, beam_force_vabs=FF)   (dehom_rm.py)
+        |   STEP 1  st=C6_RM^-1 FF; _macro_recovery; s6/s2 = RM element operators
+        |   STEP 2  plate_stress_at_depth  (msg_materials.py)  -> in-plane + s33 3-D stress
+        |   STEP 3  transverse_shear_stiffness recover (msg_transverse_shear.py)  [diagnostic]
+        v
+     stress(P,6) = [S11,S22,S33,S23,S13,S12] at every query point
+
+
+================================================================================
+ 2.  FILE MAP  (what each file holds)
+================================================================================
+ mitc_rm_segment/                          -- the RM element + ring solver (research pkg)
+   segment_indep.py        the C0 6-DOF INDEPENDENT-drilling element: the 8-strain
+                           operators (quad_ops_indep), the MITC tied-shear rows
+                           (_mitc_shear_indep), batched assembly (assemble_segment_indep),
+                           the drilling-constraint rows (assemble_constraint), the rigid
+                           kernel (build_C_Psi_segment6).
+   run_ring_indep.py       ring_indep -- the boundary-ring homogenizer: wraps the strip,
+                           assembles, imposes drilling + rigid KKT, solves V0/V1, returns
+                           the ring Timoshenko C6 (+ warping with return_fields=True).
+   segment_element.py      geometry helpers (compute_k22 = wall curvature per element).
+   solve_segment_jax.py    _material_by_section = per-section pre-integrated ABD (D_by) and
+                           transverse-shear (G_by) from the YAML laminates.
+   segment_element_general.py  the 5-DOF ELIMINATED-drilling MITC element (ring_general) --
+                           the alternative the paper does NOT use; SHEAR_SCHEMES.
+   xsec_5v6_master.py      the 5-vs-6-DOF study driver + yaml helpers (_row, _norm_materials).
+
+ examples/TW-paper/xsec_paper/             -- the paper's RM cross-section + dehom drivers
+   oml_ring.py             load_ring_ref (YAML -> ring arrays, OML vs center reference),
+                           c6 (ring 6x6), derr (%err vs a solid ref).
+   dehom_rm.py             THE RM-CONSISTENT DEHOM: build_rm_bundle, _strip, _rm_shell_strain,
+                           _macro_fields, stress_at_points.
+
+ opensg_jax/fe_jax/                        -- the JAX-FEM MSG core
+   msg_dehom.py            beam-force -> shell-strain recovery (_recov, _macro_recovery,
+                           recover_shell_strains, dehomogenize, stress_at_points [KL path],
+                           _project_point, voigt helpers).
+   msg_solver.py           the Timoshenko V1 finalize (prepare_v1_rhs,
+                           finalize_v1_and_compute_deff).
+   msg_materials.py        the plate through-thickness 1-D SG: compute_ABD_matrix (the plate
+                           8x8/ABD + warping), plate_stress_at_depth / plate_dehom_strain
+                           (STEP 2), rotation_6x6, shift_abd_reference.
+   msg_transverse_shear.py the 2x2 transverse-shear stiffness + shear-flow recovery
+                           (transverse_shear_stiffness, plate_8x8, _ply_Q_and_G).
+   msg_rm_timo.py          the 5-DOF RM Timoshenko element (timoshenko_rm, build_C_Psi).
+   msg_hermite.py          the KL C1 Hermite shell (solve_tw_from_yaml, hermite_strain_
+                           operators) -- the SUPERSEDED step-1 path, kept for contrast.
+
+
+================================================================================
+ 3.  FUNCTION REFERENCE
+================================================================================
+ [Filled per-function below: signature | purpose | args | returns | notes.]
+
+
+
+================================================================================
+ FILE:  mitc_rm_segment/segment_indep.py
+================================================================================
+
+................................................................................
+ quad_ops_indep   [public]
+................................................................................
+  quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0)
+
+  Scalar (single-element) evaluation of the 8-strain 6-DOF C0 drilling-
+  independent element operators plus the finite drilling residual DR at one
+  quadrature point (xi,eta). This is the closed-form B-operator core for one
+  MITC4 quad with omega_3 kept as a genuine 6th nodal DOF.
+  Args:
+    X              (4,3) float array; the 4 corner node coordinates of the
+                   quad element.
+    e3m            (3,) float array; the reference material/director e3 used
+                   to orient (sign-fix) the surface normal n.
+    xi             float; first parametric coordinate in [-1,1].
+    eta            float; second parametric coordinate in [-1,1].
+    k22            float; edge/curvature parameter passed through (NOT
+                   actually used inside these operator rows -- retained for
+                   signature symmetry).
+    cross          length-2 list/sequence of the two cross-section (in-plane)
+                   axis indices (the two components != ax), e.g. [j for j in
+                   range(3) if j!=ax].
+    ax             int; the beam/span axis index (0,1,2).
+    kg             float, default 0.0; geometric/curvature parameter passed
+                   through, unused in operator rows.
+  Returns:
+    10-tuple (BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA): BDe (6,4)
+    deformation-strain rows on the classical strain params eb; BDh (6,24) on
+    the fluctuation w; BDl (6,24) on the derivative/chain-rule term w'; BGe
+    (2,4) transverse-shear rows on eb; BGh (2,24) shear on w; BGl (2,24) shear
+    chain-rule; DRe (4,), DRh (24,), DRl (24,) the drilling-residual DR rows
+    on eb/w/w'; dA float area element. Row order of the 6 deformation strains
+    is [k11-membrane e11, e22, 2e12, k11, k22, k12]; the 2 shear rows are
+    [2g13, 2g23]. Each node's 6 DOF are [w1,w2,w3,om1,om2,om3].
+  Notes:
+    Implements the segment-header math: membrane rows unchanged (no om3);
+    curvature Lambda_a terms enter DIRECTLY through om3 (dof 5), Lambda_a =
+    om3|a + x_{1;a} om3'; transverse shear is pre-elimination with NO 1/C33
+    (2g13 += x_{3;2} om3 via +C23, 2g23 += -x_{3;1} om3 via -C13), 'swept' =
+    x2*y3 - x3*y2; DR = C33 om3 + C3b om_b - S/2, DRe[1] = -0.5*(x11*Rn2 -
+    x12*Rn1) is the twist column, with Rn1=x2*x31-x3*x21, Rn2=x2*x32-x3*x22.
+    Calls _surf_frame (from segment_element_general) to build N, D1, D2, dA
+    and the direction-cosine dict c. NDOF6=6.
+
+................................................................................
+ quad_ops_indep_batch   [public]
+................................................................................
+  quad_ops_indep_batch(Xe, e3e, xi, eta, cross, ax)
+
+  Batched (vectorized over all elements) evaluation of the same 6-DOF operator
+  rows and drilling residual as quad_ops_indep; this is the performance path
+  used by the assembly (the scalar version is kept only for diagnostics). k22
+  and kg do not enter these operators so are omitted.
+  Args:
+    Xe             (ne,4,3) float array; all quad corner coordinates.
+    e3e            (ne,3) float array; per-element reference directors.
+    xi             float; parametric coordinate.
+    eta            float; parametric coordinate.
+    cross          length-2 list; in-plane axis indices.
+    ax             int; span axis index.
+  Returns:
+    10-tuple (BDe, BDh, BDl, BGe, BGh, BGl, DRe, DRh, DRl, dA): BDe (ne,6,4);
+    BDh (ne,6,24); BDl (ne,6,24); BGe (ne,2,4); BGh (ne,2,24); BGl (ne,2,24);
+    DRe (ne,4); DRh (ne,24); DRl (ne,24); dA (ne,). Same row semantics and DOF
+    ordering as quad_ops_indep, prepended with the element axis.
+  Notes:
+    Numerically identical closed form to quad_ops_indep but assembled with
+    einsum/broadcasting; DOF blocks are built as (ne,row,node,6) tensors then
+    reshaped to (ne,row,24). Displacement (w) blocks occupy dof slots 0:3,
+    rotation (om) blocks 3:6. DRe[:,1] = -0.5*(x11*Rn2 - x12*Rn1). Calls
+    _surf_frame_batch. Used inside assemble_segment_indep, _tie_rows_batch,
+    and assemble_constraint's batched path.
+
+................................................................................
+ assemble_segment_indep   [public]
+................................................................................
+  assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, ax, kg_e=None, pen=None, pen_beta=0.1, dof_map=None, shear="full", sparse=False)
+
+  Assemble the full 6-DOF drilling-independent element stiffness system for a
+  segment/ring, including the finite drilling-residual penalty pen*DR^2,
+  producing the six MSG block matrices used by the Timoshenko homogenization
+  solve.
+  Args:
+    nodes          (Nn,3) float array of node coordinates.
+    quads          (ne,4) int array of quad connectivity (node indices into
+                   nodes).
+    subdom         (ne,) int array; per-element subdomain/section id used to
+                   look up D_by/G_by.
+    e3s            (ne,3) float array; per-element reference director e3.
+    D_by           dict {section_id -> (6,6)} ABD deformation stiffness per
+                   subdomain.
+    G_by           dict {section_id -> (2,2)} transverse-shear stiffness per
+                   subdomain.
+    k22_e          (ne,) array; per-element edge/curvature parameter
+                   (accepted/passed but not used by the operators).
+    cross          length-2 list; in-plane axis indices.
+    ax             int; span axis index.
+    kg_e           optional (ne,) array or None (default); geometric
+                   parameter, unused in operator rows.
+    pen            optional float or None (default); drilling penalty weight.
+                   If None, set to pen_beta*_d_scale(D_by).
+    pen_beta       float, default 0.1; multiplier on the D-scaled penalty when
+                   pen is None.
+    dof_map        optional (Nn,) int array or None (default arange(Nn)); maps
+                   node index -> dof-node index (used for the ring where the
+                   top row wraps onto the bottom row, producing repeated
+                   dofs).
+    shear          str, default 'full'; 'full' integrates both shear rows
+                   untied, else a tying scheme name
+                   ('mitc4_g23','mitc4_both','mitc4_wonly') passed to
+                   _shear_batch.
+    sparse         bool, default False; if True return the three (ndof x ndof)
+                   hh/hl/ll blocks as scipy CSR sparse matrices (Dhe/Dle stay
+                   dense).
+  Returns:
+    6-tuple (Dhh, Dhe, Dee, Dhl, Dll, Dle): Dhh (ndof,ndof) w-w block; Dhe
+    (ndof,4) w-eb block; Dee (4,4) eb-eb block; Dhl (ndof,ndof) w-w' block;
+    Dll (ndof,ndof) w'-w' block; Dle (ndof,4) w'-eb block. ndof =
+    6*(max(dof_map)+1). Dhh/Dhl/Dll are CSR sparse when sparse=True, else
+    dense.
+  Notes:
+    Integrates over the 4 Gauss points at +/-1/sqrt(3). Element energy = BDh^T
+    De BDh + BGt^T Gm BGt + pen*DRh DRh (and cross terms with BDe/BGe/DRe and
+    BDl/BGl/DRl). De/Gm are gathered per element via a sorted-key lookup table
+    (keys=sorted unique subdom, pos map, sdi index). Global dof vector g
+    (ne,24) = 6*dof_map[quads] + arange(6). Dense assembly uses np.add.at
+    (handles repeated dofs from a wrapped dof_map); sparse path builds COO
+    triplets summed by tocsr(). Dhe/Dle always accumulated dense with
+    np.add.at. tie rows precomputed via _tie_rows_batch when shear!='full'.
+    Calls quad_ops_indep_batch, _shear_batch, _d_scale.
+
+................................................................................
+ assemble_constraint   [public]
+................................................................................
+  assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None, lam_space="elem", dof_map=None, sparse=False)
+
+  Assemble the weak drilling-constraint (Lagrange-multiplier) operators
+  enforcing the drilling residual DR=0 in a chosen multiplier space, for the
+  constrained 6-DOF ring/segment solve.
+  Args:
+    nodes          (Nn,3) float array of node coordinates.
+    quads          (ne,4) int array of quad connectivity.
+    subdom         (ne,) int array; per-element subdomain id (accepted for
+                   signature symmetry; not used to gather stiffness here).
+    e3s            (ne,3) float array; per-element reference director.
+    k22_e          (ne,) array; per-element curvature param (only used in the
+                   scalar/non-elem fallback path, passed to quad_ops_indep).
+    cross          length-2 list; in-plane axis indices.
+    ax             int; span axis index.
+    kg_e           optional (ne,) array or None (default); geometric param,
+                   used only in scalar fallback.
+    lam_space      str, default 'elem'; multiplier space: 'elem' (one
+                   piecewise-constant multiplier per element, inf-sup stable),
+                   'node' (one multiplier per node, equal-order, over-
+                   constrains -- ablation), 'elem_nofold' (element-constant
+                   but EXCLUDING elements adjacent to a fold line where
+                   incident-element normals disagree >30deg).
+    dof_map        optional (Nn,) int array or None (default arange(Nn)); node
+                   -> dof-node index (wrapped strip in the ring), producing
+                   repeated dofs handled via np.add.at.
+    sparse         bool, default False; if True return G and Gl as scipy CSR
+                   sparse (elem path only).
+  Returns:
+    3-tuple (G, Gl, Ge): G (P, 6*Nd) constraint operator on the fluctuation w;
+    Gl (P, 6*Nd) on the derivative w'; Ge (P, 4) on the classical strains eb.
+    P = number of multiplier rows (= number of kept elements for
+    elem/elem_nofold, = Nd for node); Nd = max(dof_map)+1; 6*Nd = M. G/Gl are
+    CSR sparse when sparse=True (elem path).
+  Notes:
+    For 'elem'/'elem_nofold' each row is the element-integrated DR (sum over 4
+    GPs of DRh*dA, DRl*dA, DRe*dA) via a batched quad_ops_indep_batch loop;
+    elem_nofold zeroes/skips elements touching a fold node (fold detected by
+    |n_i . n_j|<cos(30deg) among elements sharing a node, per-element normal
+    from the two diagonals), remapping kept rows with row_of. For 'node' the
+    fallback loop weights each element DR by shape function N[a] into that
+    node's multiplier row using the scalar quad_ops_indep. Uses np.add.at for
+    repeated-dof safety. Calls quad_ops_indep_batch (elem path),
+    quad_ops_indep and _bilinear (node path).
+
+................................................................................
+ build_C_Psi_segment6   [public]
+................................................................................
+  build_C_Psi_segment6(nodes, quads, cross)
+
+  Build the 6-DOF rigid-body constraint matrix C and null-space/rigid-mode
+  matrix Psi for the segment, embedding the 4 classical rigid modes (3
+  translations + 1 rotation) with the drilling om3 column left at zero
+  (drilling is not a rigid mode).
+  Args:
+    nodes          (Nn,3) float array of node coordinates.
+    quads          (ne,4) int array of quad connectivity.
+    cross          length-2 list; the two in-plane axis indices (used to pick
+                   y2=nodes[:,cross[0]], y3=nodes[:,cross[1]]).
+  Returns:
+    2-tuple (C, Psi): C (4, ndof) mass/area-weighted constraint rows; Psi
+    (ndof, 4) rigid-mode basis. ndof = 6*Nn.
+  Notes:
+    C rows cc=0..3 place the area-weighted nodal weight node_w on dof 6n+cc;
+    node_w accumulated by integrating the shape function * dA over the 4 Gauss
+    points via np.add.at. Psi columns 0..2 are the three translations (unit on
+    dofs w1,w2,w3 = 6n+0..2); column 3 is the cross-section rotation:
+    Psi[6n+1,3]=-y3, Psi[6n+2,3]=y2, Psi[6n+3,3]=-1 (rotation couples w2,w3
+    and om1). om3 (dof 5) column stays 0. Calls _bilinear.
+
+................................................................................
+ _mitc_shear_indep   [private/internal]
+................................................................................
+  _mitc_shear_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0, scheme="mitc4_g23")
+
+  Scalar assembly of the tied (assumed-strain) transverse-shear rows BGt (2 x
+  24) at (xi,eta) using Dvorkin-Bathe MITC4 tying, selecting which of the two
+  shear rows are tied via the scheme.
+  Args:
+    X              (4,3) float array; quad corner coordinates.
+    e3m            (3,) float array; reference director for normal sign-fix.
+    xi             float; parametric coordinate.
+    eta            float; parametric coordinate.
+    k22            float; curvature parameter, passed to quad_ops_indep
+                   (unused in rows).
+    cross          length-2 list; in-plane axis indices.
+    ax             int; span axis index.
+    kg             float, default 0.0; passed through.
+    scheme         str, default 'mitc4_g23'; one of 'mitc4_g23' (tie only
+                   gamma_23 row), 'mitc4_both' (tie both rows -- naive full
+                   tying, aliases drilling shear, ablation), 'mitc4_wonly'
+                   (tie both rows at DB points but keep every rotation column
+                   om1/om2/om3 at its Gauss-point full-integration value --
+                   field-consistent partial tying).
+  Returns:
+    BGt: (2,24) float array; the tied transverse-shear B-rows [tied g13; tied
+    g23] at (xi,eta).
+  Notes:
+    gamma_23 (row index 1) is always tied at points (0,-1),(0,+1) with linear-
+    in-eta interpolation 0.5(1-eta)r0+0.5(1+eta)r1; gamma_13 is tied at
+    (-1,0),(+1,0) linear-in-xi only for schemes mitc4_both/mitc4_wonly,
+    otherwise taken at the Gauss point. For mitc4_wonly, after vstack the
+    rotation columns (dofs 3:6 of each node) are overwritten with the fully-
+    integrated Gauss-point BGh values. Uses module tying-point constants
+    _TIE_G13 and _TIE_G23. Calls quad_ops_indep (indexes result [4] = BGh).
+    ops[4] is the Gauss-point BGh.
+
+................................................................................
+ _surf_frame_batch   [private/internal]
+................................................................................
+  _surf_frame_batch(Xe, e3e, xi, eta, cross, ax)
+
+  Vectorized (batched over elements) version of _surf_frame: builds the local
+  orthonormal surface frame, shape-function surface derivatives, area element,
+  and direction-cosine dict for ALL elements at one quadrature point.
+  Args:
+    Xe             (ne,4,3) float array; corner coordinates of all ne quads.
+    e3e            (ne,3) float array; per-element reference director for
+                   normal sign-fix.
+    xi             float; parametric coordinate.
+    eta            float; parametric coordinate.
+    cross          length-2 list; in-plane axis indices.
+    ax             int; span axis index.
+  Returns:
+    5-tuple (N, D1, D2, dA, c): N (4,) bilinear shape functions (same for all
+    elements at this GP); D1 (ne,4), D2 (ne,4) the surface derivative
+    operators (= inv(G^T) applied to the parametric shape derivatives); dA
+    (ne,) area element per element; c dict of (ne,) direction-cosine component
+    arrays with keys x11,x21,x31 (a1 components), x12,x22,x32 (a2 components),
+    y1,y2,y3 (normal n components), and x2,x3 (in-plane position components).
+  Notes:
+    Builds a2 from normalized Jxi, a1 as Jeta orthogonalized against a2 then
+    normalized, n = a1 x a2; flips n and a1 where n.e3e < 0. Metric
+    G=[[G11,G12],[G21,G22]] with G_ab from a_i.J; [D1;D2] = inv(G^T)[dNx;dNe]
+    using det = G11*G22-G12*G21. dA = |Jxi x Jeta|. Calls _bilinear (from
+    segment_element) which returns N, dNx, dNe. The dict labels components by
+    ax (axial) and cross[0]/cross[1].
+
+................................................................................
+ _tie_rows_batch   [private/internal]
+................................................................................
+  _tie_rows_batch(Xe, e3e, cross, ax)
+
+  Precompute the batched transverse-shear B-rows at the four Dvorkin-Bathe
+  tying points once per element set (they are independent of the running
+  quadrature point, so this avoids re-evaluating them at every Gauss point).
+  Args:
+    Xe             (ne,4,3) float array; quad corner coordinates.
+    e3e            (ne,3) float array; per-element reference directors.
+    cross          length-2 list; in-plane axis indices.
+    ax             int; span axis index.
+  Returns:
+    dict with keys 'g13m','g13p','g23m','g23p', each a (ne,1,24) array:
+    g13m/g13p are the gamma_13 row (BGh row 0) at tying points (-1,0)/(+1,0);
+    g23m/g23p are the gamma_23 row (BGh row 1) at (0,-1)/(0,+1).
+  Notes:
+    Calls quad_ops_indep_batch at the four tying points and slices BGh (result
+    index [4]) rows 0:1 or 1:2. Consumed by _shear_batch.
+
+................................................................................
+ _shear_batch   [private/internal]
+................................................................................
+  _shear_batch(xi, eta, scheme, BGh_gauss, tie)
+
+  Batched construction of the tied transverse-shear rows at running point
+  (xi,eta) from the precomputed tying-point rows; the vectorized mirror of
+  _mitc_shear_indep.
+  Args:
+    xi             float; parametric coordinate.
+    eta            float; parametric coordinate.
+    scheme         str; tying scheme, one of
+                   'mitc4_g23','mitc4_both','mitc4_wonly' (any other value
+                   leaves g13 at Gauss).
+    BGh_gauss      (ne,2,24) float array; the fully-integrated Gauss-point
+                   shear rows at (xi,eta) (BGh from quad_ops_indep_batch).
+    tie            dict from _tie_rows_batch with keys g13m,g13p,g23m,g23p,
+                   each (ne,1,24).
+  Returns:
+    BGt: (ne,2,24) float array; tied shear rows [g13; g23] per element.
+  Notes:
+    g23 = 0.5(1-eta)*g23m + 0.5(1+eta)*g23p always; g13 interpolated
+    0.5(1-xi)*g13m+0.5(1+xi)*g13p only for mitc4_both/mitc4_wonly, else taken
+    from BGh_gauss[:,0:1,:]. For mitc4_wonly the rotation columns (per node
+    dofs 3:6) are overwritten with BGh_gauss values (copies BGt first).
+    NDOF6=6 used to build the rotation mask.
+
+................................................................................
+ _d_scale   [private/internal]
+................................................................................
+  _d_scale(D_by)
+
+  Return the characteristic ABD stiffness magnitude = the max over layups of
+  max|diag(D)|, used to set a dimensionally-commensurate drilling penalty
+  weight.
+  Args:
+    D_by           dict-of-(6,6) or list-of-(6,6) ABD/stiffness matrices keyed
+                   by (or indexed by) section/layup id.
+  Returns:
+    float; max over all keys of max(|diagonal(D_by[k])|).
+  Notes:
+    Handles both dict (iterates .keys()) and sequence (iterates range(len))
+    inputs. Used by assemble_segment_indep to set pen = pen_beta *
+    _d_scale(D_by) when pen is None.
+
+================================================================================
+ FILE:  mitc_rm_segment/run_ring_indep.py
+================================================================================
+
+................................................................................
+ ring_indep   [public]
+................................................................................
+  ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None, shear="mitc4_g23", lam_space="elem", return_fields=False)
+
+  Solve the constrained 6-DOF (independent-drilling, element-Lagrange)
+  boundary-ring cross-section SG and return the ring Timoshenko 6x6 stiffness
+  C6; optionally also the zeroth/first-order warping fields for the Dirichlet
+  segment transfer.
+  Args:
+    rx             (m,3) float array; ring (contour) node coordinates.
+    rcells         (nc,2) int array; ring edge connectivity (each edge = two
+                   contour node indices).
+    rsub           (nc,) int array; per-edge subdomain/section id.
+    re3            (nc,3) float array; per-edge reference director e3 (passed
+                   as e3q to the element).
+    D_by           dict {section_id -> (6,6)} ABD stiffness.
+    G_by           dict {section_id -> (2,2)} transverse-shear stiffness.
+    k22_edge       (nc,) array; per-edge k22 curvature parameter.
+    ax             int; span axis index.
+    cross          length-2 list; in-plane axis indices.
+    h              optional float or None (default); prismatic strip depth. If
+                   None, set to the mean edge length of the ring.
+    shear          str, default 'mitc4_g23'; shear scheme passed to
+                   assemble_segment_indep (production ring choice ties only
+                   gamma_23).
+    lam_space      str, default 'elem'; drilling-constraint multiplier space
+                   passed to assemble_constraint.
+    return_fields  bool, default False; if True also return V0, V1 warping
+                   fields (multiplier rows stripped).
+  Returns:
+    If return_fields=False: C6r (6,6) symmetrized ring Timoshenko stiffness.
+    If return_fields=True: 3-tuple (C6r, V0[:M], V1[:M]) where V0 (M,4) and V1
+    (M,4) are the zeroth- and first-order warping fields (M=6*Nd dof rows,
+    Lagrange-multiplier rows stripped), including the drilling om3 boundary
+    values, for the Dirichlet transfer.
+  Notes:
+    Builds a one-quad-deep prismatic strip: nodes = [rx; rx + h*e_ax], dof_map
+    wraps the top row onto the bottom (concatenate(arange(m),arange(m))),
+    quads = [[a,b,m+b,m+a]]. Assembles with pen=0.0 (drilling enforced by the
+    Lagrange constraint, not the penalty), divides all block matrices by h
+    (per-unit-length). Embeds the validated 5-DOF rigid kernel/constraint
+    (build_C_Psi from opensg_jax.fe_jax.msg_rm_timo on rx[:,cross]) into 6
+    DOF, copying the 5 dofs per node and flipping the om1 sign
+    (Psi6[3::6,3]*=-1). Forms the augmented KKT [Dhh_a, Gc.T; Gc, 0] plus
+    rigid rows Dc_a=C6.T, factorizes once with scipy lu_factor, solves V0 (RHS
+    -Dhe_a) then the MSG V1 stage via prepare_v1_rhs /
+    finalize_v1_and_compute_deff (from opensg_jax.fe_jax.msg_solver, JAX).
+    Deff = Dee + V0.T@Dhe_a. C6r symmetrized 0.5(C+C.T). Calls
+    assemble_segment_indep, assemble_constraint, NDOF6.
+
+................................................................................
+ main   [private/internal]
+................................................................................
+  main()
+
+  Driver/benchmark: for the square and circle thin geometries in iso and m45
+  materials, extract the ring mesh from YAML, compute the 6-DOF ring C6 under
+  three shear schemes, and print the L-ring-vs-3D-solid percent errors of the
+  6 Timoshenko diagonals alongside the validated 5-DOF MITC reference.
+  Args:
+    (none)         takes no arguments.
+  Returns:
+    None; prints a per-geometry/per-material table of
+    EA%/GA2%/GA3%/GJ%/EI2%/EI3% errors vs the 3-D solid.
+  Notes:
+    Loops geoms [('square','taper_square',...),('circle','taper_study',...)] x
+    materials ('iso','m45'), tag 'thin_%s_aR070'. Extracts a fresh geometry-
+    tagged npz via boundary_from_yaml.extract (stdout suppressed) to avoid
+    cross-geometry npz name collisions, loads the solid reference from
+    examples/data/benchmark, symmetrizes the solid L block So. Builds
+    materials via solve_segment_jax._material_by_section(...,
+    center_ref=True), k22 via segment_element.compute_k22. Reference row from
+    segment_element_general.ring_general(shear='mitc4_both'); then ring_indep
+    for shear in ('full','mitc4_g23','mitc4_both'). Errors computed as
+    100*(S[i,i]-So[i,i])/So[i,i] for i in 0..5. Entry point under if
+    __name__=='__main__'.
+
+================================================================================
+ FILE:  mitc_rm_segment/segment_element.py
+================================================================================
+
+................................................................................
+ compute_curvatures   [public]
+................................................................................
+  compute_curvatures(centroids, e1s, e2s, e3s, elems):
+
+  Compute the full per-element initial-curvature tensor (Yu thesis eq 5.10) by
+  finite-differencing the flat-facet local frame across neighbouring elements,
+  returning zero on flat facets.
+  Args:
+    centroids      (Ne,3) array-like of element centroid coords; np.asarray'd
+                   internally.
+    e1s            (Ne,3) per-element axial unit vector (beam-axis tangent).
+    e2s            (Ne,3) per-element hoop unit vector (in-plane tangent).
+    e3s            (Ne,3) per-element normal unit vector.
+    elems          (Ne, nnpe) integer connectivity; used to build a
+                   node->element adjacency for neighbour finding.
+  Returns:
+    dict with keys 'k11','k12','k21','k22','k13','k23', each a (Ne,) float
+    array. Axial neighbours (|d.e1|>0.5|d|) give k11=de3.e1/dx1,
+    k12=de3.e2/dx1, k13=de1.e2/dx1; hoop neighbours (|d.e2|>0.5|d|) give
+    k21=de3.e1/ds, k22=de3.e2/ds, k23=de1.e2/ds. Prismatic circle ->
+    (0,0,0,-1/R,0,0).
+  Notes:
+    Builds node2el defaultdict(list). For each element collects neighbours
+    sharing a node, classifies each as axial or hoop by centroid-displacement
+    direction, and averages (np.mean) the per-neighbour finite-difference
+    estimates. Skips displacements with norm < 1e-12.
+
+................................................................................
+ compute_k22   [public]
+................................................................................
+  compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None, cop_tol=0.5):
+
+  Estimate per-element hoop normal curvature k22 = d(e3)/ds . e2 (== -1/R for
+  a circle with inward e3) from hoop-aligned neighbours, with guards to keep
+  genuine smooth curvature but reject sharp folds/junctions.
+  Args:
+    centroids      (Ne,3) element centroid coords (line elements for a 1-D
+                   contour or quads for a 2-D segment).
+    e2s            (Ne,3) per-element hoop unit tangent.
+    e3s            (Ne,3) per-element normal.
+    elems          (Ne, nnpe) integer connectivity for node->element
+                   adjacency.
+    flat_tol       float, default 1e-3. |k22| below this snaps to exactly 0 (~
+                   R > 1 km).
+    k22_max        float or None, default None. If set, clips |k22| to this
+                   cap (for sharp trailing-edge spikes).
+    cop_tol        float, default 0.5. Coplanarity filter: a neighbour counts
+                   only if e3s[ej].e3s[ei] >= cop_tol (~ within 60 deg); a
+                   near-perpendicular fold is rejected as a discontinuity, not
+                   curvature.
+  Returns:
+    k22: (Ne,) float array of per-element hoop curvature.
+  Notes:
+    Per element: keeps only coplanar hoop-direction neighbours
+    (|disp.e2|>=0.5|disp|), forms per-neighbour estimate (e3s[ej]-e3s[ei]).e2
+    / ds, combines with np.median (robust to stray branch), then flat-snap and
+    optional clip. Rejecting folds prevents spurious curvature spikes that
+    break section symmetry (square GA2!=GA3) and blow up boundary-ring
+    torsion.
+
+................................................................................
+ compute_kg   [public]
+................................................................................
+  compute_kg(centroids, e1s, e2s, e3s, elems, flat_tol=1e-3, cop_tol=0.5):
+
+  Compute the per-element GEODESIC curvature of the hoop coordinate line kg =
+  d(e1)/ds . e2, the in-surface rotation rate of the axial tangent along the
+  hoop (zero prismatic/flat, ~ taper-rate/R on a tapered curved wall).
+  Args:
+    centroids      (Ne,3) element centroid coords.
+    e1s            (Ne,3) per-element axial unit tangent.
+    e2s            (Ne,3) per-element hoop unit tangent.
+    e3s            (Ne,3) per-element normal (used for the coplanarity
+                   filter).
+    elems          (Ne, nnpe) integer connectivity.
+    flat_tol       float, default 1e-3. |kg| below this snaps to 0.
+    cop_tol        float, default 0.5. Coplanarity filter dot-product
+                   threshold, same meaning as compute_k22.
+  Returns:
+    kg: (Ne,) float array of per-element hoop geodesic curvature.
+  Notes:
+    Same neighbour-selection/guard machinery as compute_k22 (coplanar hoop-
+    aligned neighbours, per-neighbour (e1s[ej]-e1s[ei]).e2 / ds, np.median,
+    flat snap-to-zero) but differences e1 instead of e3. No k-cap argument.
+
+................................................................................
+ assemble_segment   [public]
+................................................................................
+  assemble_segment(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_e, cross=(1, 2), full_curvature=False):
+
+  Assemble the six MSG stiffness blocks (Dhh, Dhe, Dee, Dhl, Dll, Dle) for the
+  2-D MITC4 RM quad segment via 2x2 Gauss integration with MITC-tied
+  transverse shear.
+  Args:
+    nodes          (Nn,3) node coordinates.
+    quads          (Ne,4) 0-based quad connectivity.
+    subdom         (Ne,) integer subdomain/layup id per quad (key into
+                   D_by/G_by).
+    e1s            (Ne,3) per-quad axial frame.
+    e2s            (Ne,3) per-quad hoop frame.
+    e3s            (Ne,3) per-quad normal frame.
+    D_by           dict {subdomain_id: (6,6) ABD matrix}.
+    G_by           dict {subdomain_id: (2,2) transverse-shear matrix}.
+    k22_e          (Ne,) per-quad hoop curvature.
+    cross          tuple(int,int), default (1,2). Cross-section coordinate
+                   indices.
+    full_curvature bool, default False. Passed to _quad_ops (no-op in RM).
+  Returns:
+    (Dhh, Dhe, Dee, Dhl, Dll, Dle): Dhh (ndof,ndof), Dhe (ndof,4), Dee (4,4),
+    Dhl (ndof,ndof), Dll (ndof,ndof), Dle (ndof,4), where ndof = 5*Nn.
+  Notes:
+    Gauss points at +/-1/sqrt(3). Per point: BDq/BGq/BLq/geo from _quad_ops,
+    tied BGb from _mitc_shear, macro map BDe=_macro_BD(x2,x3,t2,t3,k22)
+    (imported from opensg_jax.fe_jax.msg_rm), macro shear BGe=zeros(2,4).
+    Energies: Dhh += (BDq.T D BDq + BGb.T G BGb) dA, Dhe += (BDq.T D BDe +
+    BGb.T G BGe) dA, etc. Dof gather g = [5n,5n+1,...,5n+4] per node.
+
+................................................................................
+ build_C_Psi_segment   [public]
+................................................................................
+  build_C_Psi_segment(nodes, quads, cross=(1, 2)):
+
+  Build the 4 rigid-body kernel modes (3 translations + twist) and the
+  conjugate zero-average constraint operator for the 2-D segment, the area-
+  integrated 2-D analogue of msg_rm_timo.build_C_Psi.
+  Args:
+    nodes          (Nn,3) node coordinates.
+    quads          (Ne,4) quad connectivity.
+    cross          tuple(int,int), default (1,2). Cross-section coordinate
+                   indices used for the twist mode's (y,z) coords.
+  Returns:
+    (C, Psi): C (4, ndof) constraint matrix enforcing
+    <w1>=<w2>=<w3>=<omega1>=0 (area-weighted), Psi (ndof, 4) rigid-mode basis;
+    ndof=5*Nn.
+  Notes:
+    C assembled by 2x2 Gauss with dA=|dNx@X x dNe@X|, accumulating N[a]*dA
+    into C[c,5*nd+c] for c in 0..3. Psi columns: w1,w2,w3 unit translations
+    and twist column 3 with Psi[5nd+1,3]=-y3, Psi[5nd+2,3]=y2, Psi[5nd+3,3]=-1
+    using cross-section coords y2=nodes[nd,cross[0]], y3=nodes[nd,cross[1]].
+    Element-agnostic KKT solver applies unchanged.
+
+................................................................................
+ dirichlet_solve   [public]
+................................................................................
+  dirichlet_solve(K, RHS, bdofs, bvals):
+
+  Dense direct solve of K u = RHS subject to prescribed boundary DOFs
+  u[bdofs]=bvals, supporting multiple load-case columns.
+  Args:
+    K              (ndof,ndof) system matrix (dense).
+    RHS            (ndof, nc) right-hand side, columns = load cases.
+    bdofs          1-D int array of prescribed (boundary) DOF indices.
+    bvals          (len(bdofs), nc) prescribed boundary values.
+  Returns:
+    u: (ndof, nc) solution with u[bdofs]=bvals and interior from
+    np.linalg.solve(Kii, RHS_free - Kib@bvals).
+  Notes:
+    free = setdiff1d(arange(ndof), bdofs). Partitioned static condensation
+    onto the free block.
+
+................................................................................
+ dirichlet_factor   [public]
+................................................................................
+  dirichlet_factor(K, bdofs):
+
+  LU-factorize the interior (free-free) block of a dense Dirichlet system once
+  for reuse across multiple load sets sharing the same boundary DOF set (e.g.
+  the V0 and V1 solves).
+  Args:
+    K              (ndof,ndof) dense system matrix.
+    bdofs          1-D int array of boundary DOF indices.
+  Returns:
+    dict with keys: 'lu' = scipy.linalg.lu_factor of K[free,free], 'free' =
+    free DOF index array, 'Kib' = K[free, bdofs] coupling block, 'ndof' =
+    system size.
+  Notes:
+    Same LAPACK getrf/getrs path as np.linalg.solve. Imports
+    scipy.linalg.lu_factor locally.
+
+................................................................................
+ dirichlet_solve_fac   [public]
+................................................................................
+  dirichlet_solve_fac(fac, RHS, bdofs, bvals):
+
+  Back-substitution Dirichlet solve using a precomputed dirichlet_factor()
+  context (no refactorization).
+  Args:
+    fac            dict from dirichlet_factor() with keys
+                   'lu','free','Kib','ndof'.
+    RHS            (ndof, nc) right-hand side.
+    bdofs          1-D int array of boundary DOF indices (used to scatter
+                   bvals into u).
+    bvals          (len(bdofs), nc) prescribed boundary values.
+  Returns:
+    u: (ndof, nc) solution.
+  Notes:
+    Uses scipy.linalg.lu_solve(fac['lu'], RHS[free] - Kib@bvals). Imports
+    lu_solve locally.
+
+................................................................................
+ dirichlet_factor_sparse   [public]
+................................................................................
+  dirichlet_factor_sparse(K, bdofs):
+
+  Sparse analogue of dirichlet_factor: SuperLU-factorize the free-free block
+  of a scipy-sparse K once, for large-DOF V0/V1 solves where the dense free
+  block will not fit in memory.
+  Args:
+    K              scipy sparse system matrix (converted to CSR internally).
+    bdofs          1-D int array of boundary DOF indices.
+  Returns:
+    dict with keys: 'kind'='splu', 'lu' = scipy.sparse.linalg.splu(Kii csc),
+    'Kib' = free x boundary coupling block, 'free' = free index array, 'ndof'
+    = system size.
+  Notes:
+    Kii = Kcsr[free][:,free].tocsc(). Deliberately uses SuperLU (partial
+    pivoting) for ALL sections; PARDISO's static pivoting is avoided because
+    it returns a wrong factorization on the ill-conditioned reduced block at
+    web/skin T-junctions. Imports splu locally.
+
+................................................................................
+ dirichlet_solve_sparse   [public]
+................................................................................
+  dirichlet_solve_sparse(fac, RHS, bdofs, bvals):
+
+  Back-substitution Dirichlet solve on a dirichlet_factor_sparse() (or
+  PARDISO) context.
+  Args:
+    fac            dict from dirichlet_factor_sparse() (kind 'splu' with 'lu',
+                   or kind 'pardiso' with 'solver'/'Kii'), plus
+                   'Kib','free','ndof'.
+    RHS            (ndof, nc) right-hand side.
+    bdofs          1-D int array of boundary DOF indices.
+    bvals          (len(bdofs), nc) prescribed boundary values.
+  Returns:
+    u: (ndof, nc) solution.
+  Notes:
+    rhs = RHS[free] - Kib@bvals; if fac['kind']=='pardiso' uses
+    fac['solver'].solve(fac['Kii'],rhs) (with Python-level iterative
+    refinement noted for the ill-conditioned T-junction block), else
+    fac['lu'].solve(rhs). Docstring notes the SuperLU path is the robust
+    default.
+
+................................................................................
+ _bilinear   [private/internal]
+................................................................................
+  _bilinear(xi, eta):
+
+  Evaluate the 4-node bilinear quad shape functions and their parametric
+  derivatives at a point (xi,eta) in [-1,1]^2.
+  Args:
+    xi             float parametric coord in [-1,1] (~ hoop direction).
+    eta            float parametric coord in [-1,1] (~ axial direction).
+  Returns:
+    (N, dNx, dNe) each a (4,) array: N shape values, dNx = dN/dxi, dNe =
+    dN/deta. Corner order matches mesh winding
+    [(j,k),(j,k+1),(j+1,k+1),(j+1,k)] -> reference corners
+    [(-1,-1),(1,-1),(1,1),(-1,1)].
+  Notes:
+    Uses xc=[-1,1,1,-1], ec=[-1,-1,1,1]; N=0.25(1+xc*xi)(1+ec*eta).
+
+................................................................................
+ _quad_ops   [private/internal]
+................................................................................
+  _quad_ops(X, e1, e2, e3, xi, eta, k22, cross=(1, 2), full_curvature=False):
+
+  Build the prismatic-reduction Reissner-Mindlin membrane/bending strain
+  operator BDq, transverse-shear operator BGq (pre-tying), and shear-warping
+  operator BLq, plus geometry, at a quad Gauss point.
+  Args:
+    X              (4,3) node coordinates of the quad.
+    e1             (3,) axial unit frame vector (d/dx1 direction).
+    e2             (3,) hoop unit frame vector (d/ds direction).
+    e3             (3,) normal unit frame vector (accepted for API symmetry;
+                   not used directly here).
+    xi             float parametric hoop coord in [-1,1].
+    eta            float parametric axial coord in [-1,1].
+    k22            float per-element hoop curvature at this quad.
+    cross          tuple(int,int), default (1,2). The two cross-section
+                   coordinate indices (beam axis is the remaining index):
+                   (1,2) for axis=x cylinder, (0,1) for axis=z BAR-URC.
+    full_curvature bool, default False. Retained for API compatibility only; a
+                   NO-OP in RM (no second derivative to add).
+  Returns:
+    (BDq, BGq, BLq, geo): BDq (6,20) D-strain rows
+    [eps11,eps22,2eps12,k11,k22,2k12]; BGq (2,20) transverse-shear rows
+    [2eps13,2eps23] pre-tying; BLq (6,20) Gamma_l shear-warping surrogate; geo
+    = (x2, x3, t2, t3, dA) cross-section coords, hoop-tangent components, and
+    surface area element.
+  Notes:
+    In-frame derivatives via 2x2 metric G=[[e1.Jxi,e1.Jeta],[e2.Jxi,e2.Jeta]];
+    d = (inv(G.T) @ [dNx;dNe]).T is (4,2) = [d/dx1, d/ds] per node (uses
+    (G^T)^-1, NOT G^-1). dA=|Jxi x Jeta|. Uses 1-D in-plane normal convention
+    n2,n3 = t3,-t2. 5 DOF/node [w1,w2,w3,omega1,omega2], 20 DOF/quad. Bending
+    k12 row carries 0.5*k22*dw1/ds curvature-coupling term.
+
+................................................................................
+ _mitc_shear   [private/internal]
+................................................................................
+  _mitc_shear(X, e1, e2, e3, xi, eta, k22, cross=(1, 2)):
+
+  Assemble the MITC4 assumed (tied) transverse-shear operator BGb at (xi,eta)
+  by interpolating the covariant shear rows sampled at the Dvorkin-Bathe tying
+  points.
+  Args:
+    X              (4,3) quad node coords.
+    e1             (3,) axial frame vector.
+    e2             (3,) hoop frame vector.
+    e3             (3,) normal frame vector.
+    xi             float hoop parametric coord.
+    eta            float axial parametric coord.
+    k22            float per-element hoop curvature.
+    cross          tuple(int,int), default (1,2). Cross-section coordinate
+                   indices, passed through to _quad_ops.
+  Returns:
+    BGb: (2,20) tied transverse-shear operator, rows [g13, g23] (vstacked g13
+    then g23).
+  Notes:
+    g23 (row1 of BGq) tied at _TIE['g23']=[(0,-1),(0,1)] and linearly
+    interpolated in eta; g13 (row0) tied at _TIE['g13']=[(-1,0),(1,0)] and
+    interpolated in xi. Calls _quad_ops at each tying point and slices out the
+    relevant BGq row.
+
+================================================================================
+ FILE:  mitc_rm_segment/solve_segment_jax.py
+================================================================================
+
+................................................................................
+ build_material   [public]
+................................................................................
+  build_material(bundle, center_ref=True):
+
+  Build the (6,6) ABD stiffness D, (2,2) transverse-shear G, and total wall
+  thickness t for the single layup stored in an extraction bundle, mid-
+  surface-referenced.
+  Args:
+    bundle         dict-like (np.load npz) with JSON-encoded 'materials' and
+                   'sections' entries; sections[0]['layup'] is [[mat, ply_t,
+                   angle], ...].
+    center_ref     bool, default True. If True, parallel-axis shift the ABD
+                   from bottom-face to mid-wall by t/2 via
+                   shift_abd_reference.
+  Returns:
+    (D, G, t): D (6,6) ABD (mid-wall if center_ref), G (2,2) transverse shear
+    (reference-independent), t float total thickness.
+  Notes:
+    Parses materials into {name:{E,G,nu}}.
+    compute_ABD_matrix(thick,angles,mat_names,mat_db)[0] gives bottom-ref ABD.
+    G from transverse_shear_stiffness(...)[0]. Only single-layup
+    (sections[0]).
+
+................................................................................
+ order_ring   [public]
+................................................................................
+  order_ring(ring_x):
+
+  Sort an (unordered dolfinx submesh) boundary ring's nodes into a consistent
+  CCW hoop loop and build a closed-loop line-element connectivity, so reused
+  1-D operators see the validated orientation.
+  Args:
+    ring_x         (NC,3) ring node coordinates; cross-section plane is
+                   columns (1,2) = (y,z).
+  Returns:
+    (nodes2d, elems, perm, R): nodes2d (NC,2) sorted (y,z) coords, elems
+    (NC,2) int closed-loop line connectivity [[i,(i+1)%NC]], perm (NC,)
+    argsort of hoop angle (perm[i]=original ring-node index of sorted node i),
+    R float mean radius.
+  Notes:
+    Hoop angle th=arctan2(z,y); perm=argsort(th). R=mean(hypot(y,z)) over
+    original (unsorted) coords. perm kept to later match ring warping to
+    segment boundary nodes by hoop position.
+
+................................................................................
+ solve_ring   [public]
+................................................................................
+  solve_ring(ring_x, D, G, shear="mitc_both"):
+
+  Solve a boundary ring as a 1-D Reissner-Mindlin/MITC cross-section SG (via
+  the validated timoshenko_rm), returning its Timoshenko 6x6 and warping
+  fields V0, V1.
+  Args:
+    ring_x         (NC,3) ring node coordinates.
+    D              (6,6) ABD matrix for the ring layup.
+    G              (2,2) transverse-shear matrix.
+    shear          str, default 'mitc_both'. Shear discretization scheme
+                   passed to timoshenko_rm.
+  Returns:
+    dict with 'C6' (6,6) Timoshenko stiffness, 'V0' (ndof,4) EB warping, 'V1'
+    (ndof,4) Timoshenko shear-warping (ndof=5*NC, 5 DOF/node), 'perm' (NC,),
+    'R' float, 'nodes2d' (NC,2), 'elems' (NC,2).
+  Notes:
+    Uses order_ring, single layup id 0 (D_by={0:D},G_by={0:G}), uniform
+    k22=-1/R (code's -1/R inward-normal convention). Calls timoshenko_rm(nodes
+    2d,elems,lpe,D_by,G_by,k22,p=1,return_warp=True,shear=shear).
+
+................................................................................
+ solve_boundary_yaml   [public]
+................................................................................
+  solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc_both"):
+
+  Solve a boundary ring directly from a standalone 1-D cross-section YAML file
+  (preserving node order == segment node order), returning its 6x6 and warping
+  fields.
+  Args:
+    yaml_path      str path to a 1-D cross-section YAML with
+                   'nodes','elements' (1-based, closed
+                   loop),'materials','sections'.
+    center_ref     bool, default True. Shift ABD to mid-wall by
+                   0.5*sum(thick).
+    shear          str, default 'mitc_both'. Shear scheme for timoshenko_rm.
+  Returns:
+    dict with 'C6' (6,6), 'V0' (ndof,4), 'V1' (ndof,4), 'R' float mean radius,
+    'm' int node count.
+  Notes:
+    nodes taken as first 2 columns (y,z). elements decremented to 0-based.
+    Single layup section[0]. R=mean(hypot). k22=-1/R uniform. V0[5i:5i+5] maps
+    to segment node node2seg[i]. Imports yaml locally.
+
+................................................................................
+ solve_boundary_bundle   [public]
+................................................................................
+  solve_boundary_bundle(b, side, center_ref=True, shear="mitc_both", k22=None):
+
+  Solve a boundary ring in-memory straight from the extraction bundle (no YAML
+  round-trip), supporting multi-material layups and several initial-curvature
+  options.
+  Args:
+    b              bundle dict-like with 'axis', '<side>_x' (m,3),
+                   '<side>_cells', '<side>_subdom', '<side>_e2','<side>_e3',
+                   JSON 'sections','materials'.
+    side           str, e.g. 'L' or 'R'; selects the '<side>_*' bundle arrays.
+    center_ref     bool, default True. Mid-wall ABD reference.
+    shear          str, default 'mitc_both'. Shear scheme.
+    k22            curvature arg: None -> uniform -1/R (circular default);
+                   'zero' -> no initial curvature; 'general' -> per-edge
+                   geometric curvature via segment_element.compute_k22 on
+                   parent-quad frames; array -> caller-supplied per-edge
+                   values.
+  Returns:
+    dict with 'C6' (6,6), 'V0' (ndof,4), 'V1' (ndof,4), 'R' float.
+  Notes:
+    cross = the two non-axis indices. R = mean radial distance about the
+    contour centroid. Multi-material via _material_by_section keyed by
+    '<side>_subdom'. Calls timoshenko_rm(...,return_warp=True). 'general' path
+    imports compute_k22 locally and feeds centroids/e2/e3/cells.
+
+................................................................................
+ analytic_iso_tube   [public]
+................................................................................
+  analytic_iso_tube(R, t, E, nu):
+
+  Closed-form thin isotropic-tube Timoshenko diagonal (mid-wall reference)
+  used as the self-check for the ring 6x6 wiring.
+  Args:
+    R              float mean tube radius.
+    t              float wall thickness.
+    E              float Young's modulus.
+    nu             float Poisson ratio.
+  Returns:
+    dict {EA, GA2, GA3, GJ, EI2, EI3} of closed-form stiffnesses.
+  Notes:
+    Gs=E/(2(1+nu)); A=2 pi R t; I=pi R^3 t; J=2 pi R^3 t; shear coefficient
+    ks=0.5 (thin-ring approx). EA=E A, GA2=GA3=Gs A ks, GJ=Gs J, EI2=EI3=E I.
+
+................................................................................
+ assemble_segment_rm   [public]
+................................................................................
+  assemble_segment_rm(bundle, D, G):
+
+  Placeholder for the PART 2 2-D MITC4 RM segment-element assembly (not yet
+  implemented in this file).
+  Args:
+    bundle         extraction bundle (unused; stub).
+    D              (6,6) ABD (unused; stub).
+    G              (2,2) transverse shear (unused; stub).
+  Returns:
+    Never returns; raises NotImplementedError('PART 2 -- 2-D MITC4 RM segment
+    element (next step)').
+  Notes:
+    The actual segment assembly lives in segment_element.assemble_segment /
+    segment_element_general.assemble_segment_general; this stub is superseded.
+
+................................................................................
+ main   [public]
+................................................................................
+  main(npz_path):
+
+  Driver for PART 1: load an extraction npz, solve both end rings, and print
+  the boundary-ring RM/MITC 6x6 vs the closed-form isotropic tube plus a left-
+  vs-right consistency check.
+  Args:
+    npz_path       str path to the boundary-extraction .npz (has
+                   'materials','L_x','R_x', axis, etc.).
+  Returns:
+    (left, right): the two solve_ring result dicts for the left and right end
+    rings.
+  Notes:
+    Reads E,nu from materials[0]['elastic']. Computes
+    analytic_iso_tube(R,t,E,nu), prints per-term %err of the ring 6x6
+    diagonal, and the max relative diff between left/right 6x6 (expected ~0
+    for a prismatic segment). Invoked from __main__ with sys.argv[1] or
+    out/seg_iso_hR0.1.npz default.
+
+................................................................................
+ _material_by_section   [private/internal]
+................................................................................
+  _material_by_section(sections, materials, center_ref=True):
+
+  Compute mid-surface-referenced ABD and transverse-shear G per layup section,
+  keyed by section index, for multi-material rings/segments.
+  Args:
+    sections       list of section dicts, each with a 'layup' = [[mat, ply_t,
+                   angle], ...].
+    materials      list of material dicts each with 'name' and
+                   'elastic':{E,G,nu}.
+    center_ref     bool, default True. Shift each ABD to mid-wall by
+                   0.5*sum(th).
+  Returns:
+    (D_by, G_by): dicts {section_index: (6,6) ABD} and {section_index: (2,2)
+    G}.
+  Notes:
+    matmap built from materials. Per section: compute_ABD_matrix then optional
+    shift_abd_reference, and transverse_shear_stiffness. Reused by
+    xsec_5v6_master.load_ring.
+
+================================================================================
+ FILE:  mitc_rm_segment/segment_element_general.py
+================================================================================
+
+................................................................................
+ quad_ops_general   [public]
+................................................................................
+  quad_ops_general(X, e1m, e2m, e3m, xi, eta, k22, cross=(1, 2), ax=None, kg=0.0):
+
+  Assemble the GENERAL 3D-taper RM strain operators (membrane, curvature with
+  Lambda drilling, and full drilling-eliminated transverse shear) plus the
+  macro map at a quad Gauss point.
+  Args:
+    X              (4,3) quad node coordinates.
+    e1m            (3,) stored axial material frame (unused by the operator;
+                   kept for API).
+    e2m            (3,) stored hoop material frame (unused).
+    e3m            (3,) stored material normal (used by _surf_frame to sign-
+                   match n).
+    xi             float hoop parametric coord.
+    eta            float axial parametric coord.
+    k22            float hoop normal curvature at this quad.
+    cross          tuple(int,int), default (1,2). Cross-section coordinate
+                   indices.
+    ax             int or None, default None. Beam-axis index; if None
+                   inferred as the index not in cross.
+    kg             float, default 0.0. Hoop geodesic curvature (taper); scaled
+                   by module KG_ABL before use.
+  Returns:
+    (BDe, BDh, BDl, BGe, BGh, BGl, dA): BDe (6,4) macro map Gamma_eps, BDh
+    (6,20) fluctuation Gamma_h, BDl (6,20) x1-derivative Gamma_l; BGe (2,4),
+    BGh (2,20), BGl (2,20) transverse-shear macro/fluctuation/warping blocks;
+    dA float. Rows are [e11,e22,2e12,k11,k22,k12+21] and [2g13,2g23].
+  Notes:
+    Calls _surf_frame; DRILL_TOL dmask drops omega_3 drilling (Lambda + shear
+    1/C33) on near-flat walls |y3|<DRILL_TOL; lam=LAMBDA_ON*dmask. Membrane
+    rows from x11/x12 cosines + Rn1/Rn2. Curvature rows use
+    _lambda_ops(alpha=1,2). Transverse shear uses regularized invc33 =
+    dmask*y3/(y3^2+C33_EPS^2), h33=0.5 invc33; k1 swept-area terms
+    k1_13/k1_23; w-flux coeffs a13,b13,a23,b23; w' chain-rule = x11*(w_|1
+    coeff)+x12*(w_|2 coeff); om coeffs C_2a - C23 C_3a/C33 (g13) and -C_1a +
+    C13 C_3a/C33 (g23). Diagnostic ablations SH_ABL_BGE, SH_ABL_BGL,
+    SH_ABL_Y1, KG_ABL applied. Certified term-by-term vs paper Eq.12 +
+    Appendix by verify_strains_paper.py.
+
+................................................................................
+ assemble_segment_general   [public]
+................................................................................
+  assemble_segment_general(nodes, quads, subdom, e1s, e2s, e3s, D_by, G_by, k22_e, cross=(1, 2), dof_map=None, shear="mitc4_both", kg_e=None):
+
+  Assemble the six MSG blocks (Dhh, Dhe, Dee, Dhl, Dll, Dle) using the GENERAL
+  RM taper operators with MITC-tied transverse shear; an optional dof_map lets
+  a prismatic strip's node rows collapse for the span-invariant ring SG.
+  Args:
+    nodes          (Nn,3) node coordinates.
+    quads          (Ne,4) quad connectivity.
+    subdom         (Ne,) section/layup id per quad (key into D_by/G_by).
+    e1s            (Ne,3) per-quad axial frame (passed to operator; largely
+                   unused by op).
+    e2s            (Ne,3) per-quad hoop frame.
+    e3s            (Ne,3) per-quad material normal (drives frame sign).
+    D_by           dict or indexable {section_id: (6,6) ABD}.
+    G_by           dict {section_id: (2,2) transverse shear}; scaled by module
+                   G_SHEAR_SCALE.
+    k22_e          (Ne,) per-quad hoop normal curvature.
+    cross          tuple(int,int), default (1,2). Cross-section indices; ax
+                   inferred as the remaining index.
+    dof_map        (Nn,) or None, default None. node -> dof-node index; None
+                   -> identity arange(Nn). Mapping top row onto bottom row
+                   makes fields span-invariant (the ring SG).
+    shear          str, default 'mitc4_both'. Shear tying scheme for
+                   _mitc_shear_general.
+    kg_e           (Ne,) or None, default None. Per-quad hoop geodesic
+                   curvature; None -> 0.0 per quad.
+  Returns:
+    (Dhh, Dhe, Dee, Dhl, Dll, Dle): Dhh (ndof,ndof), Dhe (ndof,4), Dee (4,4),
+    Dhl (ndof,ndof), Dll (ndof,ndof), Dle (ndof,4), with
+    ndof=5*(max(dof_map)+1).
+  Notes:
+    2x2 Gauss at +/-1/sqrt(3), unit weights (weight w=dA). Per point uses
+    quad_ops_general for BD*/BGe/BGh/BGl and _mitc_shear_general for the tied
+    BGt. Blocks: Dhh += BDh.T D BDh + BGt.T G BGt; Dhe += BDh.T D BDe + BGt.T
+    G BGe; Dee += BDe.T D BDe + BGe.T G BGe; Dhl,Dll,Dle analogous with
+    BDl/BGl. Uses np.add.at (NOT fancy-index +=) because a dof_map produces
+    REPEATED dof indices that fancy-index += would silently drop.
+
+................................................................................
+ ring_general   [public]
+................................................................................
+  ring_general(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None, shear="mitc4_both"):
+
+  Solve a boundary cross-section SG with the SAME general operator as the
+  segment (one parametrization end-to-end): extrude the ring into a one-quad-
+  deep prismatic strip whose top node row is DOF-mapped onto the bottom, then
+  run the MSG KKT solve to get the Timoshenko 6x6 and warping fields.
+  Args:
+    rx             (m,3) ring node coordinates.
+    rcells         (Ne,2) ring line-element connectivity (a,b node pairs).
+    rsub           (Ne,) section/layup id per ring edge.
+    re3            (Ne,3) per-edge material normal (used as quad e3 for the
+                   strip).
+    D_by           dict {section_id: (6,6) ABD}.
+    G_by           dict {section_id: (2,2) transverse shear}.
+    k22_edge       (Ne,) per-edge hoop normal curvature.
+    ax             int beam-axis global index (extrusion direction).
+    cross          list/tuple of the two cross-section indices.
+    h              float or None, default None. Strip extrusion depth; None ->
+                   mean hoop edge length.
+    shear          str, default 'mitc4_both'. Shear tying scheme.
+  Returns:
+    (C6, V0, V_aug[:n,:]): C6 (6,6) Timoshenko stiffness, V0 (5m,4) EB
+    warping, V1 (5m,4) Timoshenko shear-warping (all np.asarray).
+  Notes:
+    Extrudes nodes=[rx; rx+h*ez], dof_map=[0..m-1, 0..m-1] (top==bottom),
+    quads=[[a,b,m+b,m+a]]. Calls assemble_segment_general then divides all six
+    blocks by h. Rigid kernel C,Psi from msg_rm_timo.build_C_Psi on
+    rx[:,cross]; flips Psi[3::5,3] sign because the general op's twist uses
+    global om_1=+1 vs the validated code's om_1=-1. Solves via
+    msg_solver.solve_fluctuation_field (V0), prepare_v1_rhs, and
+    pypardiso.spsolve of the augmented KKT (A_aug), then
+    finalize_v1_and_compute_deff. Imports scipy.sparse.coo_matrix, jax.numpy,
+    msg_solver funcs, build_C_Psi, pypardiso locally.
+
+................................................................................
+ _surf_frame   [private/internal]
+................................................................................
+  _surf_frame(X, e3_mat, xi, eta, cross, ax):
+
+  Build the geometric surface frame (a1 axial-tilted, a2 hoop, n normal) and
+  the in-plane derivative operator at (xi,eta) for the GENERAL taper RM
+  operator, returning the direction-cosine set.
+  Args:
+    X              (4,3) quad node coordinates.
+    e3_mat         (3,) stored material normal, used to sign-match n (keeps
+                   mesh's inward/outward choice).
+    xi             float hoop parametric coord.
+    eta            float axial parametric coord.
+    cross          tuple(int,int) cross-section coordinate indices (global).
+    ax             int global beam-axis index.
+  Returns:
+    (N, D1, D2, dA, c): N (4,) shape values; D1 (4,) d/dzeta1 (axial), D2 (4,)
+    d/dzeta2 (hoop) per-node operators; dA float surface Jacobian; c dict of
+    direction cosines {x11,x21,x31,x12,x22,x32,y1,y2,y3,x2,x3}.
+  Notes:
+    a2=Jxi/|Jxi|; a1=Gram-Schmidt of Jeta against a2 (tilted by taper ->
+    nonzero x21,x31); n=cross(a1,a2), flipped (with a1) if n.e3_mat<0 to keep
+    right-handed (a1,a2,n). Derivatives: d=(inv(G.T)@[dNx;dNe]) with
+    G=[[a1.Jxi,a1.Jeta],[a2.Jxi,a2.Jeta]]; rows D1,D2. Cosines
+    x_{i;alpha}=global-i component of a_alpha, y_i=normal components, x2/x3 =
+    cross-section coords of the point.
+
+................................................................................
+ _c33_floor   [private/internal]
+................................................................................
+  _c33_floor(y3, floor=None):
+
+  Floor the drilling denominator C33=n.b3 away from zero (magnitude-preserving
+  sign), exactly as the validated 1-D code floors 1/xdot2 on vertical walls.
+  Args:
+    y3             float C33 = n.b3 (normal's beam-axis-component / cross
+                   index-3 component).
+    floor          float or None, default None -> module FLOOR33=5e-2. Minimum
+                   magnitude.
+  Returns:
+    float: y3 if |y3|>floor else +/-floor matching sign(y3) (floor if y3>=0
+    else -floor).
+  Notes:
+    Used inside _omega3_ops and _lambda_ops for the algebraic 1/(2 C33)
+    drilling factors; the transverse-shear rows instead use the Tikhonov-
+    regularized invc33.
+
+................................................................................
+ _omega3_ops   [private/internal]
+................................................................................
+  _omega3_ops(N, D1, D2, c, k22):
+
+  Build the drilling (omega_3 and omega'_3) operator row-vectors of paper
+  Appendix A.3/A.5 over the element's 20 DOFs, for the drilling-eliminated
+  general RM formulation.
+  Args:
+    N              (4,) bilinear shape values.
+    D1             (4,) d/dzeta1 per-node operator.
+    D2             (4,) d/dzeta2 per-node operator.
+    c              dict of direction cosines from _surf_frame.
+    k22            float hoop normal curvature (accepted for signature
+                   symmetry; not used in this operator).
+  Returns:
+    (OM3h, OM3l, OM3e, OM3pl): OM3h (20,) acting on w (shape part + -(C3b/C33)
+    omega_b), OM3l (20,) acting on w' (=x11 x_{i;2}-x12 x_{i;1} weighted),
+    OM3e (4,) acting on beam strain eb (only k1 entry via swept-area Rn1/Rn2),
+    OM3pl (20,) = omega'_3 operator on w'. All scaled by OM3_SIGN (+1).
+  Notes:
+    C33=_c33_floor(y3). Rn1=x2 x31 - x3 x21, Rn2=x2 x32 - x3 x22 (A.4). S/(2
+    C33) structure: OM3e[1]=(x11 Rn2 - x12 Rn1)/(2C33); per-node
+    OM3h[i]+=(x_{i;2}D1-x_{i;1}D2)/(2C33), OM3l[i]+=(x11 x_{i;2}-x12
+    x_{i;1})N/(2C33); OM3pl mirrors the shape part; algebraic -(C3b/C33)
+    omega_b into DOFs 3,4 of OM3h and OM3pl (om'_b).
+
+................................................................................
+ _lambda_ops   [private/internal]
+................................................................................
+  _lambda_ops(N, D1, D2, c, k22, kg, alpha):
+
+  Build the Lambda_alpha = omega'_3 x_{1;alpha} + omega_{3|alpha} operators
+  (paper A.6) that enter ONLY the curvature-strain rows, with geometric
+  coefficient derivatives modeled by the Darboux frame of the hoop line.
+  Args:
+    N              (4,) shape values.
+    D1             (4,) d/dzeta1 operator.
+    D2             (4,) d/dzeta2 operator.
+    c              dict of direction cosines from _surf_frame.
+    k22            float hoop normal curvature (d e3/ds . e2).
+    kg             float hoop geodesic curvature (d e1/ds . e2; 0
+                   prismatic/flat).
+    alpha          int in {1,2}: which surface direction the Lambda is
+                   differentiated along (selects x_{1;alpha}, Da=D1 or D2, and
+                   the coefficient-derivative model).
+  Returns:
+    (Lh, Ll, Le): Lh (20,) acting on w, Ll (20,) acting on w', Le (4,) acting
+    on beam strain eb.
+  Notes:
+    Darboux model: alpha==1 (axial) frame derivatives=0 but coordinate derivs
+    survive (x_i)_{;1}=x_{i;1}; alpha==2 (hoop) (a1)_{;2}=kg a2,
+    (a2)_{;2}=-k22 n - kg a1, (n)_{;2}=k22 a2. Builds C33_a, Rn*_a,
+    dinv=d/dz[1/(2C33)]. Adds: t1 kappa1 coeff group into Le[1]; t4
+    x_{1;alpha} omega'_3 via Ll += x1a*OM3pl; t3 w'_{i|alpha}; t5 w' coeff
+    group; t7 w_{i|alpha} coeff group; t8 shape/coeff -(C3b/C33)
+    omega_{b|alpha}. Drops 2nd SG derivatives w_{i|1|alpha}, w_{i|2|alpha} and
+    kappa'_11 (documented). Calls _omega3_ops. Every term carries OM3_SIGN.
+
+................................................................................
+ _metric_at   [private/internal]
+................................................................................
+  _metric_at(X, e3_mat, xi, eta):
+
+  Return the 2x2 covariant metric G=[[a1.g_r,a1.g_s],[a2.g_r,a2.g_s]]
+  (g_r=Jxi, g_s=Jeta) using the SAME (a1,a2) frame + e3-sign convention as
+  _surf_frame, for the covariant MITC tying scheme.
+  Args:
+    X              (4,3) quad node coordinates.
+    e3_mat         (3,) material normal for sign-matching a1.
+    xi             float hoop parametric coord.
+    eta            float axial parametric coord.
+  Returns:
+    G: (2,2) metric array; covariant shears cov = G.T @ [2g13;2g23] and
+    physical = (G.T)^-1 @ cov.
+  Notes:
+    a2=Jxi/|Jxi|, a1=Gram-Schmidt(Jeta) then sign-flip a1 if
+    cross(a1,a2).e3_mat<0. Only used by the 'mitc4_cov' scheme in
+    _mitc_shear_general.
+
+................................................................................
+ _mitc_shear_general   [private/internal]
+................................................................................
+  _mitc_shear_general(X, e1m, e2m, e3m, xi, eta, k22, cross, ax, scheme="mitc4_both", kg=0.0):
+
+  Produce the assumed transverse-shear (2,20) operator at (xi,eta) for the
+  general RM element, dispatching among full/reduced/MITC4 tying schemes.
+  Args:
+    X              (4,3) quad node coords.
+    e1m            (3,) axial material frame (passed through to
+                   quad_ops_general).
+    e2m            (3,) hoop material frame.
+    e3m            (3,) material normal.
+    xi             float hoop parametric coord.
+    eta            float axial parametric coord.
+    k22            float hoop normal curvature.
+    cross          tuple(int,int) cross-section indices.
+    ax             int beam-axis index.
+    scheme         str, default 'mitc4_both'. One of 'full' (no tying, locks
+                   thin), 'reduced' (single centre point), 'mitc4_cov'
+                   (covariant tying on distorted quad), 'mitc4_g23' (tie only
+                   g23, g13 full), 'mitc4_both' (tie both rows).
+    kg             float, default 0.0. Hoop geodesic curvature passed to
+                   quad_ops_general.
+  Returns:
+    (2,20) transverse-shear operator, rows [g13, g23].
+  Notes:
+    Extracts BGh (index [4]) of quad_ops_general at the tying points. g23 tied
+    at _TIE_G23=[(0,-1),(0,1)] linear in eta; g13 at _TIE_G13=[(-1,0),(1,0)]
+    linear in xi. 'mitc4_cov' ties covariant rows via _metric_at then maps
+    back with solve((G.T), .). 'mitc4_g23' leaves g13 at the actual (xi,eta).
+
+================================================================================
+ FILE:  examples/TW-paper/xsec_paper/oml_ring.py
+================================================================================
+
+................................................................................
+ load_ring_ref   [public]
+................................................................................
+  load_ring_ref(path, ref="oml"):
+
+  Load an OpenSG shell YAML into the ring-solver data dictionary, applying the
+  chosen laminate reference convention (center / oml / oml_flip) to the
+  section ABD stiffnesses.
+  Args:
+    path           str path to the OpenSG shell YAML file.
+    ref            str reference convention, default 'oml'. 'center' =
+                   laminate centred on contour (mid-surface meshes; uses
+                   center_ref=True material build); 'oml' = contour on OML,
+                   laminate stacked inward (official OpenSG frac=0);
+                   'oml_flip' = ABD reference shifted the full thickness the
+                   other way (diagnostic; applies shift_abd_reference by total
+                   ply thickness t).
+  Returns:
+    dict with keys: 'rx' = float ndarray (m,3) node coords; 'cells' = int
+    ndarray (n,2) connectivity (converted to 0-based if min==1); 'rsub' = int
+    ndarray (n,) per-element section index; 're3' = float ndarray (n,3)
+    element e3 orientation (columns 6:9 of elementOrientations); 'D_by' =
+    list/array of per-section 6x6 ABD stiffness; 'G_by' = per-section
+    transverse-shear stiffness; 'k22' = per-element curvature from
+    compute_k22; 'ax' = 2 (beam axis); 'cross' = [0,1] (cross-section coord
+    indices).
+  Notes:
+    Parses nodes via _row(r)[:3], elements via _row(e), orientations via
+    _row(o); re3 = ori[:,6:9]. Builds setname->section-index map, fills rsub
+    from d['sets']['element'] group labels (label-1, 1-based YAML labels).
+    Materials normalized by _norm_materials. center_ref=True/False routed to
+    _material_by_section. For 'oml_flip', each D_by[si] shifted by
+    shift_abd_reference(D_by[si], t) where t = sum of layup ply thicknesses.
+    k22 = compute_k22(element centroids rx[cells].mean(1), ori[:,3:6], re3,
+    cells). Hardcodes ax=2, cross=[0,1].
+
+................................................................................
+ c6   [public]
+................................................................................
+  c6(R):
+
+  Compute the symmetrized RM Timoshenko 6x6 stiffness matrix for a loaded ring
+  dict using the independent-drilling MITC-g23 ring solver.
+  Args:
+    R              dict from load_ring_ref (uses R['rx'], R['cells'],
+                   R['rsub'], R['re3'], R['D_by'], R['G_by'], R['k22'],
+                   R['ax'], R['cross']).
+  Returns:
+    ndarray (6,6) symmetrized RM Timoshenko stiffness C = 0.5*(C+C.T).
+  Notes:
+    Calls ring_indep(..., shear='mitc4_g23', lam_space='elem') (without
+    return_fields) and symmetrizes the result. Convenience wrapper used for
+    quick 6x6 evaluation without the warping fields.
+
+................................................................................
+ derr   [public]
+................................................................................
+  derr(C, So):
+
+  Compute the percentage relative error of the six diagonal terms of a
+  computed 6x6 stiffness C against a reference 6x6 So.
+  Args:
+    C              ndarray (6,6) computed stiffness matrix (e.g. from c6).
+    So             ndarray (6,6) reference stiffness matrix (e.g. 2D-solid or
+                   VABS reference).
+  Returns:
+    ndarray (6,) of percent diagonal errors: 100*(C[i,i]-So[i,i])/So[i,i] for
+    i in 0..5.
+  Notes:
+    Only compares diagonal entries; no cutoff/thresholding applied here.
+
+================================================================================
+ FILE:  examples/TW-paper/xsec_paper/dehom_rm.py
+================================================================================
+
+................................................................................
+ build_rm_bundle   [public]
+................................................................................
+  build_rm_bundle(shell_yaml, ref="oml", shear="mitc4_g23"):
+
+  Homogenize a thin-walled section with the RM (Reissner-Mindlin) ring and
+  package the Timoshenko 6x6, warping fields, strip geometry, per-element
+  layup, and plate-SG databases into one bundle dict for the two-step RM
+  dehomogenization.
+  Args:
+    shell_yaml     str path to the OpenSG shell YAML (1D contour section
+                   definition).
+    ref            str reference convention, default 'oml'; passed to
+                   load_ring_ref. 'oml' = contour on OML, laminate inward;
+                   'center' = laminate centred on contour (also sets
+                   frac=0.5); 'oml_flip' = diagnostic full-thickness shift.
+    shear          str MITC shear/tying scheme for the RM ring homogenization,
+                   default 'mitc4_g23' (only gamma_23 tied). Passed to
+                   ring_indep.
+  Returns:
+    dict bundle with keys: 'Timo' = symmetrized RM Timoshenko 6x6 C6 (=C6_RM,
+    ndarray 6x6); 'V0' = RM warping field ndarray (6m x 4); 'V1' = RM warping-
+    derivative field ndarray (6m x 4); 'corners' = R['rx'][:, R['cross']] the
+    2D cross-section corner coords (m,2); 'red_cells' = ndarray (n,2) reduced
+    cell connectivity; 'rx3' = ndarray (m,3) ring node coords; 're3' = ndarray
+    (n,3) per-element e3 orientation; 'k22' = ndarray per-element curvature
+    k22; 'ax' = int beam axis; 'cross' = list of the two cross-section coord
+    indices (e.g. [0,1]); 'strip' = tuple (nodes, quads, h) from _strip;
+    'layup_per_elem' = list of layup/section names per element; 'layup_db' =
+    plate layup database (by name); 'material_db' = material database (by
+    name); 'frac' = float 0.0 (or 0.5 if ref=='center').
+  Notes:
+    Calls load_ring_ref(shell_yaml, ref) to get ring data R, then
+    ring_indep(..., shear=shear, lam_space='elem', return_fields=True) to get
+    C6, V0, V1. Symmetrizes C6 = 0.5*(C6+C6.T). Builds strip via _strip. Maps
+    each reduced-cell subdomain index R['rsub'] to its section elementSet name
+    (sec_names from d['sections']). Reuses solve_tw_from_yaml (KL bundle) ONLY
+    for the geometry-free by-name plate layup_db and material_db, called with
+    frac=0.0 unless ref=='center' (then 0.5). V0/V1 wrapped with np.asarray.
+
+................................................................................
+ stress_at_points   [public]
+................................................................................
+  stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, frame="global", n_per_layer=2, elem_order=2, rm_shear=False, s2_scheme="mitc4_g23"):
+
+  RM two-step dehomogenization: recover the full 3D stress and strain state at
+  arbitrary section coordinates (y2,y3), using the RM shell-strain recovery in
+  step 1 and the plate through-thickness SG in step 2.
+  Args:
+    B              bundle dict from build_rm_bundle.
+    points_2d      array-like (P,2) or (2,) of section coords (y2,y3); coerced
+                   via np.atleast_2d to (P,2).
+    beam_force_vabs ndarray (6,) or None; applied beam force (VABS ordering).
+                    Exactly one of this or beam_strain required (enforced in
+                    _macro_fields).
+    beam_strain    ndarray (6,) or None; applied beam strain. Exactly one of
+                   this or beam_force_vabs required.
+    frame          str output frame, default 'global'. 'global' rotates
+                   stress/strain into the section (y1,y2,y3) global frame via
+                   arc-tangent/normal; 'material' rotates into the ply
+                   material frame using rotation_6x6(±ply); any other value
+                   leaves the plate-local frame.
+    n_per_layer    int through-thickness sub-elements per ply for the plate
+                   ABD/warping build, default 2.
+    elem_order     int plate through-thickness element order, default 2.
+    rm_shear       bool, default False. If True, adds the RM constitutive
+                   transverse-shear stresses sigma13/sigma23 from the wall
+                   shear s2 (over-predicts ~20x for spar caps; left OFF so
+                   shipped stress is the validated in-plane field with
+                   sigma13/23 = plate plane-stress limit).
+    s2_scheme      str tying scheme for recovered s2, default 'mitc4_g23';
+                   passed to _rm_shell_strain. Only used when rm_shear=True
+                   affects s13/s23.
+  Returns:
+    dict with keys: 'stress' = ndarray (P,6) Voigt stress
+    [S11,S22,S33,S23,S13,S12] per point; 'strain' = ndarray (P,6) Voigt
+    strain; 'elem' = int array (P,) element index per point; 'xi' = float
+    array (P,) arc coord per point; 'depth' = float array (P,) through-
+    thickness coordinate z; 'proj' = ndarray (P,2) projected point on the
+    contour; 'macro' = ndarray (6,) macro beam strain st.
+  Notes:
+    Mirrors msg_dehom.stress_at_points but with RM step-1 recovery.
+    Precomputes per-layup plate warping via
+    compute_ABD_matrix(...,return_warping=True)[2] into warp dict, and (only
+    if rm_shear) transverse_shear_stiffness into shr dict. For each point:
+    _project_point(corners, red_cells, pt) -> (e, xi, pr); builds unit arc
+    tangent (t2,t3), inward normal (n2,n3)=(t3,-t2) flipped to point toward
+    centroid cen; signed depth z = (pt-pr)·n. Calls _rm_shell_strain to get
+    s6,s2; plate_stress_at_depth(warp, s6, z) -> (Gam, Sig, ply). If rm_shear:
+    Q = Gmat@s2, (s13,s23)=recover(z,Q), added to Sig[4]+=s13, Sig[3]+=s23
+    (Voigt [S11,S22,S33,S23,S13,S12]). Frame rotation: 'global' uses
+    Rm=[[1,0,0],[0,t2,n2],[0,t3,n3]] with _voigt_to_tensor/_tensor_to_voigt;
+    'material' uses rotation_6x6(-ply) on Sig and rotation_6x6(ply).T on Gam.
+
+................................................................................
+ _strip   [private/internal]
+................................................................................
+  _strip(rx3, cells, ax):
+
+  Reconstruct the one-quad-deep prismatic strip mesh exactly as ring_indep
+  does, by extruding the 2D ring contour a distance h along the beam axis so
+  the RM element operators can be evaluated.
+  Args:
+    rx3            array-like (m,3) float; the ring node coordinates (3D nodal
+                   positions of the reduced contour).
+    cells          int array (n,2); connectivity of the 1D ring — each row
+                   [a,b] a pair of node indices forming a line element.
+    ax             int; the beam-axis index (0,1,2). The extrusion direction
+                   ez is the unit vector along this axis (here ax=2).
+  Returns:
+    tuple (nodes, quads, h): nodes = float array (2m,3) = original rx3 stacked
+    with rx3 + h*ez; quads = int array (n,4) with rows [a, b, m+b, m+a]; h =
+    float mean element length (mean of ||rx3[cells[:,1]]-rx3[cells[:,0]]||).
+  Notes:
+    h is the mean line-element length over all cells; the extruded layer is
+    offset by h*ez where ez has a 1.0 in slot ax. Quad node ordering is [a, b,
+    m+b, m+a] (m = number of ring nodes). Converts rx3 to float np array
+    first.
+
+................................................................................
+ _rm_shell_strain   [private/internal]
+................................................................................
+  _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme="mitc4_g23"):
+
+  Evaluate the 8 RM shell strains at element e and arc position xi: the 6
+  membrane/bending strains s6=[e11,e22,2e12,k11,k22,2k12] and the 2 transverse
+  shears s2=[2g13,2g23].
+  Args:
+    B              bundle dict from build_rm_bundle (uses B['strip'],
+                   B['re3'], B['k22'], B['cross'], B['ax'], B['red_cells']).
+    e              int element index into the ring.
+    xi             float arc coordinate in [0,1] along the element; mapped to
+                   natural coord xq = 2*xi - 1 in [-1,1].
+    st_m           ndarray (6,) macro membrane/bending strain vector (from
+                   _macro_recovery).
+    aA             ndarray (6m,) warping field w = a1 + a2 (from
+                   _macro_fields); gathered to element DOFs as wA.
+    aB             ndarray (6m,) warping-derivative field w' = a4 + a3 (from
+                   _macro_fields); gathered as wB.
+    s2_scheme      str tying scheme for the RECOVERED transverse shear s2,
+                   default 'mitc4_g23' (matches homogenization: only g23 tied,
+                   g13 raw carries flat-wall drilling). 'mitc4_both' returns
+                   drilling-free tied shear on both rows (physical wall
+                   shear).
+  Returns:
+    tuple (s6, s2): s6 = ndarray (6,) = [e11,e22,2e12,k11,k22,2k12]; s2 =
+    ndarray (2,) = [2g13,2g23].
+  Notes:
+    Gathers element geometry Xe=nodes[quads[e]] and e3e=B['re3'][e]. Calls
+    quad_ops_indep(Xe,e3e,xq,0.0,k22[e],cross,ax) returning operators
+    BDe,BDh,BDl,BGe,BGh,BGl,DRe,DRh,DRl,dA, and
+    _mitc_shear_indep(...,scheme=s2_scheme) for the tied shear operator BGt.
+    Builds a 24-length DOF gather index g = [c0*6:c0*6+6, c1*6:+6, c1*6:+6,
+    c0*6:+6] (the a1,a2,a4,a3 ordering) where c0,c1 = red_cells[e]. Computes
+    s6 = BDe@st_m + BDh@wA + BDl@wB and s2 = BGe@st_m + BGt@wA + BGl@wB (BGt
+    replaces BGh for the MITC-tied transverse shear).
+
+................................................................................
+ _macro_fields   [private/internal]
+................................................................................
+  _macro_fields(B, beam_force_vabs=None, beam_strain=None):
+
+  Compute the macro beam strain and the two RM warping combination fields (aA,
+  aB) from either an applied beam force or an applied beam strain.
+  Args:
+    B              bundle dict from build_rm_bundle (uses B['Timo'], B['V0'],
+                   B['V1']).
+    beam_force_vabs ndarray (6,) or None; applied beam force/moment resultant
+                    (VABS ordering). If given, st = inv(C6) @ force. Exactly
+                    one of this or beam_strain must be provided.
+    beam_strain    ndarray (6,) or None; applied beam strain directly. Exactly
+                   one of this or beam_force_vabs must be provided.
+  Returns:
+    tuple (st, st_m, aA, aB): st = ndarray (6,) full macro beam strain; st_m =
+    ndarray (6,) recovered macro membrane/bending strain component; aA =
+    ndarray (6m,) warping field w = V0@st_m + V1@st_cl1 (= a1 + a2); aB =
+    ndarray (6m,) warping-derivative field w' = V0@st_cl1 + V1@st_cl2 (= a4 +
+    a3).
+  Notes:
+    Raises ValueError if not exactly one of beam_force_vabs/beam_strain is
+    given (checks (beam_strain is None) == (beam_force_vabs is None)).
+    Symmetrized C6 pulled from B['Timo']. Calls _macro_recovery(C6, st) to
+    split st into (st, st_m, st_cl1, st_cl2). aA/aB combine V0,V1 with st_m,
+    st_cl1, st_cl2 per the RM warping composition.
+
+================================================================================
+ FILE:  opensg_jax/fe_jax/msg_dehom.py
+================================================================================
+
+................................................................................
+ recover_shell_strains   [public]
+................................................................................
+  recover_shell_strains(bundle, beam_force_vabs=None, beam_strain=None, xi_eval=None)
+
+  Step 1 of dehomogenization: recover the 6 plate/shell strains along the
+  cross-section from a beam force or prescribed beam strain, using the MSG
+  shell strain operators plus the EB (V0) and shear (V1) warping fields.
+  Args:
+    bundle         dict from msg_hermite.solve_tw_from_yaml; reads Timo (6,6),
+                   V0 (N,6), V1 (N,6), red_cells (E,2), corners (Nc,2), k22
+                   (E,), L (E,), xd2 (E,), xd3 (E,), xi_q (Pq,).
+    beam_force_vabs (6,) applied beam force in VABS order [F1,F2,F3,M1,M2,M3];
+                    provide exactly one of this or beam_strain. Strain
+                    recovered as inv(Timo)@force.
+    beam_strain    (6,) prescribed beam strain in VABS order; taken directly
+                   as st when given.
+    xi_eval        (P,) optional arc positions in [0,1] to evaluate; default =
+                   bundle['xi_q'] Gauss points. Use [0.0,1.0] for the two end-
+                   node values.
+  Returns:
+    dict: 'shell_strain' (E,P,6)
+    [eps11,eps22,gamma12,kappa11,kappa22,kappa12]; 'shell_strain_elem' (E,6)
+    per-element mean over P; 'x2','x3' (E,P) arc-point coords; 'xi' (P,)
+    positions; 'tang' (E,2) unit arc tangent [xd2,xd3]; 'macro' (6,) beam
+    strain st; 'st_m' (4,) EB macro strain.
+  Notes:
+    Raises ValueError unless exactly one of beam_force_vabs/beam_strain is
+    given (XOR check via (beam_strain is None)==(beam_force_vabs is None)).
+    Calls _macro_recovery. Builds four warping combos: a1=V0@st_m (EB warping
+    w_1), a2=V1@st_cl1 (shear warping w1s_1), a3=V1@st_cl2 (shear warping
+    w1s_2), a4=V0@st_cl1 (EB-of-derivative w_2). Per element extracts 12-dof
+    gather g = [c0*6:c0*6+6, c1*6:c1*6+6], calls
+    hermite_strain_operators(n0,n1,k22,L,xd2,xd3,xi) -> (eps_h,eps_l,eps_e,_)
+    and assembles s = eps_h(a1[g]) + eps_e(st_m) + eps_h(a2[g]) + eps_l(a4[g])
+    + eps_l(a3[g]). x2/x3 are linear interpolation (1-xi)*n0 + xi*n1. Mixes
+    JAX (jnp) operator calls with numpy accumulation.
+
+................................................................................
+ dehomogenize   [public]
+................................................................................
+  dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None, n_eval_per_elem=3, bundle=None, elem_order=2, n_per_layer=2)
+
+  Full two-step dehomogenization for a YAML cross-section: recover shell
+  strains (step 1) then run the MSG plate through-thickness model per element
+  (step 2) to get pointwise 3D strain/stress.
+  Args:
+    yaml_path      str path to OpenSG cross-section YAML; only used if bundle
+                   is None.
+    beam_force_vabs (6,) beam force in VABS order; provide exactly one of this
+                    or beam_strain.
+    beam_strain    (6,) prescribed beam strain in VABS order.
+    n_eval_per_elem int, through-thickness sample points per plate sub-element
+                    passed to plate_dehom_strain (default 3).
+    bundle         dict optional precomputed solve_tw_from_yaml bundle; avoids
+                   re-solving for multiple load cases. If None,
+                   solve_tw_from_yaml(yaml_path) is called.
+    elem_order     int plate (step-2) element order: 2 = quadratic 3-node
+                   (default), 3 = cubic 4-node; refines non-uniform layers.
+    n_per_layer    int through-thickness plate sub-elements per ply layer
+                   (default 2).
+  Returns:
+    dict = the step-1 shell dict (copied via dict(shell)) plus: 'elem' — list
+    length E of per-element dicts {'z','strain_3d' (n,6),'stress_3d'
+    (n,6),'layup'}; 'bundle' — the solution bundle.
+  Notes:
+    Builds a warp_cache keyed by layup name from bundle['layup_db'], each via 
+    compute_ABD_matrix(thick,angles,mat_names,material_db,n_per_layer,return_w
+    arping=True,elem_order) taking the returned warp. Loops
+    layups=bundle['layup_per_elem'], feeding element-mean shell strain
+    ss_elem[e]=shell['shell_strain_elem'][e] into
+    plate_dehom_strain(warp,ss_elem[e],n_eval_per_elem) -> (z,Gam,Sig). Calls
+    recover_shell_strains and (optionally) solve_tw_from_yaml.
+
+................................................................................
+ stress_at_points   [public]
+................................................................................
+  stress_at_points(bundle, points_2d, beam_force_vabs=None, beam_strain=None, frame="global", elem_order=2, n_per_layer=2)
+
+  Recover the 3D stress and strain at arbitrary cross-section coordinates by
+  projecting each point onto the 1D reference mesh (arc position + through-
+  thickness depth) and driving the MSG plate model at that depth.
+  Args:
+    bundle         dict from solve_tw_from_yaml; reads Timo, V0, V1,
+                   red_cells, corners, k22, L, xd2, xd3, layup_per_elem,
+                   layup_db, material_db, and optional 'frac' (default 0.0).
+    points_2d      (P,2) cross-section coordinates (y2,y3); passed through
+                   np.atleast_2d.
+    beam_force_vabs (6,) beam force in VABS order; provide exactly one of this
+                    or beam_strain.
+    beam_strain    (6,) prescribed beam strain in VABS order.
+    frame          str output frame: 'global' (y1,y2,y3), 'material'
+                   (ply/fiber frame), else laminate/local frame
+                   (1=beam,2=tangent,3=normal). Default 'global'.
+    elem_order     int plate element order (2 or 3), default 2.
+    n_per_layer    int through-thickness plate sub-elements per ply, default
+                   2.
+  Returns:
+    dict: 'stress' (P,6) [S11,S22,S33,S23,S13,S12]; 'strain' (P,6) same order;
+    'elem' (P,) int projected element; 'xi' (P,) arc parameter; 'depth' (P,)
+    through-thickness depth z+frac*h (0=OML); 'proj' (P,2) projected point on
+    reference curve.
+  Notes:
+    XOR-validates the force/strain inputs (ValueError otherwise). Calls
+    _macro_recovery, builds a1/a2/a3/a4 warping combos as in
+    recover_shell_strains. Per-layup warp dict via
+    compute_ABD_matrix(...,return_warping=True)[2]. cen=corners.mean(axis=0).
+    Per point: _project_point -> (e,xi,pr); inward normal (n2,n3)=(t3,-t2)
+    flipped so it points toward centroid; depth z=(p-pr).n. Assembles shell
+    strain ss via hermite_strain_operators at the single xi. Reference-frac
+    handling: fr=bundle.get('frac',0), h_elem[layup]=sum(thick); if fr,
+    converts ref-membrane back to OML via ss[0:3]-=fr*he*ss[3:6], and
+    evaluates plate_stress_at_depth(warp,ss,z+fr*he) -> (Gam,Sig,ply). Frame
+    transforms: 'global' rotates Voigt via R=[[1,0,0],[0,t2,n2],[0,t3,n3]] and
+    _voigt_to_tensor/_tensor_to_voigt; 'material' uses rotation_6x6(-ply)@Sig
+    and rotation_6x6(ply).T@Gam. depth stored is z+fr*he.
+
+................................................................................
+ _recov   [private/internal]
+................................................................................
+  _recov(st)
+
+  Build the 6x6 Timoshenko derivative-recovery matrix from a beam-strain
+  vector, matching the OpenSG solid `utils.recov`. Encodes the cross products
+  that couple force/moment components under axial differentiation.
+  Args:
+    st             (6,) array-like beam strain [eps11, gamma12, gamma13, k1,
+                   k2, k3]; only components st[0..5] are read to fill the skew
+                   blocks.
+  Returns:
+    R : (6,6) numpy array. Upper-left 3x3 skew block from st[3],st[4],st[5];
+    R[3:6,3:6] copies R[0:3,0:3]; lower rows add st[0],st[1],st[2] cross
+    terms.
+  Notes:
+    Pure numpy, no JAX. R[0,1]=st[5],R[0,2]=-st[4];
+    R[1,0]=-st[5],R[1,2]=st[3]; R[2,0]=st[4],R[2,1]=-st[3]; then
+    R[3:6,3:6]=R[0:3,0:3]; R[3,1]=st[2],R[3,2]=-st[1];
+    R[4,0]=-st[2],R[4,2]=st[0]; R[5,0]=st[1],R[5,1]=-st[0]. Called by
+    _macro_recovery with the fixed unit strain [1,0,0,0,0,0].
+
+................................................................................
+ _macro_recovery   [private/internal]
+................................................................................
+  _macro_recovery(Ceff_srt, st)
+
+  From the Timoshenko 6x6 and a prescribed beam strain, produce the EB macro
+  strain st_m and the first/second Timoshenko derivative-recovery terms
+  st_cl1/st_cl2, each Q-corrected for the EB<->shear coupling. Mirrors the
+  corrected OpenSG-FEniCS stress_recov.local_strain.
+  Args:
+    Ceff_srt       (6,6) Timoshenko stiffness matrix (VABS/sorted order).
+    st             (6,) prescribed beam strain [eps11, gamma12, gamma13, k1,
+                   k2, k3]; cast to float via np.asarray.
+  Returns:
+    (st, st_m, st_cl1, st_cl2): st the unchanged (6,) input; st_m (4,)
+    Q-corrected EB macro strain [eps11,k1,k2,k3]; st_cl1 (4,) first-derivative
+    recovery; st_cl2 (4,) second-derivative recovery.
+  Notes:
+    Comp=inv(Ceff_srt). st_m initialized as st[[0,3,4,5]]. F_1d=Ceff_srt@st is
+    the equivalent beam force. R1=_recov([1,0,0,0,0,0]) is the FIXED recovery
+    operator (not recov(st)). Iterates F1=R1@F_1d, F2=R1@F1, F3=R1@F2;
+    stTk=Comp@Fk; st_clk picks indices [0,3,4,5]; gammak picks [1,2]. Applies
+    _Q@gamma corrections: st_m+=_Q@gamma1, st_cl1+=_Q@gamma2,
+    st_cl2+=_Q@gamma3, where _Q is the module-level 4x2
+    [[0,0],[0,0],[0,-1],[1,0]]. The old recov(st+e0)/R2/R3 terms are
+    deliberately dropped.
+
+................................................................................
+ _voigt_to_tensor   [private/internal]
+................................................................................
+  _voigt_to_tensor(s)
+
+  Convert a 6-component Voigt strain/stress vector into the symmetric 3x3
+  tensor.
+  Args:
+    s              (6,) Voigt vector ordered [11,22,33,23,13,12] (i.e.
+                   s[0..5]).
+  Returns:
+    (3,3) numpy symmetric tensor [[s0,s5,s4],[s5,s1,s3],[s4,s3,s2]].
+  Notes:
+    Inverse of _tensor_to_voigt. Used by stress_at_points for global-frame
+    rotation.
+
+................................................................................
+ _tensor_to_voigt   [private/internal]
+................................................................................
+  _tensor_to_voigt(T)
+
+  Convert a symmetric 3x3 tensor back into a 6-component Voigt vector.
+  Args:
+    T              (3,3) symmetric tensor.
+  Returns:
+    (6,) numpy Voigt vector [T00,T11,T22,T12,T02,T01] = [11,22,33,23,13,12].
+  Notes:
+    Inverse of _voigt_to_tensor. Reads T[1,2],T[0,2],T[0,1] for the shear
+    entries.
+
+................................................................................
+ _project_point   [private/internal]
+................................................................................
+  _project_point(corners, rc, p)
+
+  Project a 2D cross-section point onto the 1D reference mesh, returning the
+  nearest element, its arc parameter, and the projected point.
+  Args:
+    corners        (Nc,2) reference-curve corner-node coordinates (y2,y3).
+    rc             (E,2) reduced-cell connectivity: end-node indices per
+                   element.
+    p              (2,) query point (y2,y3).
+  Returns:
+    (elem, xi, proj): elem int nearest element index; xi float clamped arc
+    parameter in [0,1]; proj (2,) projected point on the reference curve A +
+    xi*(B-A).
+  Notes:
+    Loops all elements; for each A=corners[rc[e,0]], B=corners[rc[e,1]],
+    t=clip((p-A).AB/|AB|^2,0,1) (t=0 if degenerate |AB|^2<1e-30); tracks
+    minimum Euclidean distance d=hypot(p-proj). Returns
+    best[1],best[2],best[3] (drops the distance).
+
+================================================================================
+ FILE:  opensg_jax/fe_jax/msg_solver.py
+================================================================================
+
+................................................................................
+ gauss_legendre_01   [public]
+................................................................................
+  gauss_legendre_01(n_pts)
+
+  Return Gauss-Legendre quadrature points and weights mapped from [-1,1] onto
+  [0,1].
+  Args:
+    n_pts          int number of quadrature points.
+  Returns:
+    (xi, w): xi jnp (n_pts,) points on [0,1] = 0.5*(xi_ref+1); w jnp (n_pts,)
+    weights = 0.5*w_ref.
+  Notes:
+    Wraps numpy.polynomial.legendre.leggauss; returns jnp arrays.
+
+................................................................................
+ compute_element_geometry   [public]
+................................................................................
+  compute_element_geometry(nodes, cells)
+
+  Compute per-element arc length and unit tangent components from the two end-
+  corner nodes.
+  Args:
+    nodes          (Nn,2) node coordinates (y2,y3).
+    cells          (E,k) connectivity; uses first (cells[:,0]) and last
+                   (cells[:,-1]) columns, so works for 3-node quadratic and
+                   2-node Hermite cells.
+  Returns:
+    (L_e, xdot2, xdot3): L_e jnp (E,) arc length; xdot2 jnp (E,) = dy2/L;
+    xdot3 jnp (E,) = dy3/L (unit tangent components).
+  Notes:
+    dy2=nodes[n2,0]-nodes[n1,0], dy3=nodes[n2,1]-nodes[n1,1],
+    L=sqrt(dy2^2+dy3^2). Returns jnp arrays.
+
+................................................................................
+ assemble_kkt   [public]
+................................................................................
+  assemble_kkt(Dhh_sparse, Dc_matrix)
+
+  Build the augmented KKT matrix [[Dhh, Dc],[Dc^T, 0]] with constraints scaled
+  by 1e8, patching any all-zero rows with a unit diagonal.
+  Args:
+    Dhh_sparse     scipy sparse (N,N) Hessian; converted to COO if it lacks a
+                   'row' attribute.
+    Dc_matrix      constraint matrix; if shape (4,N) it is transposed to
+                   (N,4). n_con = Dc.shape[1].
+  Returns:
+    (A_aug, N, n_con, emp): A_aug scipy CSR (N+n_con, N+n_con) augmented KKT;
+    N int primal dofs; n_con int constraints; emp (m,) indices of originally-
+    empty rows given a unit diagonal (caller must zero their RHS).
+  Notes:
+    Dc scaled Dc_sc=Dc*1e8. Off-diagonal blocks placed via np.where: bottom-
+    left rows offset by +N, top-right cols offset by +N. Empty rows found via
+    np.bincount(aug_row)==0 and augmented with ones on the diagonal. Called by
+    solve_fluctuation_field.
+
+................................................................................
+ solve_fluctuation_field   [public]
+................................................................................
+  solve_fluctuation_field(Dhh_sparse, RHS_dense, Dc_matrix)
+
+  Solve the constrained KKT system [[Dhh,Dc],[Dc^T,0]][V0;lam]=[RHS;0] for the
+  EB fluctuation field and the D1 correction, using pypardiso.
+  Args:
+    Dhh_sparse     scipy sparse (N,N) Hessian.
+    RHS_dense      (N, n_cases) dense right-hand side (typically 4 EB load
+                   cases).
+    Dc_matrix      constraint matrix passed to assemble_kkt.
+  Returns:
+    (V0, D1, A_augmented): V0 jnp (N, n_cases) fluctuation field; D1 jnp
+    (n_cases,n_cases) = -(V0^T @ RHS); A_augmented scipy CSR full KKT (reused
+    for the Timoshenko RHS).
+  Notes:
+    Stacks R_aug=[RHS; zeros(n_con,n_cases)], zeroes emp rows, solves via
+    pypardiso.spsolve. V0 = first N rows of the solution. Returns jnp arrays
+    for V0/D1.
+
+................................................................................
+ prepare_v1_rhs   [public]
+................................................................................
+  @jax.jit
+def prepare_v1_rhs(V0, Dhl, Dll, Dle_dense, Psi, Dc)
+
+  Compute the right-hand side for the V1 (shear-warping) solve, projected onto
+  range(Dhh) via the constraint/null-space matrices Psi and Dc, plus
+  intermediate products reused in the 6x6 assembly.
+  Args:
+    V0             (N, n_cases) EB fluctuation field from
+                   solve_fluctuation_field.
+    Dhl            (N,N) coupling operator (h-l block).
+    Dll            (N,N) l-l block operator.
+    Dle_dense      (N, n_cases) dense l-e coupling.
+    Psi            (N, n_con) null-space / projection basis.
+    Dc             (N, n_con) constraint matrix.
+  Returns:
+    (bb, DhlV0, DhlTV0Dle, V0DllV0): bb (N,n_cases) projected V1 RHS; DhlV0
+    (N,n_cases)=Dhl@V0; DhlTV0Dle (N,n_cases)=Dhl.T@V0+Dle_dense; V0DllV0
+    (n_cases,n_cases)=V0.T@Dll@V0.
+  Notes:
+    JAX-jitted. b_unproj=DhlV0 - DhlTV0Dle. Projection:
+    tmp=inv(Psi.T@Dc)@(Psi.T@b_unproj); bb=Dc@tmp - b_unproj. Outputs feed
+    finalize_v1_and_compute_deff.
+
+................................................................................
+ finalize_v1_and_compute_deff   [public]
+................................................................................
+  @jax.jit
+def finalize_v1_and_compute_deff(V1s_raw, V0, D_eff, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)
+
+  Project the raw V1 shear-warping field onto the constraint null space and
+  assemble the final sorted 6x6 Timoshenko stiffness via the Schur/static-
+  condensation of the shear DOFs.
+  Args:
+    V1s_raw        (N, n_cases) unprojected V1 shear-warping solution from the
+                   KKT solve.
+    V0             (N, n_cases) EB fluctuation field.
+    D_eff          (4,4) effective EB stiffness (Hessian of the EB energy);
+                   symmetrized internally.
+    V0DllV0        (n_cases,n_cases) from prepare_v1_rhs.
+    DhlV0          (N,n_cases) from prepare_v1_rhs.
+    DhlTV0Dle      (N,n_cases) = Dhl.T@V0+Dle_dense, from prepare_v1_rhs.
+    Psi            (N, n_con) null-space basis.
+    Dc             (N, n_con) constraint matrix.
+  Returns:
+    (S, B_tim, C_tim, V1s): S (6,6) sorted Timoshenko stiffness
+    [EA,GA12,GA13,GJ,EI2,EI3]; B_tim (4,4)=DhlTV0Dle.T@V0; C_tim (4,4)
+    symmetrized shear-energy matrix; V1s (N,n_cases) projected shear-warping
+    field.
+  Notes:
+    JAX-jitted. V1s=V1s_raw - Psi@inv(Dc.T@Psi)@(Dc.T@V1s_raw). D_eff
+    symmetrized 0.5*(D_eff+D_eff.T) to remove the antisymmetric taper artifact
+    (Dirichlet segment) that inflates C26/C35 shear-bending coupling.
+    Ainv=inv(D_eff). C_unsym=V0DllV0 + V1s.T@(DhlV0+DhlTV0Dle);
+    C_tim=0.5*(C_unsym+C_unsym.T). Q_base=[[0,0],[0,0],[0,-1],[1,0]] (same as
+    _Q); Q_tim=Ainv@Q_base. Ginv=Q_tim.T@(C_tim - B_tim.T@Ainv@B_tim)@Q_tim;
+    G_tim=inv(Ginv) (shear stiffness GA12/GA13). Y_tim=B_tim.T@Q_tim@G_tim;
+    A_tim=D_eff+Y_tim@Ginv@Y_tim.T. S assembled placing A_tim into rows/cols
+    {0,3,4,5}, G_tim into {1,2}, Y_tim into the shear-extension/shear-bending
+    couplings; row 0=[A00,Y[0,:],A[0,1:4]], rows 1:3=[Y.T[:,0],G,Y.T[:,1:4]],
+    rows 3:6=[A[1:4,0],Y[1:4,:],A[1:4,1:4]].
+
+================================================================================
+ FILE:  opensg_jax/fe_jax/msg_materials.py
+================================================================================
+
+................................................................................
+ build_stiffness_6x6   [public]
+................................................................................
+  build_stiffness_6x6(E, G, nu):
+
+  Build the 6x6 orthotropic stiffness matrix C = S^{-1} from engineering
+  elastic constants, in the Voigt ordering [s11,s22,s33,s23,s13,s12].
+  Args:
+    E              array-like [E1, E2, E3] — Young's moduli along the three
+                   material axes
+    G              array-like [G12, G13, G23] — shear moduli
+    nu             array-like [nu12, nu13, nu23] — Poisson ratios
+  Returns:
+    (6,6) numpy stiffness C = inv(S), Voigt order
+    [sigma11,sigma22,sigma33,sigma23,sigma13,sigma12]. Off-diagonal compliance
+    uses symmetric minor relations (S[1,2]=-v23/E2 etc.).
+  Notes:
+    Assembles the 6x6 compliance S (diagonal 1/E, 1/G; coupling -v12/E1,
+    -v13/E1, -v23/E2 symmetrized) then inverts via np.linalg.inv. Note S
+    coupling terms use the row modulus (not the symmetrized minor form), which
+    is the standard orthotropic convention given v_ij/E_i = v_ji/E_j.
+
+................................................................................
+ rotation_6x6   [public]
+................................................................................
+  rotation_6x6(theta_deg):
+
+  Return the 6x6 Voigt stress/stiffness rotation matrix for an in-plane fiber
+  angle (about the e3 axis), matching the OpenSG R_sig convention.
+  Args:
+    theta_deg      float — fiber angle in degrees (rotation about the through-
+                   thickness e3 axis)
+  Returns:
+    (6,6) numpy rotation matrix R in Voigt order [11,22,33,23,13,12]; used as
+    R @ C @ R.T to rotate stiffness.
+  Notes:
+    Hard-coded standard R_sig with c=cos, s=sin, cs=c*s. Rows/cols 3-4 (23,13)
+    carry the [[c,s],[-s,c]] transverse-shear rotation; the 11/22/12 block
+    carries the c^2,s^2,+-2cs terms. e33 row is identity (rotation about e3).
+
+................................................................................
+ rotated_stiffness_6x6   [public]
+................................................................................
+  rotated_stiffness_6x6(E, G, nu, theta_deg):
+
+  Convenience wrapper: build the orthotropic 6x6 stiffness and rotate it to a
+  ply's fiber angle.
+  Args:
+    E              [E1,E2,E3] Young's moduli
+    G              [G12,G13,G23] shear moduli
+    nu             [nu12,nu13,nu23] Poisson ratios
+    theta_deg      float — ply fiber angle in degrees
+  Returns:
+    (6,6) numpy rotated stiffness R @ C @ R.T in Voigt order
+    [11,22,33,23,13,12].
+  Notes:
+    Calls build_stiffness_6x6 then rotation_6x6; returns R @ C @ R.T.
+
+................................................................................
+ compute_ABD_matrix   [public]
+................................................................................
+  compute_ABD_matrix(thick, angles_deg, mat_names, material_db, n_per_layer=1, return_warping=False, elem_order=2, shear_refined=False, z_ref=0.0):
+
+  Compute the plate ABD stiffness of a laminate via the MSG 1D through-
+  thickness SG (variational, quadratic-Lagrange, exact for uniform layers),
+  optionally the 8x8 Reissner-Mindlin stiffness with the transverse-shear
+  block, plus mass and warping fields.
+  Args:
+    thick          list[float] — layer thicknesses, ordered bottom(OML) to
+                   top(IML)
+    angles_deg     list[float] — fiber angle (deg) per layer
+    mat_names      list[str] — material-db key per layer
+    material_db    dict {name: {E:[3], G:[3], nu:[3], rho or density: float}}
+                   — material properties
+    n_per_layer    int, default 1 — number of Lagrange sub-elements per
+                   physical layer (1 is exact for uniform layers)
+    return_warping bool, default False — if True also return the warping dict
+                   for plate dehomogenization
+    elem_order     int, default 2 — element polynomial order p (2=quadratic
+                   3-node, 3=cubic); p+1 nodes, max(3,p+1)-pt Gauss
+    shear_refined  bool, default False — if True return the 8x8 RM plate
+                   stiffness [[A,B,0],[B,D,0],[0,0,G]] instead of the 6x6
+    z_ref          float, default 0.0 — through-thickness coordinate of the
+                   reference surface measured from the bottom/OML face; the 1D
+                   mesh origin is shifted by z_ref (0=OML, sum(thick)/2=mid,
+                   sum(thick)=IML)
+  Returns:
+    Without return_warping: (stiff, mass). stiff = (6,6) MSG ABD (default) or
+    (8,8) RM stiffness when shear_refined. mass = [mu, mu*xm3, i22_m]
+    (mass/area, first moment mu*centroid, second moment). With return_warping:
+    (stiff, mass, warp) where warp is a dict {V0:(ndofs,6), node_x:(n_node,),
+    elem_layer:(n_elem,), C_layers:list of (6,6), elem_order:p, angles:list}.
+  Notes:
+    Variational MSG: gamma_h=B, macro map Ge (rows: eps11<-1+x*k11 col0/3,
+    eps22<-1+x*k22 col1/4, gamma12<-1+x*k12 col2/5). Assembles K=B^T C B,
+    F_load=B^T C Ge, D_ee=Ge^T C Ge over 3-node quad elements with Gauss.
+    Rigid-body nullspace (3 constant translations) removed by PROJECTION
+    P=I-QQ^T (not penalty, to avoid swamping near-zero soft plies like gelcoat
+    E=10) with K_proj=P K P + beta QQ^T, beta=max|diag K|.
+    V0=solve(K_proj,-(P@F_load)) then P@V0; D_eff=D_ee+V0^T F_load. Calls
+    rotated_stiffness_6x6, _plate_B; shear_refined calls
+    transverse_shear_stiffness and plate_8x8. rho read via 'rho' then
+    'density' fallback.
+
+................................................................................
+ plate_dehom_strain   [public]
+................................................................................
+  plate_dehom_strain(warp, shell_strain, n_eval_per_elem=3):
+
+  Plate dehomogenization: recover the pointwise 3D strain and stress through
+  the laminate thickness from the 6 shell/plate strains, via the MSG plate
+  warping (strain concentration).
+  Args:
+    warp           dict — the warping bundle from compute_ABD_matrix(...,
+                   return_warping=True) {V0, node_x, elem_layer, C_layers,
+                   elem_order, angles}
+    shell_strain   (6,) array — plate/shell strains [eps11, eps22, gamma12,
+                   kappa11, kappa22, kappa12] at the reference surface for one
+                   arc point
+    n_eval_per_elem int, default 3 — through-thickness sample points per
+                    element (linspace over xi in [-1,1])
+  Returns:
+    (z, Gam, Sig): z (npts,) through-thickness coordinate (0=bottom/OML face
+    after mesh shift); Gam (npts,6) 3D strain [e11,e22,e33,g23,g13,g12]; Sig
+    (npts,6) 3D stress = C_layer @ Gam in the ply Voigt order.
+  Notes:
+    Strain concentration SC = B @ V0e + Ge (6x6), Gam = SC @ shell_strain, Sig
+    = Ck @ Gam. Ge built inline (eps11 col0/3, eps22 col1/4, gamma12 col2/5
+    with x_q the through-thickness coord). Exact transpose of the ABD-building
+    operators, so INT Gam:Sig dz == shell_strain^T ABD shell_strain to machine
+    precision. Calls _plate_B. npts = n_elem * n_eval_per_elem.
+
+................................................................................
+ shift_abd_reference   [public]
+................................................................................
+  shift_abd_reference(ABD, z0):
+
+  Parallel-axis shift of a 6x6 plate ABD to a reference surface moved by z0
+  along the through-thickness axis, keeping the e3 (through-thickness)
+  direction unchanged.
+  Args:
+    ABD            (6,6) array-like — plate ABD in Voigt order
+                   [eps11,eps22,gamma12,kappa11,kappa22,kappa12]
+    z0             float — reference-surface offset along through-thickness
+                   (e.g. laminate thickness to reach the IML)
+  Returns:
+    (6,6) numpy ABD_new = Tinv.T @ ABD @ Tinv referenced at the shifted
+    surface.
+  Notes:
+    Membrane strain transforms as m -> m + z0*k, so T=[[I,z0 I],[0,I]],
+    Tinv[:3,3:]=-z0*I, and ABD_new = Tinv^T ABD Tinv. Preferred over reversing
+    the layup (reversal flips e3 and breaks material-orientation agreement;
+    see check-e3-orientation).
+
+................................................................................
+ plate_stress_at_depth   [public]
+................................................................................
+  plate_stress_at_depth(warp, shell_strain, z):
+
+  Recover the 3D strain/stress at one specific through-thickness depth z
+  (0=OML) from the 6 shell strains, using the same MSG plate strain
+  concentration as plate_dehom_strain but at a single point.
+  Args:
+    warp           dict — warping bundle from compute_ABD_matrix(...,
+                   return_warping=True), must include 'angles' to get the ply
+                   angle
+    shell_strain   (6,) array — plate/shell strains
+                   [eps11,eps22,gamma12,kappa11,kappa22,kappa12]
+    z              float — through-thickness depth, clamped to [0, total
+                   thickness]
+  Returns:
+    (Gam, Sig, angle): Gam (6,) 3D strain [e11,e22,e33,g23,g13,g12]; Sig (6,)
+    3D stress = Ck @ Gam (laminate/ply Voigt order); angle float fiber angle
+    (deg) of the ply at depth z (0.0 if angles absent). Caller can rotate to
+    material frame via rotation_6x6(-angle) @ Sig.
+  Notes:
+    Locates the sub-element e containing z (first element whose right node_x
+    >= z-1e-12, else last), maps to xi via clip(2*(z-xl)/he-1, -1, 1). Gam =
+    (B @ V0e + Ge) @ ss with Ge using z directly. h = node_x[-1]. Calls
+    _plate_B.
+
+................................................................................
+ compute_ABD_CLT   [public]
+................................................................................
+  compute_ABD_CLT(thick, angles_deg, mat_names, material_db):
+
+  Compute the 6x6 ABD via Classical Lamination Theory (reference at the bottom
+  face) for comparison against the MSG plate result.
+  Args:
+    thick          list[float] — layer thicknesses
+    angles_deg     list[float] — fiber angles (deg) per layer
+    mat_names      list[str] — material-db key per layer
+    material_db    dict — {name:{E:[3],G:[3],nu:[3]}} (uses only
+                   E1,E2,G12,nu12 — plane-stress reduced Q)
+  Returns:
+    (6,6) numpy ABD = block [[A,B],[B,D]] where A=sum Qr*(zt-z), B=0.5 sum
+    Qr*(zt^2-z^2), D=(1/3) sum Qr*(zt^3-z^3).
+  Notes:
+    Plane-stress reduced stiffness Q (denom=1-v12^2 E2/E1) rotated by the 3x3
+    in-plane Voigt R3 (Qr=R3 Q R3^T). Reference z starts at 0 (bottom face).
+    Ignores transverse shear entirely (classical Kirchhoff).
+
+................................................................................
+ _lagrange_dN   [private/internal]
+................................................................................
+  _lagrange_dN(nodes_xi, xi):
+
+  Evaluate the derivatives d/dxi of the 1D Lagrange basis functions at a
+  reference coordinate xi for arbitrary node positions.
+  Args:
+    nodes_xi       array-like length n — reference-coordinate positions of the
+                   Lagrange nodes (e.g. linspace(-1,1,p+1))
+    xi             float — reference coordinate in [-1,1] at which to evaluate
+                   the basis derivatives
+  Returns:
+    (n,) numpy array dN of dN_i/dxi at xi.
+  Notes:
+    Standard product-rule Lagrange derivative: for each node i sums over j!=i
+    the term 1/(xi_i-xi_j) times the product over m!=i,j of (xi-xi_m)/(xi_i-
+    xi_m). Reference-space derivative; caller scales by 2/he for physical.
+
+................................................................................
+ _plate_B   [private/internal]
+................................................................................
+  _plate_B(nodes_xi, xi, he):
+
+  Build the through-thickness warping strain operator gamma_h (the B matrix)
+  mapping nodal fluctuation DOFs to 3D strain at reference point xi in a 1D
+  element of physical length he.
+  Args:
+    nodes_xi       array-like length p+1 — Lagrange node reference positions
+    xi             float — reference coordinate in [-1,1]
+    he             float — physical thickness of the element (Jacobian 2/he)
+  Returns:
+    (6, 3*(p+1)) numpy matrix B. Nonzero rows: row2 (eps33) from dv3/dx, row3
+    (gamma23) from dv2/dx, row4 (gamma13) from dv1/dx.
+  Notes:
+    gamma_h(v) = [0,0,dv3/dx,dv2/dx,dv1/dx,0]. dN = _lagrange_dN * (2/he) maps
+    reference->physical derivative. DOF layout is [v1,v2,v3] interleaved per
+    node (node n_idx occupies cols 3*n_idx..3*n_idx+2).
+
+================================================================================
+ FILE:  opensg_jax/fe_jax/msg_transverse_shear.py
+================================================================================
+
+................................................................................
+ transverse_shear_stiffness   [public]
+................................................................................
+  transverse_shear_stiffness(thick, angles, mat_names, mat_db, nz_per_ply=40, coupled=True):
+
+  Compute the laminate 2x2 transverse-shear stiffness (the G block of the RM
+  8x8 plate law) by the FSDT/3D-equilibrium shear-flow method with
+  complementary-energy equivalence, plus a shear-stress recovery function.
+  Args:
+    thick          list[float] — layer thicknesses
+    angles         list[float] — fiber angles (deg) per layer
+    mat_names      list[str] — material-db key per layer
+    mat_db         dict — {name:{E,G,nu}} material properties
+    nz_per_ply     int, default 40 — through-thickness sample points per ply
+                   (endpoint excluded)
+    coupled        bool, default True — True uses the coupling-aware MSG form
+                   (full 2x2 from Gbar^{-1}(z)); False uses the per-direction
+                   diagonal FSDT/Whitney(1973) energy-equivalence stiffness
+  Returns:
+    (Gmat, recover, aux): Gmat (2,2) transverse-shear stiffness
+    (rows/cols=[2g13,2g23]); recover(z,V)->[sigma13,sigma23] callable for
+    stress recovery; aux = (zs, gx/Dx, gy/Dy) with zs (N,) sample coords,
+    gx/Dx (N,) and gy/Dy (N,) the normalized shear-flow shapes ghat.
+  Notes:
+    Per direction (nested function `direction`): neutral axis z_na = sum(Q z
+    dz)/sum(Q dz); D_eff = sum(Q zc^2 dz); shear flow g = cumsum(Q zc dz);
+    Whitney F = D_eff^2 / sum(g^2/G dz). coupled=True builds M_ab = sum(ghat_a
+    ghat_b [Gbar^{-1}]_ab dz) with ghat=g/D_eff and Gmat = inv(M);
+    coupled=False gives diag(Fx,Fy). Coincides when Gbar diagonal (G13=G23).
+    Validates isotropic -> (5/6) G h. Calls _ply_Q_and_G. dz = htot/len(zs)
+    uniform.
+
+................................................................................
+ plate_8x8   [public]
+................................................................................
+  plate_8x8(D6, Gmat):
+
+  Assemble the Reissner-Mindlin 8x8 plate stiffness [[A,B,0],[B,D,0],[0,0,G]]
+  from the 6x6 Kirchhoff ABD and the 2x2 transverse-shear block.
+  Args:
+    D6             (6,6) array — Kirchhoff ABD (the [[A,B],[B,D]] block)
+    Gmat           (2,2) array — transverse-shear stiffness block G
+  Returns:
+    (8,8) numpy matrix P with P[:6,:6]=D6, P[6:,6:]=Gmat, zeros elsewhere (no
+    membrane/bending-shear coupling).
+  Notes:
+    Trivial block-diagonal assembly; the transverse-shear block is decoupled
+    from the membrane/bending block.
+
+................................................................................
+ _ply_Q_and_G   [private/internal]
+................................................................................
+  _ply_Q_and_G(E, G, nu, theta_deg):
+
+  Compute a rotated ply's reduced in-plane bending stiffnesses Qbar11, Qbar22
+  and its 2x2 transverse-shear stiffness Gbar for use in the shear-flow
+  construction.
+  Args:
+    E              [E1,E2,E3] Young's moduli (E3 unused)
+    G              [G12,G13,G23] shear moduli
+    nu             [nu12,nu13,nu23] Poisson ratios (only nu12 used)
+    theta_deg      float — ply fiber angle in degrees
+  Returns:
+    (Qb11, Qb22, Gbar): Qb11 float rotated reduced stiffness in x (ply-1/beam)
+    direction; Qb22 float in y (ply-2/tangent) direction; Gbar (2,2) numpy
+    rotated transverse-shear stiffness = R2 diag(G13,G23) R2^T.
+  Notes:
+    Reduced Q from plane stress: den=1-v12*v21 with v21=v12*E2/E1; Q11=E1/den,
+    Q22=E2/den, Q12=v12 E2/den, Q66=G12. Qbar via standard
+    c^4/s^4/2(Q12+2Q66)s^2c^2 transforms. Transverse shear Gp=diag(G13,G23)
+    rotated by R2=[[c,s],[-s,c]].
+
+================================================================================
+ FILE:  opensg_jax/fe_jax/msg_rm_timo.py
+================================================================================
+
+................................................................................
+ assemble_all   [public]
+................................................................................
+  assemble_all(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True, shear="mitc"):
+
+  Assemble all RM cross-section system matrices (Dhh, Dhe, Dee, Dhl, Dll, Dle,
+  Dhh_mem) for the 5-DOF C0 Reissner-Mindlin model, applying the chosen
+  transverse-shear integration scheme.
+  Args:
+    nodes          (Nn,2) array — cross-section node coordinates (y2,y3)
+    elems          list/array of element connectivities (each length p+1)
+    layup_per_elem list — per-element layup key into D_by/G_by
+    D_by           dict {layup: (6,6)} — plate ABD (D-energy/bending)
+                   stiffness per layup
+    G_by           dict {layup: (2,2)} — transverse-shear stiffness per layup
+    k22_e          array (n_elem,) — per-element curvature
+    p              int, default 1 — element polynomial order
+    reduced        bool, default True — legacy flag (superseded by `shear`);
+                   not directly used to branch
+    shear          str, default 'mitc' — 'mitc' selective assumed-strain
+                   (full-integrate gamma13=omega2, tie gamma23), 'mitc_both'
+                   (Eq.12 g13 + tie both rows), 'reduced' (uniform reduced int
+                   of whole G-energy), 'full' (full int, locks thin walls)
+  Returns:
+    (Dhh, Dhe, Dee, Dhl, Dll, Dle, Dhh_mem): Dhh (ndof,ndof) fluctuation
+    stiffness incl. transverse-shear G; Dhe (ndof,4); Dee (4,4); Dhl
+    (ndof,ndof); Dll (ndof,ndof); Dle (ndof,4); Dhh_mem (ndof,ndof)
+    membrane/bending-only (no G). ndof=5*Nn.
+  Notes:
+    D-energy full-integrated with (p+1)-pt Gauss (xgD); G-energy scheme-
+    dependent. MITC (is_mitc): tying points ty=[0] for p=1 (constant assumed
+    gamma23) or +-1/sqrt(3) for p=2 with linear Nas; BG23bar (and BG13bar if
+    tie_both) re-interpolated from tying-point samples, then full-integrated.
+    g13mode='eq12' and tie_both only when shear=='mitc_both'. Non-MITC path
+    uses reduced (xgG=max(1,p)-pt) or full Gauss. Macro ops _macro_BD,
+    _macro_BG from msg_rm. Uses np.ix_ scatter with DOF map g=[5nd..5nd+4].
+
+................................................................................
+ build_C_Psi   [public]
+................................................................................
+  build_C_Psi(nodes, elems, p=1, w2null=False):
+
+  Build the RM rigid-body kernel Psi (zero-strain modes) and its conjugate
+  constraint matrix C for the 5-DOF C0 cross-section model, with optional
+  extra omega2-director null-mode handling for soft cores.
+  Args:
+    nodes          (Nn,2) array — node coordinates (y2,y3)
+    elems          list/array of element connectivities
+    p              int, default 1 — element polynomial order
+    w2null         bool/str, default False — False: 4 modes; True: add 5th
+                   constant-omega2 mode + <omega2> constraint; 'id': constrain
+                   EVERY omega2 DOF (4+Nn modes, full omega2 subspace)
+  Returns:
+    (C, Psi): C (nm, ndof) constraint matrix (rows = conjugate averages); Psi
+    (ndof, nm) rigid kernel. nm = 4 (default), 5 (w2null=True), or 4+Nn
+    (w2null='id'). ndof=5*Nn.
+  Notes:
+    4 base modes: 3 translations (w1,w2,w3=const) + twist (w2=-y3, w3=y2,
+    omega1=-1). Constraints C rows: <w1>,<w2>,<w3>,<omega1> integrated with
+    (p+1)-pt Gauss; w2null=True adds <omega2>. w2null='id' adds identity
+    rows/cols constraining each omega2 DOF (Eq.85/100 V1s projection otherwise
+    misses omega2 soft-core near-null mode). Calls _lagrange, _shape.
+
+................................................................................
+ timoshenko_rm   [public]
+................................................................................
+  timoshenko_rm(nodes, elems, layup_per_elem, D_by, G_by, k22_e, p=1, reduced=True, return_warp=False, shear="mitc_both"):
+
+  Run the full RM (V1) Timoshenko cross-section homogenization and return the
+  6x6 Timoshenko stiffness (and 4x4 EB), reusing the validated msg_solver KKT
+  condensation.
+  Args:
+    nodes          (Nn,2) array — node coordinates
+    elems          list/array — element connectivity
+    layup_per_elem list — per-element layup keys
+    D_by           dict {layup: (6,6)} plate ABD
+    G_by           dict {layup: (2,2)} transverse-shear stiffness
+    k22_e          array (n_elem,) per-element curvature
+    p              int, default 1 — element order
+    reduced        bool, default True — passed through to assemble_all
+                   (legacy)
+    return_warp    bool, default False — if True also return Deff, V0 and the
+                   V1 warping
+    shear          str, default 'mitc_both' — transverse-shear integration
+                   scheme passed to assemble_all
+  Returns:
+    Default: (C6, Deff) with C6 (6,6) Timoshenko stiffness
+    [EA,GA12,GA13,GJ,EI2,EI3] and Deff (4,4) EB stiffness. If return_warp:
+    (C6, Deff, V0, V1) with V0 (ndof,4) EB fluctuation and V1 (ndof,4) shear
+    warping (V_aug[:n,:]).
+  Notes:
+    Pipeline: assemble_all -> build_C_Psi (4 modes) -> Dc=C.T ->
+    solve_fluctuation_field(coo(Dhh),-Dhe,Dc) gives V0,D1,A_aug; Deff=Dee+D1;
+    prepare_v1_rhs (JAX) builds bb and reusable blocks; R_v1 stacks bb with 4
+    zero rows; pypardiso.spsolve(A_aug,R_v1) for V_aug;
+    finalize_v1_and_compute_deff returns C6. Uses scipy coo_matrix, jax.numpy,
+    pypardiso (imported inline). G stays in the EB warping (Eq.85 style).
+
+................................................................................
+ _elem_BD_BG_BL   [private/internal]
+................................................................................
+  _elem_BD_BG_BL(nodes_xi, xi, X, dN_unused, k22, p, g13mode="omega"):
+
+  Build the per-element RM cross-section strain operators at a reference point
+  xi: EB warping strain BDq, transverse-shear BGq, and shear-warping BLq, plus
+  geometry, for the 5-DOF/node C0 RM model.
+  Args:
+    nodes_xi       array-like — Lagrange node reference positions (from
+                   _lagrange(p))
+    xi             float — reference coordinate at which to evaluate
+    X              (p+1, 2) array — element node coordinates (y2,y3) in the
+                   cross-section plane
+    dN_unused      unused placeholder (pass None) — kept for signature
+                   compatibility
+    k22            float — element curvature -1/R (from k22_e)
+    p              int — element polynomial order (1 linear, 2 quadratic);
+                   npn=p+1 nodes, 5 DOF/node
+    g13mode        str, default 'omega' — 'omega': 2*eps13 = omega2 (algebraic
+                   baseline); 'eq12': full Eq.12 warping-derivative form
+                   2*eps13 = -wdot1*xdot3/(2 xdot2) + omega2/xdot2 (used by
+                   the mitc_both scheme)
+  Returns:
+    (BDq, BGq, BLq, geo): BDq (6,5*npn) EB warping strain (eps_h) operator;
+    BGq (2,5*npn) transverse-shear [2eps13,2eps23]; BLq (6,5*npn) shear-
+    warping (eps_l); geo=(x2,x3,t2,t3,Jac).
+  Notes:
+    5 DOFs/node ordered [w1,w2,w3,omega1,omega2]. Geometry: dxds=dNr@X,
+    Jac=hypot(dxds), dN=dNr/Jac, tangent (t2,t3), normal (n2,n3)=(t3,-t2). t2f
+    floors 1/xdot2 to +-1e-3 for vertical walls. BDq rows: eps22<-t.dw(w2,w3),
+    eps33<-dw1, kappa22<-+dN(omega1) [sign fixed: was -dN causing +66% shear-
+    bend over-count], gamma12<-dN(omega2)+0.5 k22 dN(w1). BGq: row0=omega2 (or
+    eq12 deriv form), row1=n.dw-omega1. BLq (Kirchhoff-style on w): eps11=w1,
+    2eps12=t.w, kappa12 terms with 2 t3 dw / -2 t2 dw and -0.5 k22 t w. Calls
+    _shape.
+
+================================================================================
+ FILE:  opensg_jax/fe_jax/msg_hermite.py
+================================================================================
+
+................................................................................
+ hermite_shape_functions   [public]
+................................................................................
+  hermite_shape_functions(xi_q, L):
+
+  Evaluate the cubic Hermite C1 shape functions and their first and second
+  physical (arc) derivatives at quadrature points for a 1D element of length
+  L.
+  Args:
+    xi_q           (Q,) array — reference coordinates in [0,1] (quadrature
+                   points)
+    L              float — element arc length; slope shape functions scaled by
+                   L so slope DOFs are physical dw/ds
+  Returns:
+    (phi_val, phi_d1, phi_d2), each (Q,4): phi_val the value shapes, phi_d1 =
+    d/ds, phi_d2 = d^2/ds^2, columns ordered [v0, s0, v1, s1] (value & slope
+    at the two corners).
+  Notes:
+    psi1=1-3z^2+2z^3, psi2=z-2z^2+z^3, psi3=3z^2-2z^3, psi4=-z^2+z^3 (z=xi).
+    Slope columns multiplied by L (value) / divided by L or L^2 (derivatives)
+    to give physical arc derivatives. Pure JAX (jnp.stack).
+
+................................................................................
+ make_hermite_mesh   [public]
+................................................................................
+  make_hermite_mesh(nodes_2d, cells):
+
+  Extract the corner-node coordinates and 2-node corner connectivity for the
+  Hermite C1 shell from a quadratic (3-node) line mesh; the midside node is
+  used only for geometry/curvature.
+  Args:
+    nodes_2d       (N,2) array — quadratic mesh node coordinates (even rows
+                   are corners)
+    cells          (n_elem, 3) array — quadratic (3-node) connectivity
+  Returns:
+    (corners, hcells): corners (n_elem+1, 2) corner coordinates (last==first
+    if closed); hcells (n_elem, 2) corner connectivity [corner_i,
+    corner_{i+1}].
+  Notes:
+    corners = nodes_2d[0::2] (every other row). hcells built as consecutive
+    [arange(n_elem), arange(1,n_elem+1)] as int64. Assumes sequential corner
+    ordering.
+
+................................................................................
+ build_hermite_dof_map   [public]
+................................................................................
+  build_hermite_dof_map(n_corner, is_closed=True):
+
+  Build the periodic (or open) DOF map for Hermite corners with 6 DOF/node
+  (value+slope for w1,w2,w3), merging the last corner into the first when the
+  section is closed.
+  Args:
+    n_corner       int — number of corner nodes
+    is_closed      bool, default True — if True merge last corner's 6 DOFs
+                   into the first (periodic)
+  Returns:
+    (dof_map, n_unique): dof_map (n_corner*6,) int64 DOF indices (last
+    corner's 6 DOFs remapped to 0..5 when closed); n_unique = n_corner-1
+    (closed) or n_corner (open).
+  Notes:
+    Merges value & slope DOFs of the last corner onto the first for
+    periodicity. Straightforward index construction.
+
+................................................................................
+ compress_hermite_dofs   [public]
+................................................................................
+  compress_hermite_dofs(dof_map, hcells):
+
+  Renumber the (possibly merged) Hermite corner DOFs to a contiguous unique
+  numbering and remap the cell connectivity accordingly.
+  Args:
+    dof_map        (n_corner*6,) int — DOF map from build_hermite_dof_map
+    hcells         (n_elem,2) int — corner connectivity
+  Returns:
+    (reduced_cells, n_primal): reduced_cells (n_elem,2) connectivity in
+    compressed node ids; n_primal = len(unique)*6 total DOF count.
+  Notes:
+    master = dof_map[::6]//6 gives per-corner master node id; unique + forward
+    map f2r renumber; reduced_cells = f2r[master[hcells]].
+
+................................................................................
+ hermite_strain_operators   [public]
+................................................................................
+  hermite_strain_operators(n0, n1, k22, L, xd2, xd3, xi_q):
+
+  Build the per-element MSG shell strain operators (eps_h bending fluctuation,
+  eps_l Timoshenko shear-warping, eps_e macro EB map) and the macro-strain map
+  Ge at the quadrature points, for a Hermite C1 element. Single source of
+  truth shared by assembly and dehomogenization.
+  Args:
+    n0             (2,) array — first corner coordinate (y2,y3)
+    n1             (2,) array — second corner coordinate
+    k22            float — element curvature (-1/R; flat=0)
+    L              float — element arc length
+    xd2            float — tangent component dx2/ds
+    xd3            float — tangent component dx3/ds
+    xi_q           (Q,) array — reference quadrature coordinates in [0,1]
+  Returns:
+    (eps_h, eps_l, eps_e, Ge): eps_h(u) callable u(12,)->(Q,6); eps_l(u)
+    callable (Q,6); eps_e(ue) callable ue(4,)->(Q,6) = Ge@ue; Ge (Q,6,4) macro
+    EB strain map. Shell strain order
+    [eps11,eps22,gamma12,kappa11,kappa22,kappa12].
+  Notes:
+    Uses hermite_shape_functions; DOF component indices _I1/_I2/_I3 pick
+    w1/w2/w3 value+slope from the 12-DOF vector. Rn = x2 xd3 - x3 xd2 (moment
+    arm). Ge nonzeros: eps11<-EA(col0)+kappa about x3 (col2)/x2(col3),
+    gamma12<-Rn*twist(col1), kappa11<-xd2/xd3(col2/3), kappa12<--2+k22/2*Rn
+    (col1). eps_h: eps22=xd2 dw2+xd3 dw3, gamma12=dw1, kappa22=-k22 xd2 dw2 +
+    xd3 d2w2 - k22 xd3 dw3 - xd2 d2w3, kappa12=(k22/2) dw1. eps_l: eps11=w1,
+    eps22=xd2 dw2+xd3 dw3, gamma12=xd2 w2+xd3 w3, kappa12=2 xd3 dw2 - 2 xd2
+    dw3 + (k22/2)(xd2 w2+xd3 w3). Pure JAX (differentiable).
+
+................................................................................
+ assemble_system_matrices_hermite   [public]
+................................................................................
+  assemble_system_matrices_hermite(corners, hcells, reduced_cells, ABD_elems, k22_elems, L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal, dof_map=None, return_blocks=False):
+
+  Assemble the global MSG-shell system matrices (Dhh, Dhe, Dee, Dll, Dhl, Dle)
+  for the Hermite C1 elements by autodiff of the strain energy, vmapped over
+  elements and scattered into sparse COO.
+  Args:
+    corners        (n_unique,2) array — corner coordinates
+    hcells         (E,2) int — corner connectivity (indexes corners)
+    reduced_cells  (E,2) int — compressed node ids for DOF scatter
+    ABD_elems      (E,6,6) array — per-element plate ABD
+    k22_elems      (E,) array — per-element curvature
+    L_elems        (E,) array — element arc lengths
+    xd2_elems      (E,) array — tangent dx2/ds per element
+    xd3_elems      (E,) array — tangent dx3/ds per element
+    xi_q           (Q,) array — quadrature coords in [0,1]
+    W_q            (Q,) array — quadrature weights
+    n_primal       int — total number of primal DOFs (6*n_unique)
+    dof_map        (E,12) int, default None — optional override of the
+                   node->DOF scatter (splits slope DOFs at T-junctions); None
+                   uses 6*reduced_cells+arange(6)
+    return_blocks  bool, default False — if True return per-element dense
+                   blocks instead of assembled globals
+  Returns:
+    If return_blocks: (D_hh_b, D_he_b, D_ee_b, D_ll_b, D_hl_b, D_le_b) per-
+    element blocks shaped
+    (E,12,12),(E,12,4),(E,4,4),(E,12,12),(E,12,12),(E,12,4). Else assembled:
+    (Dhh, Dhe, Dee, Dll, Dhl, Dle) with Dhh/Dll/Dhl sparse COO
+    (n_primal,n_primal), Dhe/Dle sparse COO (n_primal,4), Dee dense (4,4)=sum
+    over elements.
+  Notes:
+    Per element (get_elem, vmapped): dV_q=L*W_q; quadratic forms q(e,f)=0.5
+    einsum(f ABD f dV), bilinear b via jax grad/jacfwd.
+    D_hh=hessian(q(eps_h)), D_he=jacfwd(grad(b(eps_h,eps_e))),
+    D_ee=hessian(q(eps_e)), D_ll=hessian(q(eps_l)), D_hl=cross(eps_h,eps_l),
+    D_le=cross(eps_l,eps_e). Scatter via jsparse.COO with row/col index arrays
+    rs/cs (square) and rr/cr (rect to 4). Note Dhe here is the eps_h/eps_e
+    coupling (unlike the RM module's Dhe naming). Calls
+    hermite_strain_operators.
+
+................................................................................
+ build_constraints_hermite   [public]
+................................................................................
+  build_constraints_hermite(corners, hcells, reduced_cells, L_elems, xd2_elems, xd3_elems, xi_q, W_q, n_primal, n_unique, dof_map=None):
+
+  Build the 4xN constraint matrix C (three translation averages + derivative
+  twist) and the Nx4 rigid-body kernel Psi in the Hermite C1 DOF layout,
+  keeping the V1 RHS orthogonal to Psi so no interior penalty is needed.
+  Args:
+    corners        (n_unique,2) array — corner coordinates
+    hcells         (E,2) int — corner connectivity
+    reduced_cells  (E,2) int — compressed node ids
+    L_elems        (E,) array — arc lengths
+    xd2_elems      (E,) array — tangent dx2/ds
+    xd3_elems      (E,) array — tangent dx3/ds
+    xi_q           (Q,) array — quadrature coords in [0,1]
+    W_q            (Q,) array — quadrature weights
+    n_primal       int — total DOFs
+    n_unique       int — number of unique corner nodes
+    dof_map        (E,12) int, default None — optional split-slope DOF map
+                   (twist slope uses each element's own tangent); None uses
+                   shared-C1 nodal-average tangent
+  Returns:
+    (C, Psi): C jnp (4, n_primal) constraint matrix (<w1>,<w2>,<w3>,
+    derivative twist); Psi jnp (n_primal, 4) rigid kernel (3 translations on
+    value DOFs + twist).
+  Notes:
+    C rows integrate value shapes iv=int(phi) for <w1..w3>; twist row 3
+    integrates slope shapes idp=int(dphi/ds) as xd3*dw2 - xd2*dw3. Psi:
+    translations set on value DOFs (nd*6+0/2/4); twist value w2=-y3, w3=y2,
+    twist slope from tangent (dof_map=None: normalized nodal-average tang;
+    else per-element xd3/xd2). cdofs helper picks the 6 DOFs per corner. Uses
+    hermite_shape_functions.
+
+................................................................................
+ solve_tw_from_yaml   [public]
+................................................................................
+  solve_tw_from_yaml(yaml_path, reference="OML", frac=None):
+
+  Full Hermite C1 MSG-shell Timoshenko homogenization from an OpenSG YAML
+  cross-section, returning every field (EB, Timo, warping V0/V1, mesh
+  geometry, per-element layups) as a dict bundle — the single TW solve path
+  used by the stiffness wrapper and the dehomogenization.
+  Args:
+    yaml_path      str — path to the OpenSG YAML cross-section file
+    reference      str, default 'OML' — reference surface: 'OML' (nodes are
+                   outer mold line), 'CENTROID'/'MID' (offset inward by half
+                   laminate thickness to material mid-surface), or 'IML'
+                   (offset by full thickness)
+    frac           float or None, default None — fraction of laminate
+                   thickness to offset inward from OML (0=OML,0.5=mid,1=IML);
+                   overrides `reference` when given
+  Returns:
+    dict bundle with keys: EB (4,4), Timo (6,6 sorted), Btim (4,4?), Ctim, V0
+    (n_primal,4), V1 (n_primal,4), corners (n_unique,2), red_cells (E,2), k22
+    (E,), L (E,), xd2 (E,), xd3 (E,), xi_q, W_q, ABD_elems (E,6,6),
+    layup_per_elem (list), layup_db, material_db, elements (1-based
+    connectivity), n_primal, frac.
+  Notes:
+    Loads YAML (load_yaml), computes plate ABD once per unique laminate
+    signature (thick,angles,mat_names) with compute_ABD_matrix, applies
+    shift_abd_reference by frac*thickness when non-OML. Offsets nodes inward
+    along material e3 (offset_oml_to_iml, element_e3_from_yaml) when frac. k22
+    via mesh_curvature. Hermite corners = cells[:,[0,-1]] renumbered. 4-pt
+    Gauss (gauss_legendre_01(4)). Assembles matrices, builds C/Psi, solves V0
+    (solve_fluctuation_field), Ceff=Dee+D1, prepare_v1_rhs, pypardiso.spsolve
+    for V_aug, finalize_v1_and_compute_deff for C6/V1. Heavy inline imports
+    (numpy, jax, pypardiso, msg_mesh, msg_materials, msg_solver).
+
+................................................................................
+ timoshenko_from_yaml   [public]
+................................................................................
+  timoshenko_from_yaml(yaml_path, reference="OML", frac=None):
+
+  Thin wrapper around solve_tw_from_yaml that returns just the Euler-Bernoulli
+  and Timoshenko stiffness matrices for an OpenSG YAML cross-section
+  (webbed/multi-component sections handled since every YAML element is kept).
+  Args:
+    yaml_path      str — path to the OpenSG YAML cross-section
+    reference      str, default 'OML' — reference surface ('OML' or
+                   'IML'/'MID'/'CENTROID'; see solve_tw_from_yaml)
+    frac           float or None, default None — inward offset fraction
+                   overriding `reference`
+  Returns:
+    (EB, Timo, complete): EB (4,4) Euler-Bernoulli stiffness [EA,GJ,EI2,EI3];
+    Timo (6,6) sorted Timoshenko stiffness [EA,GA12,GA13,GJ,EI2,EI3]; complete
+    bool always True (all YAML elements used).
+  Notes:
+    Calls solve_tw_from_yaml and returns out['EB'], out['Timo'], True.
+
+================================================================================
+ FILE:  examples/TW-paper/xsec_paper/xsec_5v6_master.py
+================================================================================
+
+................................................................................
+ load_ring   [public]
+................................................................................
+  load_ring(path):
+
+  Load a 1-D contour shell YAML and assemble the full ring input bundle
+  (geometry, connectivity, per-edge section ids, material stiffnesses, and
+  computed hoop curvature) for the ring SG solvers.
+  Args:
+    path           str path to a 1-D contour shell YAML with 'nodes','elements
+                   ','elementOrientations','sections','materials','sets'.
+  Returns:
+    dict with rx (m,3), cells (Ne,2 0-based), rsub (Ne,) section id per edge,
+    re3 (Ne,3) normal, D_by/G_by section-keyed stiffness dicts, k22 (Ne,),
+    ax=2, cross=[0,1], nweb=int((rsub>0).sum()).
+  Notes:
+    Uses _row for robust parsing; decrements 1-based cells; extracts
+    re2=ori[:,3:6], re3=ori[:,6:9] from elementOrientations. Maps element-set
+    labels (1-based) to section indices via setname_to_sec +
+    d['sets']['element']. Materials via _norm_materials; D_by,G_by via
+    _material_by_section(center_ref=True). k22 via
+    segment_element.compute_k22(centroids, re2, re3, cells). Beam axis fixed
+    to index 2, cross=[0,1].
+
+................................................................................
+ load_solid   [public]
+................................................................................
+  load_solid(path):
+
+  Load a 2-D solid cross-section 6x6 reference from a text file and symmetrize
+  it.
+  Args:
+    path           str path to a whitespace-delimited 6x6 stiffness matrix
+                   (VABS-convention .txt).
+  Returns:
+    (6,6) symmetrized matrix 0.5*(M + M.T).
+  Notes:
+    loadtxt called twice (once each for M and M.T).
+
+................................................................................
+ ring_6dof   [public]
+................................................................................
+  ring_6dof(R):
+
+  Compute the symmetrized cross-section Timoshenko 6x6 using formulation A:
+  the 6-DOF independent-omega3 element with an element-wise Lagrange
+  multiplier enforcing the drilling constraint, tying only gamma_23.
+  Args:
+    R              ring bundle dict from load_ring (uses
+                   rx,cells,rsub,re3,D_by,G_by,k22,ax,cross).
+  Returns:
+    (6,6) symmetrized Timoshenko stiffness.
+  Notes:
+    Calls run_ring_indep.ring_indep(..., shear='mitc4_g23', lam_space='elem')
+    and symmetrizes via 0.5*(C+C.T).
+
+................................................................................
+ ring_5dof   [public]
+................................................................................
+  ring_5dof(R):
+
+  Compute the symmetrized cross-section Timoshenko 6x6 using formulation B:
+  the 5-DOF drilling-ELIMINATED MITC element
+  (segment_element_general.ring_general), tying only gamma_23.
+  Args:
+    R              ring bundle dict from load_ring.
+  Returns:
+    (6,6) symmetrized Timoshenko stiffness.
+  Notes:
+    Calls ring_general(...,shear='mitc4_g23'), discards its V0/V1 (takes only
+    C6), and symmetrizes 0.5*(C+C.T).
+
+................................................................................
+ pct   [public]
+................................................................................
+  pct(S, ref):
+
+  Compute the per-entry percent error of a 6x6 stiffness S vs a reference ref,
+  masking out entries below a relative cutoff (returns NaN there).
+  Args:
+    S              (6,6) computed stiffness.
+    ref            (6,6) reference stiffness (2-D solid).
+  Returns:
+    (6,6) array of 100*(S-ref)/ref where |ref|>cutoff, else NaN.
+  Notes:
+    cutoff = |ref|.max()/1e3; mask m=|ref|>cut; entries below cut set to NaN
+    to avoid dividing by near-zero couplings.
+
+................................................................................
+ show   [public]
+................................................................................
+  show(name, S, So, C6, C5):
+
+  Pretty-print the diagonal Timoshenko terms and per-term %err of both the
+  6-DOF Lagrange and 5-DOF MITC formulations against the 2-D solid reference
+  for one case.
+  Args:
+    name           str case label for the header.
+    S              the ring bundle dict from load_ring (accepted but not used
+                   in the body).
+    So             (6,6) 2-D solid reference stiffness.
+    C6             (6,6) 6-DOF Lagrange gamma23 stiffness.
+    C5             (6,6) 5-DOF MITC gamma23 stiffness.
+  Returns:
+    None (prints to stdout).
+  Notes:
+    Prints solid diagonal (labelled EA,GA2,GA3,GJ,EI2,EI3 via module LBL),
+    both formulation diagonals, and diagonal %err =
+    100*(C[i,i]-So[i,i])/So[i,i] for each. Note the 'S' arg is vestigial.
+
+................................................................................
+ _row   [private/internal]
+................................................................................
+  _row(r):
+
+  Normalize a heterogeneous YAML row (nested single-element list, space/comma-
+  separated string, or numeric list) into a flat list of floats.
+  Args:
+    r              a YAML row: list, single-element [str] list,
+                   whitespace/comma-separated str, or list of numbers.
+  Returns:
+    list[float] of the parsed row values.
+  Notes:
+    Unwraps a length-1 list whose sole element is a str; splits strings on
+    commas/whitespace; otherwise floats each element. Used by load_ring to
+    tolerate the various node/element/orientation encodings.
+
+................................................................................
+ _norm_materials   [private/internal]
+................................................................................
+  _norm_materials(mats):
+
+  Normalize a materials list so every entry has the nested {'name',
+  'elastic':{E,G,nu}} shape expected by _material_by_section.
+  Args:
+    mats           list of material dicts, either already-nested ('elastic'
+                   key present) or flat (top-level E,G,nu).
+  Returns:
+    list of material dicts each shaped {'name':...,
+    'elastic':{'E':..,'G':..,'nu':..}}.
+  Notes:
+    Pass-through when 'elastic' present, else wraps flat E/G/nu into an
+    'elastic' sub-dict.

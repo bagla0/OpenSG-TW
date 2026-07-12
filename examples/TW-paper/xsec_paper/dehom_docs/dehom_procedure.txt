@@ -41,6 +41,299 @@ CONVENTIONS
   reference surface        frac = 0 OML / 0.5 mid / 1 IML  (matches the homogenization)
 
 
+
+
+================================================================================
+ THEORY -- MITC TRANSVERSE-SHEAR TYING (FROM FEM BASICS, CODE-ANCHORED)
+================================================================================
+
+================================================================================
+  MITC TRANSVERSE-SHEAR TREATMENT IN THE 6-DOF RM CROSS-SECTION ELEMENT
+  A first-principles, code-anchored theory note for dehom_procedure.txt
+  Files: mitc_rm_segment/segment_indep.py, segment_element_general.py
+================================================================================
+
+--------------------------------------------------------------------------------
+0.  SCOPE AND NOTATION
+--------------------------------------------------------------------------------
+This element is a 4-node bilinear quadrilateral living on the mid-surface of a
+thin composite wall.  Each node carries SIX DOF: [w1,w2,w3, om1,om2,om3] -- three
+warping/displacement components and three director rotations, with om3 the
+DRILLING rotation kept as an INDEPENDENT nodal unknown (segment_indep.py:1-23,
+NDOF6=6 at line 28).  This is the distinguishing feature: the general operator
+(segment_element_general.py) ELIMINATES om3 by the in-plane-symmetry relation
+  om3 = S/(2 C33) - (C3b/C33) om_b,     C33 = n.b3,
+which is SINGULAR on flat walls where C33 = n.b3 = 0 (the shear-web / GA3 carrier)
+(segment_indep.py:3-7).  segment_indep keeps om3 alive and re-imposes the symmetry
+weakly through the finite drilling residual DR (lines 13-19, 102-112).
+
+Natural (parent) coordinates are (xi,eta) in [-1,1]^2.  The surface frame
+(a1,a2,n) and the metric G = [[a1.g_r, a1.g_s],[a2.g_r, a2.g_s]] (g_r=Jxi,
+g_s=Jeta) are built in _surf_frame / _metric_at (segment_element_general.py:
+456-467).  The two transverse-shear strain rows are stored as
+  BG* rows:  row 0 = 2*gamma_13,  row 1 = 2*gamma_23,
+with the three additive operators BGe (beam-strain / eps_bar columns, shape 2x4),
+BGh (nodal-value / "h" columns), BGl (chain-rule / "l" columns) -- see the
+transverse-shear block segment_indep.py:86-100.
+
+--------------------------------------------------------------------------------
+1.  WHY A LOW-ORDER DISPLACEMENT ELEMENT LOCKS IN TRANSVERSE SHEAR
+--------------------------------------------------------------------------------
+Reissner-Mindlin kinematics let the director rotate independently of the
+mid-surface normal.  The transverse shear is the MISMATCH between the slope of
+the transverse displacement and the rotation:
+  2*gamma_a3 = w_{3,a} + theta_a      (a = 1,2, schematically).
+In the bilinear Q4 element the transverse displacement w3 is bilinear, so its
+in-plane derivative w_{3,a} is, ALONG a given natural direction, LINEAR in the
+OTHER coordinate (e.g. w_{3,xi} ~ affine in eta).  The rotation theta_a is itself
+bilinear, hence FULL (bilinear) in both coordinates.  The two terms of gamma
+therefore live in DIFFERENT polynomial spaces: a differentiated-displacement term
+that is only partial-order, added to a full-order rotation term.
+
+Now drive the thickness t -> 0.  The bending energy scales like t^3 and the shear
+energy like t; to keep total energy finite the element must enforce gamma -> 0
+POINTWISE at every integration point.  Because the two contributions cannot cancel
+term-by-term (different polynomial content), demanding gamma=0 at the 2x2 Gauss
+points imposes SPURIOUS constraints on the rotation DOF that are not present in
+the continuum -- the element cannot represent pure bending without parasitic
+shear, so it "locks": stiffness blows up, computed shear/bending stiffness
+collapses.  This is the classical transverse-shear locking of the
+displacement-based Q4 plate.
+
+In the present cross-section context the pathology surfaces as a THICK-wall
+under-prediction of the shear stiffnesses GA2/GA3 and, in the tapered 3-D
+segment, as an hourglass-like corruption of the shear rows.  The 'full' scheme
+(no treatment) is exactly this untreated element and is documented to LOCK thin
+(segment_element_general.py:437).
+
+--------------------------------------------------------------------------------
+2.  THE DVORKIN-BATHE MITC4 REMEDY (ASSUMED NATURAL / COVARIANT STRAIN)
+--------------------------------------------------------------------------------
+Dvorkin & Bathe's cure is to STOP evaluating the transverse-shear strain directly
+from the displacement field at the Gauss points, and instead:
+  (i)  SAMPLE the COVARIANT transverse-shear component at a small set of "tying
+       points" chosen so the offending differentiated-displacement term is
+       field-consistent there (the edge midpoints);
+  (ii) INTERPOLATE (assume) those sampled values back across the element with a
+       lower-order shape so both terms of gamma live in the SAME space.
+This "assumed natural strain" field carries no spurious constraint as t -> 0: the
+element bends freely, locking is removed, and consistency/convergence are retained.
+
+The covariant components are the natural objects to tie because they transform
+with the metric.  In this code the rigorous variant does exactly that
+(segment_element_general.py:475-486, scheme 'mitc4_cov'):
+  cov = G^T @ [2g13; 2g23]              # covariant shears
+  ert = 0.5(1-eta)*cov0|(0,-1) + 0.5(1+eta)*cov0|(0,+1)   # tie e_rt along eta
+  est = 0.5(1-xi )*cov1|(-1,0) + 0.5(1+xi )*cov1|(+1,0)   # tie e_st along xi
+  physical = (G^T)^-1 @ [ert; est]     # np.linalg.solve(_metric_at.T, ...)
+The physical-row shortcut used elsewhere drops the metric transform and ties the
+physical rows directly; on the near-rectangular wall quads here the two agree to
+plotting accuracy.
+
+Exact tying points and blends (identical in both files):
+  gamma_13 (row 0): sampled at (-1,0) and (+1,0), LINEAR in xi
+       g13 = 0.5(1-xi)*r13[(-1,0)] + 0.5(1+xi)*r13[(+1,0)]
+  gamma_23 (row 1): sampled at (0,-1) and (0,+1), LINEAR in eta
+       g23 = 0.5(1-eta)*r23[(0,-1)] + 0.5(1+eta)*r23[(0,+1)]
+Code anchors:
+  _TIE_G13 = [(-1,0),(+1,0)],  _TIE_G23 = [(0,-1),(0,+1)]   segment_indep.py:119-120
+  the 0.5*(1-/+eta) g23 blend                                segment_indep.py:141
+  the 0.5*(1-/+xi ) g13 blend                                segment_indep.py:144
+Batched mirror (assembly-time):
+  tie dict g13m/g13p/g23m/g23p sampled at the four edge midpoints
+                                                              segment_indep.py:270-274
+  g23 / g13 blends in _shear_batch                            segment_indep.py:279-281
+
+Each sampled tying row is a full BG operator row taken from quad_ops_indep's
+output tuple index [4] (that is BGh) evaluated AT the tying point:
+  r23 = [quad_ops_indep(...,tx,te,...)[4][1:2,:] for (tx,te) in _TIE_G23]
+                                                              segment_indep.py:140.
+
+--------------------------------------------------------------------------------
+3.  THE KEY POINT FOR THIS ELEMENT: TIE gamma_23 ONLY ('mitc4_g23')
+--------------------------------------------------------------------------------
+The locking argument of Section 1 requires a PAIRING of a differentiated
+transverse displacement with a rotation IN THE SAME strain row.  With the
+INDEPENDENT drilling om3, the two shear rows of THIS element are NOT symmetric in
+that respect.  Read the covariant rows off segment_indep.py:86-100:
+
+  Row 0  (2*gamma_13):
+    BGh[0,o+i] += yv[i] * D1[a]        # C_3i * w_{i|1}   (differentiated disp, xi)
+    BGh[0,o+3] += x12 * N[a]           # C_2a * om_a  (a=... x12=a2.e_ax)
+    BGh[0,o+4] += x22 * N[a]
+    BGh[0,o+5] += x32 * N[a]           # +C_23 * om3  = x_{3;2} om3   <-- ALGEBRAIC
+  Row 1  (2*gamma_23):
+    BGh[1,o+i] += yv[i] * D2[a]        # C_3i * w_{i|2}   (differentiated disp, eta)
+    BGh[1,o+3] += -x11 * N[a]
+    BGh[1,o+4] += -x21 * N[a]
+    BGh[1,o+5] += -x31 * N[a]          # -C_13 * om3  = -x_{3;1} om3
+
+On the PRISMATIC ring, the transverse (axial) direction is eta.  The
+differentiated-displacement content of row 0 (gamma_13) reduces to the
+CIRCUMFERENTIAL derivative w_{i|1}, and the physically active shear-web / GA3
+content enters row 0 ALGEBRAICALLY through the director term x_{3;2}*om3
+(line 99) -- exactly the role that om2 plays in the eliminated formulation.  A
+strain row that is purely ALGEBRAIC in the directors (om2/om3, N[a] shape, no
+in-plane derivative on the rotation) carries NO gradient-vs-rotation
+polynomial-order mismatch.  It therefore CANNOT lock and needs NO tying.
+
+Only row 1 (gamma_23) pairs a DIFFERENTIATED displacement w_{i|2} (the D2[a]
+factor, line 94 -- derivative along the axial/eta direction) against the
+bilinear rotation columns.  This is the genuine locking pairing.  Hence the
+element ties ONLY gamma_23: scheme 'mitc4_g23' (segment_indep.py:136).  In
+_mitc_shear_indep this is the else-branch that leaves g13 at its full Gauss value:
+  g13 = ops[4][0:1, :]                 # gamma_13 UNTIED
+                                       segment_indep.py:145-146
+  g13 = BGh_gauss[:, 0:1, :]           # batched equivalent, segment_indep.py:283
+
+WHY TYING gamma_13 IS HARMFUL, NOT MERELY UNNECESSARY.
+The gamma_13 row's om3 term x_{3;2}*om3 is a LEGITIMATE, physical drilling/director
+stiffness -- it is how the flat GA3-carrier wall (where C33=0) supplies its
+transverse-shear-vs-drilling coupling.  Dvorkin-Bathe tying REPLACES the
+pointwise row by a two-point edge-midpoint average that is LINEAR in xi.  Applied
+to an algebraic (already field-consistent) row it does not remove a spurious
+constraint -- there is none -- it instead UNDER-INTEGRATES / ALIASES the real
+director content: the edge-midpoint sampling coarsens x_{3;2}*om3, de-penalizes
+the drilling mode, and admits an hourglass.  The code states the measured damage:
+tying gamma_13 gives GA3 low by -29/-47% on the thin square (segment_indep.py:
+126-128), and the assembler docstring quantifies both aliasing schemes:
+  'mitc4_both' -31/-50% GA3,  'mitc4_g23' -15/-30% GA2, vs 'full' -4..-6%
+                                       (segment_indep.py:308-311).
+So on this 6-DOF element the correct minimal treatment is: tie the row that can
+lock (gamma_23), leave the algebraic row (gamma_13) fully integrated.
+
+--------------------------------------------------------------------------------
+4.  THE FOUR SCHEMES
+--------------------------------------------------------------------------------
+Dispatched in _mitc_shear_indep / _shear_batch (segment_indep.py:123-153, 277-291);
+the general element's registry is
+  SHEAR_SCHEMES = ("mitc4_both","mitc4_g23","mitc4_cov","reduced","full")
+                                       (segment_element_general.py:453).
+
+  'full'        No treatment.  Both shear rows integrated pointwise at the 2x2
+                Gauss points (BGt = BGh, segment_indep.py:339).  With the
+                independent om3 BOTH rows keep their full algebraic director
+                content, so 'full' is the ACCURATE default here (-4..-6% GA on the
+                thin square) even though a pure displacement plate would lock.
+                Default of assemble_segment_indep (shear="full", line 304).
+
+  'mitc4_g23'   Tie ONLY gamma_23 at (0,+-1) linear in eta; leave gamma_13 at its
+                Gauss value (segment_indep.py:141,145-146).  The prismatic-element
+                analogue -- removes the only locking pairing, preserves the
+                algebraic GA3 director content.  On the ring this is inert (Sec 5).
+
+  'mitc4_wonly' FIELD-CONSISTENT PARTIAL tying: tie BOTH rows at the standard
+                Dvorkin-Bathe points BUT restore every ROTATION column
+                (om1,om2,om3 = local DOF 3,4,5) to its full-integration value:
+                  rot[6a+3 : 6a+6] = True;  BGt[:,rot] = ops[4][:,rot]
+                                       (segment_indep.py:148-152; batched 285-290).
+                This ties away the w-GRADIENT/rotation order mismatch (the true
+                locking term is the displacement columns) WITHOUT de-penalizing the
+                algebraic director content.  It is the general-geometry safeguard
+                for cases where gamma_13 also acquires a w-gradient term under taper.
+
+  'mitc4_both'  Naive full Dvorkin-Bathe: tie BOTH rows including the rotation
+                columns (segment_indep.py:142-144).  ABLATION ONLY -- it aliases
+                the drilling shear (-31/-50% GA3) and is retained purely to
+                demonstrate the failure (docstring line 137).
+
+The general (om3-eliminated) element additionally exposes 'mitc4_cov' (rigorous
+covariant tying with the (G^T)^-1 metric transform, segment_element_general.py:
+475-486) and 'reduced' (single centre-point evaluation of both rows, line 473).
+Note the general file's caveat (lines 446-450): the tapered-square GA2 != GA3
+asymmetry is NOT a tying defect but an INCOMPLETE taper strain expression in
+BGe/BGh/BGl; tying an incomplete g13 merely exposes it -- the fix belongs in the
+strain rows, not the tying points.
+
+--------------------------------------------------------------------------------
+5.  NUMERICAL EVIDENCE: THE TIE IS INERT ON THE PRISMATIC RING
+--------------------------------------------------------------------------------
+Because the prismatic ring never locks (Section 3: its gamma_13 shear content is
+algebraic and its gamma_23 pairing is benign on the untapered wall), applying the
+gamma_23 tie changes nothing measurable:
+  'full' == 'mitc4_g23' to < 0.02% on the ring 6x6, and
+  circle: full == tied to 0.2%   (segment_indep.py:311, and the assembler's
+  "no transverse-shear locking is observed untied" note, lines 310-311).
+Mechanically: on the ring the axial (eta) direction is straight and the
+differentiated-displacement term w_{i|2}*D2 of gamma_23 is ALREADY consistent with
+the rotation columns at the Gauss points, so the edge-midpoint average reproduces
+the Gauss value -- the tie is a projection onto a space the strain already
+occupies.  Locking is real ONLY in the 3-D TAPERED segment quads, where taper
+makes the w-gradient term genuinely lower-order than the rotation and the two shear
+contributions no longer cancel pointwise; there 'mitc4_g23' (or the safer
+'mitc4_wonly') is the treatment that matters, while on the ring it is a null
+operation kept for consistency of the code path.
+
+--------------------------------------------------------------------------------
+6.  HOW THE TIED ROW ENTERS THE ELEMENT (BGt SUBSTITUTED FOR BGh, WARP TERM ONLY)
+--------------------------------------------------------------------------------
+The transverse-shear energy uses the 2x2 wall shear modulus Gm.  In
+assemble_segment_indep (segment_indep.py:336-359) the tied shear operator replaces
+BGh in the NODAL ("h") shear term ONLY:
+  BGt = BGh if shear=="full" else _shear_batch(xi,eta,shear,BGh,tie)   (line 339)
+  GB  = Gm @ BGt                                                        (line 342)
+  Ehh += w*( BDh^T D BDh + BGt^T Gm BGt + pen*DRh DRh )                 (line 347)
+  Ehe += w*( BDh^T D BDe + BGt^T Gm BGe + pen*DRh DRe )                 (line 349)
+  Ehl += w*( BDh^T D BDl + BGt^T Gm BGl + pen*DRh DRl )                 (line 354)
+Crucially the BGe (beam-strain / eps_bar) and BGl (chain-rule) shear operators are
+NOT retied -- lines 344,346 keep GBe = Gm@BGe and GBl = Gm@BGl at their Gauss
+values, and only the warp block Ehh/Ehe/Ehl carries BGt.  The tie thus modifies
+the warping-field shear response (the term that can lock) while leaving the
+prescribed-beam-strain and chain-rule couplings exact.  The finite drilling
+residual DR (DRe/DRh/DRl, segment_indep.py:102-112) is penalized with pen =
+pen_beta * max|diag(D)| (lines 294-299, 312-313) in EVERY block, independently of
+the shear scheme -- it, not gamma_13 tying, is what re-imposes the in-plane
+symmetry on the flat GA3-carrier walls without a 1/C33 singularity.
+
+--------------------------------------------------------------------------------
+  SUMMARY
+--------------------------------------------------------------------------------
+Displacement Q4 plates lock because the differentiated transverse displacement and
+the rotation live in different polynomial spaces, forcing spurious gamma=0
+constraints as t->0.  Dvorkin-Bathe MITC4 samples the covariant shear at edge
+midpoints ((-1,0),(+1,0) for gamma_13 linear in xi; (0,-1),(0,+1) for gamma_23
+linear in eta) and interpolates a field-consistent strain.  In THIS 6-DOF element
+the independent drilling om3 makes gamma_13 ALGEBRAIC in the directors (x_{3;2}om3),
+so it neither locks nor needs tying; tying it would ALIAS the legitimate drilling
+stiffness (-31/-50% GA3).  Only gamma_23 pairs a differentiated displacement with a
+rotation, so the element ties ONLY gamma_23 ('mitc4_g23'), with 'mitc4_wonly' as
+the field-consistent general safeguard, 'full' as the accurate default (the
+independent om3 removes the need to tie on prismatic geometry), and 'mitc4_both' as
+the aliasing ablation.  On the prismatic ring the tie is inert (full == mitc4_g23
+to <0.02%); locking is real only in the 3-D tapered segment quads.
+================================================================================
+
+
+================================================================================
+ TYING-SCHEME COMPARISON ON st15  (why tie ONLY gamma_23 -- the numbers)
+================================================================================
+Section 3 above argues gamma_13 is algebraic in the directors on the prismatic
+ring and needs no MITC.  Measured on st15 (BAR-URC station 15): the RM ring
+Timoshenko 6x6 diagonal % difference vs the 2-D solid (VABS .K), per shear scheme,
+alongside the old KL Hermite shell (compare_st15_schemes.py):
+
+  model                EA     GA2    GA3     GJ    EI2    EI3   Frob%
+  KL-Hermite (old)    +1.9   -2.6   -8.8   -3.6   +0.5  +13.7   5.85
+  RM full             +1.9   -3.2  -13.3   -5.1   +0.6  +13.8   5.88
+  RM tie-g23 only     +1.9   -3.1  -13.3   -5.1   +0.6  +13.8   5.87
+  RM tie-both         +1.9   -3.1  -13.3   -5.1   +0.6  +13.8   5.87
+
+  gamma_13-tie effect on the ring 6x6 (max |diag diff|):
+     full    vs tie-g23  : 0.018 %
+     tie-g23 vs tie-both : 0.000 %
+
+  => Tying gamma_13 (tie-g23 -> tie-both) changes the ring 6x6 by 0.000%, and
+     'full' (no tie) differs from tie-g23 by only 0.018%.  gamma_13 needs NO MITC on
+     the prismatic ring -- exactly Section 3.  Production scheme = 'mitc4_g23'
+     (tie only gamma_23), used for BOTH the homogenization and this dehom.
+
+  RM (tie-g23) vs KL Hermite (old): classical EA / EI2 / EI3 and the couplings
+  agree; the RM element is a few points softer on the transverse shear GA2/GA3 and
+  torsion GJ (GA3 -13.3 vs KL -8.8) -- the single-director-shell limit on the ~40 mm
+  carbon cap -- while EI3 +13.8 is the same thick-cap chordwise-bending outlier in
+  both.  The dehom inverts the RM 6x6, so the RM homogenization (not the KL shell)
+  is what the paper reports (Table 13).
+
 ================================================================================
  STEP 1 -- BEAM FORCE  ->  RM SHELL STRAINS ALONG THE CONTOUR
            dehom_rm.stress_at_points / _rm_shell_strain / _macro_fields
