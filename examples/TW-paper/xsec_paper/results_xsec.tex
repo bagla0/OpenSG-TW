@@ -1,0 +1,292 @@
+\section{Results}\label{sec:results}
+The cross-sectional formulation is validated against two-dimensional (2-D) solid
+finite-element homogenization on four examples of increasing complexity: a webbed
+\emph{two-cell} tube (isotropic and anisotropic), a \emph{four-cell elliptic} tube at a
+thin and a thick wall, the \emph{IEA-22-280-RWT} blade cross-section at $r/R=0.2$ with a
+mesh-convergence study, and the \emph{full IEA-22 blade} homogenized at every span
+station. Throughout, the equivalent-beam Timoshenko $6\times6$ is written $C^{b}_{ij}$
+(the superscript $b$ for \emph{beam}), with the diagonal entries the extension
+$C^{b}_{11}$, the transverse shears $C^{b}_{22}$ and $C^{b}_{33}$, the torsion
+$C^{b}_{44}$, and the bendings $C^{b}_{55}$ and $C^{b}_{66}$; it is not to be confused
+with the direction cosine $C^{ab}_{33}$ of Section~\ref{sec:drill}. The reported error is
+$(C_{ij}^{\mathrm{shell}}-C_{ij}^{\mathrm{solid}})/C_{ij}^{\mathrm{solid}}$ on every
+nonzero constant, couplings included. The RM shell applies the $\gamma_{23}$-tie of
+Section~\ref{sec:mitc} in the thin-wall regime; the tie was verified numerically inert
+on the prismatic contour (Section~\ref{sec:mitc}), so no reported number depends on it.
+The laminate reference follows the mesh convention: the tube and ellipse contours lie on
+the wall \emph{mid-surface} (laminate centred on the line), whereas the airfoil contours
+lie on the \emph{outer mold line} (OML) with the laminate stacked inward---the standard
+OpenSG blade convention. The distinction is not cosmetic: centring the laminate on the
+OML contour pushes half the wall outside the true section, and at $r/R=0.2$ turns the
+torsion and flapwise-bending errors from $-2.8\%$ and $+0.9\%$ into $+7.9\%$ and
+$+8.0\%$, the spurious stiffening growing to $16\%$ at the thick mid-span walls.
+
+%----------------------------------------------------------------------------------
+\subsection{Example 1: webbed two-cell tube}\label{sec:res_two}
+A circular tube (mid-wall radius $R=5$~cm, wall $t=4$~mm) with a diametral web forms the
+simplest multi-cell section, and the flat web joining the curved skin is precisely the
+junction that exposes the drilling treatment (Section~\ref{sec:drill}). Two walls are
+considered: an isotropic aluminium wall and a $[-45^\circ]$ single-ply laminate, the
+latter activating the extension--twist and shear--bending couplings.
+Figure~\ref{fig:twocell} shows the two computed meshes. Table~\ref{tab:two} lists every
+nonzero Timoshenko constant for both walls: the RM 6-DOF cross-section reproduces the
+2-D solid within $2.2\%$ on every term---including the anisotropic couplings---and the
+torsion within $0.5\%$.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.6\textwidth]{figures/twocell_mesh.png}
+\caption{Webbed two-cell tube: 2-D solid mesh (filled by material) with the 1-D RM shell
+mid-surface contour overlaid as the dotted centre reference.}\label{fig:twocell}
+\end{figure}
+
+\input{tab_rm/ex1_two.tex}
+
+Table~\ref{tab:twodrill} isolates the torsion against the five-parameter
+drilling-eliminated element of Section~\ref{sec:fivedof}. The two formulations agree on
+the classical and shear constants, but the eliminated element mispredicts the torsion
+$C^{b}_{44}$ by $+8.3\%$, whereas the 6-DOF element holds it to $-0.4\%$: the Lagrange
+constraint recovers the drilling-carried torsional shear that the flat-wall elimination
+\eqref{eq:om3} destroys. The correction is not free---on this contour the eliminated
+element carries $5$ DOF per node ($1{,}195$ total) against $6$ per node plus one
+multiplier per element ($1{,}674$, some $40\%$ more)---but the extra unknowns are what
+keep the flat-web shear channel well-posed. This single term is why a multi-cell
+section---flat webs joining curved skins---requires the constrained six-parameter model.
+
+\input{tab_rm/twodrill.tex}
+
+Figure~\ref{fig:conv2} shows the RM mesh convergence: every diagonal constant is within
+$0.6\%$ of its converged value already at $N=40$ circumferential elements and settled to
+three figures by $N=160$, so the errors of Table~\ref{tab:two} are model error, not
+discretization.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.62\textwidth]{figures/conv_twocell.png}
+\caption{Two-cell tube: RM 6-DOF diagonal \% error vs.\ circumferential element count
+$N$ (isotropic wall).}\label{fig:conv2}
+\end{figure}
+
+%----------------------------------------------------------------------------------
+\subsection{Example 2: elliptic four-cell tube, thin and thick}\label{sec:res_ell}
+The elliptic tube (semi-axes $a=1.0$, $b=0.6$~m) with three internal webs is a four-cell
+section representative of a multi-web blade box (Figure~\ref{fig:ell4}). It is analysed
+at a thin wall ($t/a=0.02$) and a six-times thicker wall ($t/a=0.12$), for the isotropic
+and the $[-45^\circ]$ wall, each against a 2-D solid computed independently at that wall.
+Tables~\ref{tab:elliso} and~\ref{tab:ellm45} give the term-by-term comparison. The
+isotropic section is reproduced within $4.8\%$ (thin) and $3.4\%$ (thick), the torsion
+essentially exactly at both walls. The anisotropic section shows one deliberate
+exception: at the thin wall the chordwise shear $C^{b}_{22}$, carried almost entirely by
+the three off-axis $[-45^\circ]$ webs, is under-predicted by $26\%$---the transverse-shear
+limit of a single-director wall on a thin, fully off-axis web---\emph{thickening the wall restores it} to $-0.6\%$, and the remaining diagonal constants
+stay within $2.7\%$ at both walls. Only the diagonal constants are tabulated for the
+anisotropic section: its sign-odd couplings are reproduced in magnitude but flip sign
+against the present hand-generated solid web mesh, whose through-thickness axis convention
+differs from the shell's---a mesh-orientation artifact, not a shell-formulation error, and
+one the PreVABS solid resolves. The RM cross-section is thus reliable from thin to thick
+walls, with the one documented mechanical exception of chordwise shear through thin
+fully-anisotropic webs.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.72\textwidth]{figures/ell4cell_mesh.png}
+\caption{Elliptic four-cell tube: 2-D solid mesh (filled by material) with the 1-D RM
+shell mid-surface contour overlaid as the dotted centre reference.}\label{fig:ell4}
+\end{figure}
+
+\input{tab_rm/ex2_ell_iso.tex}
+\input{tab_rm/ex2_ell_m45.tex}
+
+%----------------------------------------------------------------------------------
+\subsection{Example 3: IEA-22 blade cross-section at $r/R=0.2$}\label{sec:res_iea}
+The IEA-22 station at $r/R=0.2$ is a three-web box: carbon spar caps, foam-core sandwich
+panels, and glass at the leading and trailing edges, drawn directly from the windIO
+description (Section~\ref{sec:workflow}). The six constituent materials and the six wall
+laminates they form at this station are listed in Tables~\ref{tab:iea_mat}
+and~\ref{tab:iea_layup}. The 2-D solid reference is the PreVABS
+cross-sectional mesh, homogenized by the 2-D-solid MSG solver; Figure~\ref{fig:iea_mesh}
+shows both meshes. Table~\ref{tab:iea020} gives the term-by-term comparison with the OML
+laminate reference: extension and both bendings within $2.2\%$, torsion within $2.8\%$,
+chordwise shear within $2\%$, and flapwise shear within $5.6\%$. The four significant couplings---the extension--bending pair $C^{b}_{15},C^{b}_{16}$, the
+shear--torsion $C^{b}_{34}$, and the bending--bending $C^{b}_{56}$---are reproduced within
+$5\%$ (couplings more than three orders of magnitude below the leading stiffness are
+omitted from the table).
+Figure~\ref{fig:conv_iea} shows the mesh-convergence of the shell contour: extension,
+torsion, and both bendings are settled to a fraction of a percent from the coarsest
+contour ($132$ nodes), and the flapwise shear varies within a $\pm0.8\%$ band---the
+reported differences are the RM model error, not discretization.
+
+\begin{figure}[htbp]\centering
+\begin{minipage}{0.49\textwidth}\centering
+\includegraphics[width=\linewidth]{figures/iea_r020_solid_prevabs.png}\\[1pt]{\small (a) 2-D solid (PreVABS)}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}\centering
+\includegraphics[width=\linewidth]{figures/iea_r020_shell.png}\\[1pt]{\small (b) 1-D RM shell}
+\end{minipage}
+\caption{IEA-22 cross-section at $r/R=0.2$: 2-D solid PreVABS mesh coloured by material
+(left) and 1-D RM shell contour with the material frame (right).}\label{fig:iea_mesh}
+\end{figure}
+
+\input{tab_rm/iea_mat.tex}
+\input{tab_rm/iea_layup_r020.tex}
+\input{tab_rm/iea020.tex}
+
+The five-parameter drilling-eliminated element was also run on the same ring
+($1{,}560$ field DOF against $1{,}872$ plus $315$ element multipliers on the
+$312$-node reference contour): it reproduces the classical constants
+identically and lands \emph{closer} to the solid on the flapwise shear and torsion
+($C^{b}_{33}$ $-3.7\%$ vs.\ $-5.6\%$, $C^{b}_{44}$ $-2.1\%$ vs.\ $-2.8\%$ at $r/R=0.2$).
+This is not superior accuracy but error cancellation: the elimination systematically
+\emph{stiffens} the shear and torsion channels carried by the webs---pure error of
+$+8.3\%$ on the two-cell tube where the wall model itself is nearly exact---and on the
+blade this spurious stiffening partially offsets the RM wall model's genuine shear
+undershoot. The constrained six-parameter element is the formulation-consistent one; its
+residual is the model error itself, not two errors in fortuitous opposition.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.62\textwidth]{figures/conv_iea_r020.png}
+\caption{IEA-22 $r/R=0.2$: RM 6-DOF diagonal \% error vs.\ shell-contour node count
+(OML reference; the 2-D solid reference is fixed).}\label{fig:conv_iea}
+\end{figure}
+
+%----------------------------------------------------------------------------------
+\subsection{Example 4: the full IEA-22 blade}\label{sec:res_blade}
+Homogenizing every span station assembles the blade's complete one-dimensional beam
+model---the same full-blade verification performed for the Kirchhoff--Love cross-section
+in the companion study \cite{bagla2024asc,camarena2025}, here with the single RM 6-DOF
+element throughout. Figure~\ref{fig:span_loft} shows the eight cross-sections lofted
+along the beam reference axis, from $r=0.2$ to $0.9$, coloured by wall region as in
+Figure~\ref{fig:iea_mesh}.
+Table~\ref{tab:fullblade} and Figure~\ref{fig:span} give the RM shell against the 2-D
+solid at all eight stations ($r=0.2$ to $0.9$). Extension and both bendings track the
+solid within $1.5\%$, $1.4\%$, and $3.9\%$ respectively at \emph{every} station, and the
+chordwise shear within $3.3\%$. The flapwise shear and torsion drift from $-5.6\%$ and
+$-2.8\%$ inboard to $-12.3\%$ and $-11.2\%$ at the thin outboard stations---the
+transverse-shear-flexible walls thin faster than the section contracts, and the
+single-director wall progressively under-resolves the through-thickness shear of the
+sandwich panels. Each station homogenizes in about one second.
+
+\begin{figure}[htbp]\centering
+\begin{minipage}[c]{0.86\textwidth}\centering
+\includegraphics[width=\textwidth]{figures/iea_span_loft_noleg.png}
+\end{minipage}\hfill
+\begin{minipage}[c]{0.12\textwidth}\centering
+\includegraphics[width=\textwidth]{figures/iea_span_legend.png}
+\end{minipage}
+\caption{The eight IEA-22 blade cross-sections lofted along the beam reference axis
+(dotted), from $r=0.2$ to $0.9$, coloured by wall region with the legend at
+right.}\label{fig:span_loft}
+\end{figure}
+
+\input{tab_rm/fullblade.tex}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/full_blade_rm_span.png}
+\caption{Full IEA-22 blade: RM 6-DOF cross-section diagonal \% error vs.\ the 2-D solid
+across the span (left: transverse shear and torsion; right: extension and bending), OML
+laminate reference.}\label{fig:span}
+\end{figure}
+
+%----------------------------------------------------------------------------------
+\subsection{Computational cost}\label{sec:res_cost}
+Table~\ref{tab:timing4} tabulates the wall-clock solver cost of the three homogenizers
+on all four examples: the present 1-D RM shell ring, the OpenSG-JAX 2-D solid, and the
+OpenSG-FEniCS 2-D solid on the same mesh. The two independent 2-D solids agree on the
+section constants---a cross-check of the reference itself. At these section sizes the
+solve times are of the same order for all three methods (the compiled JAX solid is even
+marginally faster on the blade sections); the structural advantages of the 1-D contour
+lie elsewhere: it assembles $2$--$4\times$ fewer unknowns, it requires no
+through-thickness meshing of the wall---the entire ply stack enters through the
+$8\times8$ wall law, so the cost is independent of the ply count, whereas the 2-D solid
+mesh grows with every ply resolved---and the complete eight-station blade model is
+assembled in a few seconds end to end.
+
+\input{tab_rm/timing4.tex}
+
+%----------------------------------------------------------------------------------
+\subsection{Example 5: local stress recovery by dehomogenization}\label{sec:res_dehom}
+Cross-sectional analysis is invertible: the same warping fields that condense the
+three-dimensional problem into the beam $6\times6$ can \emph{recover} the pointwise 3-D
+stress from the beam internal loads---the \emph{dehomogenization} step, which is what
+makes a beam model usable for strength. We demonstrate it on a genuinely thick section,
+station~15 of the BAR-URC blade (a carbon spar cap $\sim\!40$~mm thick; the mesh is shown
+in Figure~\ref{fig:st15_mesh}, the constituents and wall laminates in
+Tables~\ref{tab:st15_mat} and~\ref{tab:st15_layup}), and compare against VABS.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/st15_mesh.png}
+\caption{BAR-URC station-15 cross-section: 2-D solid mesh coloured by material (left) and
+the 1-D RM shell contour (right), both from the same source description.}\label{fig:st15_mesh}
+\end{figure}
+
+\input{tab_rm/st15_mat.tex}
+\input{tab_rm/st15_layup.tex}
+
+Homogenization comes first: Table~\ref{tab:st15_homo} lists every nonzero $C_{ij}$ of the RM
+shell against the VABS $.\mathrm{K}$ (section axes) at the three references. The six diagonals
+plus the two structurally significant couplings---the extension--edgewise-bending $C_{16}$
+(the centroid/shear-centre offset, $-3.6\times10^{9}$) and the bend--bend $C_{56}$---are all
+within a few to fifteen percent. The chordwise bending $C_{66}\,(EI_3)$ is the outlier
+($+8$ to $+14\%$), the single hardest mode for a one-director shell on this thick carbon cap,
+and the reason the full-$6\times6$ Frobenius error sits near $6\%$ rather than sub-percent.
+The remaining couplings ($C_{15},C_{23},C_{24},C_{34}$) are three orders below the leading
+stiffness and sit at the parallel-axis reference-sensitivity floor: their percentages swing
+strongly between the OML, centroidal and IML references (most visibly $C_{15}$), which is
+exactly why the comparison is reported at all three.
+
+\input{tab_rm/st15_homo.tex}
+
+Given a beam force $F$, the recovery is two steps
+(Section~\ref{sec:wall}). Crucially, step~1 is driven by the \emph{same} Reissner--Mindlin
+ring used for the homogenization---the $C^0$ drilling-constrained element with the
+MITC-tied $\gamma_{23}$, not a Kirchhoff--Love shell---so the recovered shell strains are
+consistent with the $6\times6$ they invert: the beam strain
+$\bar{\epsilon}=\mathbf{S}^{-1}F$ (with $\mathbf{S}$ the RM Timoshenko stiffness) drives the
+RM warping $V_0,V_1$ through the element strain operator to the eight shell strains
+$[\epsilon_{11},\epsilon_{22},2\epsilon_{12},\kappa_{11},\kappa_{22},2\kappa_{12},
+2\gamma_{13},2\gamma_{23}]$ along the contour. This recovery is the exact adjoint of the
+RM assembly, so it is energy-consistent by construction. At each through-thickness depth the
+same plate structure-gene that built the $8\times8$ then returns the local 3-D stress,
+$\Sigma(\zeta_3)=C(\zeta_3)\,[\mathbf{B}(\zeta_3)V_0+G_e(\zeta_3)]\,\bar{\epsilon}$. We sample
+two paths under the station-15 loads: a through-thickness column at the LP spar-cap centre
+(Figure~\ref{fig:st15_path}) and a circumferential loop around the section.
+Figures~\ref{fig:dehom_cap} and~\ref{fig:dehom_circ} compare the recovered stress against
+the VABS $.\mathrm{SM}$ point cloud.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/st15_path.png}
+\caption{Dehomogenization paths on the station-15 section. (a)~The circumferential loop
+(blue) and the LP spar-cap through-thickness column (red) drawn as line arrows on the full
+section. (b)~The spar-cap laminate zoom, coloured by material, with the through-thickness
+recovery arrow running from the outer (OML) to the inner (IML) mould line.}\label{fig:st15_path}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/dehom_st15_capcentre.png}
+\caption{Spar-cap centre through-thickness: RM shell two-step dehomogenization vs.\ VABS.
+The in-plane $\sigma_{11},\sigma_{22},\sigma_{12}$ track VABS to under $1\%$ (peak
+$\sigma_{11}=-167$~MPa); the transverse components $\sigma_{33},\sigma_{13},\sigma_{23}$
+(note the axis scale, $\lesssim\!0.04$~MPa) are the plate plane-stress
+limit.}\label{fig:dehom_cap}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/dehom_st15_circumferential.png}
+\caption{Circumferential path around the section: the recovered in-plane stress tracks
+VABS everywhere except at the discrete web-junction arc positions, where the 1-D shell
+reference folds.}\label{fig:dehom_circ}
+\end{figure}
+
+The in-plane stress---which carries essentially all of the strength-relevant field on this
+skin-and-cap section---is reproduced to under $1\%$ both through the thickness and around
+the contour, at the cost of the 1-D solve. The transverse-normal $\sigma_{33}$ and the
+transverse shears $\sigma_{13},\sigma_{23}$ are three to four orders of magnitude below the
+in-plane at this station and are reported here at the plate plane-stress limit. We note that
+although the RM warping does carry the wall transverse-shear strains $2\gamma_{13},
+2\gamma_{23}$, the local \emph{constitutive} recovery $\sigma_{13}=G_{13}\gamma_{13}$ does
+not reproduce the cap field: in a spar cap the transverse shear is an equilibrium quantity
+(set by the arc-gradient of the bending stress), so a single-director shell's fixed
+parabolic profile cannot match the sign-changing through-thickness field. A physical
+$\sigma_{13},\sigma_{23}$ recovery requires the equilibrium shear-flow around the contour and
+is left to future work; it does not affect the strength-relevant in-plane result reported
+here. The one remaining caveat is geometric: a path must run along the shell's
+through-thickness direction; a column driven through a cap/web \emph{corner}, where the 1-D
+reference folds, samples the arc rather than the thickness and must instead be taken at the
+cap interior.

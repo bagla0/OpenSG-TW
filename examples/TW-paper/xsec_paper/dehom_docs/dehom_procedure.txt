@@ -1,8 +1,22 @@
 ================================================================================
  MSG THIN-WALLED DEHOMOGENIZATION -- FROM BEAM FORCE TO POINTWISE 3-D STRESS
- opensg_jax/fe_jax/msg_dehom.py :  recover_shell_strains / dehomogenize / stress_at_points
- opensg_jax/fe_jax/msg_materials.py : plate_stress_at_depth / plate_dehom_strain
+ examples/TW-paper/xsec_paper/dehom_rm.py : build_rm_bundle / recover / stress_at_points
+                                            (RM-CONSISTENT step 1 -- see box below)
+ opensg_jax/fe_jax/msg_materials.py : plate_stress_at_depth / plate_dehom_strain (step 2)
+ opensg_jax/fe_jax/msg_dehom.py : the earlier KL-Hermite step 1 (superseded for the RM paper)
 ================================================================================
+
+  WHY RM, NOT KL-HERMITE (2026-07-12).  The paper's homogenization is the Reissner-Mindlin
+  ring (run_ring_indep.ring_indep, shear='mitc4_g23'): a C0 Lagrange 6-DOF element with
+  MITC-tied gamma_23.  The dehomogenization step 1 must use the SAME cross-section model,
+  not the Kirchhoff-Love C1 Hermite shell (solve_tw_from_yaml).  dehom_rm.py rebuilds step 1
+  on the RM ring; the two-step recovery is the exact adjoint of the RM homogenization
+  (mirrors assemble_segment_indep term-for-term).  The in-plane sigma11/22/12 match VABS as
+  before (the RM and KL in-plane fields are near-identical, both <1% at the cap centre) -- so
+  the switch does not degrade the validated result, it makes it methodologically consistent,
+  AND the RM warping carries the wall transverse shear (2g13,2g23) that the KL bundle lacked.
+  The four-way adversarial rigor review (2026-07-12, PART R) confirmed the RM step-1
+  recovery is energy-consistent, correctly MITC-tied, and sign/scale-correct.
 
 GOAL
 ----
@@ -28,44 +42,48 @@ CONVENTIONS
 
 
 ================================================================================
- STEP 1 -- BEAM FORCE  ->  SHELL (PLATE) STRAINS ALONG THE CONTOUR
-           recover_shell_strains(bundle, beam_force_vabs=FF)  [msg_dehom.py]
+ STEP 1 -- BEAM FORCE  ->  RM SHELL STRAINS ALONG THE CONTOUR
+           dehom_rm.stress_at_points / _rm_shell_strain / _macro_fields
 ================================================================================
+Homogenize once with the RM ring: build_rm_bundle -> ring_indep(shear='mitc4_g23',
+return_fields=True) gives C6_RM (the RM Timoshenko 6x6) and the RM warping V0,V1 (6m x 4,
+in the 6-DOF nodal space u1,u2,u3,om1,om2,om3), plus the strip geometry and per-element
+layup.
 
-1a. BEAM STRAIN (line 131)
-        st = C_eff^{-1} @ FF               (Timoshenko 6x6 inverse; st in VABS order)
-    st = [e11, 2e12, 2e13, k1, k2, k3] = the 1-D beam strain state that FF produces.
+1a. BEAM STRAIN
+        st = C6_RM^{-1} @ FF               (RM Timoshenko 6x6 inverse; st in VABS order)
+    st = [e11, 2e12, 2e13, k1, k2, k3].  (Using C6_RM -- post V1-finalization -- is REQUIRED,
+    not Dee+V0^T Dhe; the finalize projection is a no-op because the KKT already pins
+    Dc^T V1 = 0, so V0/V1 are the same fields that built C6_RM.  Rigor B4.)
 
-1b. MACRO + DERIVATIVE RECOVERY  (_macro_recovery, line 133)
-        st, st_m, st_cl1, st_cl2 = _macro_recovery(C_eff, st)
-    st_m       : the classical (Euler-Bernoulli) part of the beam strain.
-    st_cl1,2   : the two Timoshenko DERIVATIVE-recovery terms.  These carry the
-                 x1-derivative (spanwise-gradient) information that a shear force
-                 implies -- the same 'recov' chain the OpenSG solid stress_recov.
-                 local_strain uses, with the fixed operator R1 = recov([1,0,0,0,0,0]).
-    (This makes the shell recovery identical in structure to the validated solid one.)
+1b. MACRO + DERIVATIVE RECOVERY  (_macro_recovery, reused verbatim from msg_dehom.py)
+        st, st_m, st_cl1, st_cl2 = _macro_recovery(C6_RM, st)
+    st_m : the classical (EB) 4-strain; st_cl1,st_cl2 the two Timoshenko derivative-recovery
+    terms via the fixed R1 = recov([1,0,0,0,0,0]).  R1 is model-independent (a pure beam
+    dF/dx1 equilibrium operator) and NILPOTENT (R1^2 = 0), so st_cl2 uses R1^2 F = 0
+    -> a3 = 0: the recovered field is exactly the first-order {A,B,C} field, no Vlasov
+    term.  _macro_recovery is DOF-layout-agnostic and valid verbatim for C6_RM.  Rigor B4.
 
-1c. SECTION-WARPING COMBINATIONS (lines 135-138)
-        a1 = V0 @ st_m     EB warping                w_1
-        a2 = V1 @ st_cl1   shear warping (order 1)    w1s_1
-        a3 = V1 @ st_cl2   shear warping (order 2)    w1s_2
-        a4 = V0 @ st_cl1   EB-of-derivative           w_2
-    V0 = EB warping (n_primal x 4), V1 = finalized shear warping -- BOTH are outputs
-    of the cross-section homogenization (solve_tw_from_yaml).
+1c. SECTION-WARPING COMBINATIONS
+        w  = a1 + a2 = V0 @ st_m  + V1 @ st_cl1     (warping)
+        w' = a4 + a3 = V0 @ st_cl1 + V1 @ st_cl2    (warping x1-derivative)
+    V0,V1 are the RM ring warping (outputs of build_rm_bundle / ring_indep).
 
-1d. THE 6 PLATE STRAINS PER CONTOUR ELEMENT (loop lines 150-162)
-    For each contour element e (corner nodes n0,n1), the Hermite shell strain
-    operators eps_h, eps_l, eps_e (hermite_strain_operators; carry k22 curvature,
-    length L, tangent xd2,xd3) assemble the plate strain at each arc quadrature xi:
+1d. THE 8 RM PLATE STRAINS PER CONTOUR ELEMENT (dehom_rm._rm_shell_strain)
+    For each contour element e (strip quad nodes [c0,c1,m+c1,m+c0], 24-DOF slice
+    g=[6c0.., 6c1.., 6c1.., 6c0..]), the SAME RM element operators that assembled the 6x6
+    (segment_indep.quad_ops_indep -> BDe,BDh,BDl membrane/bending, BGe,BGh,BGl shear;
+    _mitc_shear_indep(scheme='mitc4_g23') -> BGt tied gamma_23) evaluate, at arc xi (eta=0):
 
-        shell[e] = eps_h(a1) + eps_e(st_m)          (EB / zeroth order)
-                 + eps_h(a2) + eps_l(a4) + eps_l(a3)(Timoshenko / first order)
+        s6 = BDe @ st_m + BDh @ w + BDl @ w'   -> [e11,e22,2e12,k11,k22,2k12]  (6 in-plane/bend)
+        s2 = BGe @ st_m + BGt @ w + BGl @ w'   -> [2g13,2g23]                   (RM transverse shear)
 
-    -> shell[e] = [eps11, eps22, 2eps12, kappa11, kappa22, 2kappa12]  (6 plate strains)
-       at every point along the contour.  (This is the KL 6-strain set; the RM
-       transverse-shear strains 2g13,2g23 are added in STEP 3.)
-
-    Returns {shell_strain (E,P,6), x2,x3 (point coords), tang, macro=st, st_m}.
+    This is the EXACT adjoint of assemble_segment_indep's energy (BGt tied on the warp term,
+    BGe/BGl raw -- identical to the stiffness assembly), so INT Gamma:Sigma dz = st^T C6_RM st
+    up to the (negligible) drilling-penalty residual.  s2 is the engineering [2g13,2g23]
+    conjugate to the same G_2x2 used in the 6x6 (no factor-2).  Unlike the KL bundle, the RM
+    bundle DOES carry 2g13,2g23 -- but see STEP 3 for why the constitutive sigma13/23 are
+    still not the physical cap field.
 
 
 ================================================================================
@@ -97,32 +115,36 @@ KEY POINTS
 
 
 ================================================================================
- STEP 3 -- RM 8x8: RECOVER THE TRANSVERSE SHEAR sigma13, sigma23
+ STEP 3 -- TRANSVERSE SHEAR sigma13, sigma23  (OPEN: constitutive route is NOT physical)
 ================================================================================
 
-STEP 2's plate law is the 6x6 KIRCHHOFF ABD (solve_tw_from_yaml is the Hermite C1 /
-KL shell), so the transverse shears sigma13,sigma23 from the LOCAL plate concentration
-are ~0 (they are a higher-order equilibrium effect: d sigma13/dz = -d sigma11/dx1,
-i.e. they need the ARC-gradient of the in-plane stress).  Physically at st15 they are
-~0.04 MPa vs 167 MPa in-plane -- negligible -- but the RM 8x8 recovers them properly
-using the SAME shear-flow shapes that built the 2x2 G (8x8 doc PART 2):
+The RM bundle now DOES carry the per-element wall transverse shear s2 = [2g13, 2g23]
+(step 1d), so one CAN drive the plate shear-flow recovery
 
     Gmat, recover, (zs, ghat_x, ghat_y) = transverse_shear_stiffness(thick,ang,mat,db)
-    sigma13(z) = ghat_x(z) * Q1        ghat_x(z) = g_x(z)/D_eff_x  (parabolic, 0 at faces)
-    sigma23(z) = ghat_y(z) * Q2        Q1,Q2 = transverse-shear stress resultants (N/m)
+    [Q1,Q2] = Gmat @ s2 ;  sigma13(z) = ghat_x(z)*Q1 ;  sigma23(z) = ghat_y(z)*Q2
 
-  where the resultants are the RM plate transverse shears
-        [Q1, Q2] = G_2x2 @ [2gamma13, 2gamma23]
-  and [2gamma13, 2gamma23] are the wall transverse-shear strains of the RM shell.
-  These come from the RM cross-section solve (ring_indep: 2gamma13 = omega2,
-  2gamma23 = a3.w' - omega1); the KL Hermite bundle does not carry them, so the RM
-  8x8 recovery drives Q1,Q2 from the RM ring's per-element transverse shear (or, as a
-  first approximation, from the beam shear force FF[1],FF[2] distributed by the shear
-  flow).  The through-thickness PROFILE (parabolic, traction-free at both surfaces) is
-  set by ghat and is correct by construction; the magnitude scales with Q.
+with the free-surface parabolic ghat profile.  This s2 is the CORRECT adjoint (far better
+than the earlier section-shear approximation of dehom_st15_rm8x8.py, which multiplied each
+wall's laminate G by the whole-SECTION beam shear strain -- a category error that overcounted
+16-560x).  BUT the CONSTITUTIVE route sigma13 = G*g13_wall still does NOT reproduce the cap
+field.  MEASURED at st15 cap-centre (sweep_rm_shear.py): peak |sigma13|_RM = 0.94 MPa vs VABS
+0.041 (23x high), scheme-independent (mitc4_g23 == mitc4_both here), and the through-thickness
+SHAPE is a symmetric parabola while VABS changes SIGN (0.009 -> 0.041 -> -0.026 MPa OML->IML).
 
-  IMPLEMENTATION: stress_at_points(..., rm8x8=True) adds sigma13,sigma23 = ghat(z)*Q
-  to the STEP-2 stress before the frame rotation.  [dehom_st15_figs.py --rm8x8]
+  WHY.  In a spar cap the transverse shear is an EQUILIBRIUM effect (d sigma13/dz =
+  -d sigma11/dx1, set by the arc-gradient of the bending stress), NOT a local constitutive
+  G*gamma.  A single-director RM shell represents the wall transverse shear as one
+  constant-gamma scaled by the fixed parabola ghat(z), which cannot match the sign-changing
+  equilibrium field, and on the flat cap the untied g13 also carries the independent-drilling
+  content.  So the constitutive sigma13/23 are shipped OFF (rm_shear=False): the reported
+  transverse stresses are the plate plane-stress limit (~0), which at st15 is ~4000x below the
+  in-plane and physically negligible.
+
+  OPEN ITEM (task #88).  A physical sigma13/23 needs the EQUILIBRIUM shear-flow: the section
+  shear force distributed as q(s) around the contour by the classical thin-wall first-moment,
+  then sigma13(z) = ghat(z)*q(s)/t.  This is a separate development; the constitutive s2 above
+  is retained in the code (rm_shear=True) only for diagnostics.
 
 
 ================================================================================
@@ -138,25 +160,27 @@ using the SAME shear-flow shapes that built the 2x2 G (8x8 doc PART 2):
 ================================================================================
  ALGORITHM (pseudocode)
 ================================================================================
-  # homogenize once
-  bundle = solve_tw_from_yaml(shell_yaml, frac=0)        # C_eff, V0, V1, geometry
+  # homogenize once with the RM ring (build_rm_bundle)
+  C6_RM, V0, V1 = ring_indep(shear='mitc4_g23', return_fields=True)   # RM 6x6 + RM warping
   for each unique laminate: warp[laminate] = compute_ABD_matrix(..., return_warping=True)
-  Gsh[laminate], ghat[laminate] = transverse_shear_stiffness(...)   # RM 8x8 addition
 
-  # STEP 1: beam force -> shell strains along the contour
-  st = inv(C_eff) @ FF
-  st_m, st_cl1, st_cl2 = macro_recovery(C_eff, st)
-  a1,a2,a3,a4 = V0@st_m, V1@st_cl1, V1@st_cl2, V0@st_cl1
-  for e in contour_elements:
-      shell[e] = eps_h(a1)+eps_e(st_m)+eps_h(a2)+eps_l(a4)+eps_l(a3)   # 6 plate strains
+  # STEP 1: beam force -> RM shell strains along the contour
+  st = inv(C6_RM) @ FF
+  st_m, st_cl1, st_cl2 = macro_recovery(C6_RM, st)
+  w  = V0@st_m  + V1@st_cl1        # warping
+  w' = V0@st_cl1 + V1@st_cl2       # warping-derivative
+  for e in contour_elements:                                          # RM element operators
+      BDe,BDh,BDl,BGe,BGh,BGl = quad_ops_indep(strip[e], xi, eta=0)
+      BGt = mitc_shear_indep(strip[e], xi, scheme='mitc4_g23')        # tied gamma23
+      s6[e] = BDe@st_m + BDh@w[e] + BDl@w'[e]     # [e11,e22,2e12,k11,k22,2k12]
+      s2[e] = BGe@st_m + BGt@w[e] + BGl@w'[e]     # [2g13,2g23]  (diagnostic only)
 
-  # STEP 2+3: at each query point -> 3-D stress
+  # STEP 2: at each query point -> 3-D stress (in-plane + e33), RM strains through the plate SG
   for p in points:
       e, z = locate(p)                                   # element + through-thickness depth
       SC   = B(z) @ warp[lam(e)].V0_e + Ge(z)
-      Gam  = SC @ shell[e](arc(p));  Sig = C_layer(e,z) @ Gam        # in-plane + e33
-      Q    = Gsh[lam(e)] @ [2g13(e), 2g23(e)]            # RM transverse-shear resultant
-      Sig[S13] += ghat_x(z)*Q1;  Sig[S23] += ghat_y(z)*Q2           # STEP 3
+      Gam  = SC @ s6[e](arc(p));  Sig = C_layer(e,z) @ Gam           # in-plane + e33
+      # STEP 3 (rm_shear, OFF by default): constitutive sigma13/23 -- see STEP 3 caveat
       stress[p] = rotate(Sig, ply_angle) if frame=="material" else Sig
 
   # validate vs VABS .SM (nearest gauss point) along a path

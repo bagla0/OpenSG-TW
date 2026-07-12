@@ -1,6 +1,9 @@
 """dehom_st15_figs.py -- RM shell two-step dehom vs VABS .SM on the VALID paths
 (cap-centre through-thickness + circumferential around the section), 6 stress
 components each.  -> figures/dehom_st15_capcentre.png, dehom_st15_circumferential.png
+
+The step-1 shell strains come from the RM ring (C0 Lagrange 6-DOF, MITC-tied gamma23;
+dehom_rm), consistent with the paper's homogenization -- NOT the KL C1 Hermite shell.
 """
 import os
 import sys
@@ -14,9 +17,10 @@ import matplotlib.pyplot as plt
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..", "..")))
+sys.path.insert(0, HERE)
 import jax
 jax.config.update("jax_enable_x64", True)
-from opensg_jax.fe_jax import solve_tw_from_yaml, stress_at_points
+import dehom_rm
 
 DEH = os.path.join(HERE, "..", "..", "..", "examples", "data", "dehom_st15")
 SHELL15 = os.path.expanduser("~/OpenSG-TW-claude/tests/data/1Dshell_15.yaml")
@@ -33,14 +37,15 @@ def load_sm(path):
 
 sm_xy, sm_s = load_sm(os.path.join(DEH, "bar_urc-15-t-0.in.SM"))
 tree = cKDTree(sm_xy)
-bundle = solve_tw_from_yaml(SHELL15, frac=0.0)
+bundle = dehom_rm.build_rm_bundle(SHELL15, ref="oml")   # RM ring (C0, MITC-g23)
 
 
 def make(fn, xlabel, title, out, around=False):
     coords = np.loadtxt(os.path.join(DEH, fn))[:, :2]
     z = np.r_[0.0, np.cumsum(np.hypot(np.diff(coords[:, 0]), np.diff(coords[:, 1])))]
     xs = z * (1.0 if around else 1e3)
-    S = np.asarray(stress_at_points(bundle, coords, beam_force_vabs=FF, frame="material")["stress"])
+    S = np.asarray(dehom_rm.stress_at_points(bundle, coords, beam_force_vabs=FF,
+                                             frame="material")["stress"])
     V = sm_s[tree.query(coords)[1]]
     fig, ax = plt.subplots(2, 3, figsize=(11, 7))
     fig.suptitle(title, fontsize=12, fontweight="bold")
