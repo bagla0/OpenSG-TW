@@ -28,7 +28,8 @@ UF = os.path.join(D2, "iea_r020.sg.U")
 TEX = os.path.join(HERE, "results", "tex_rm"); os.makedirs(TEX, exist_ok=True)
 FIG = os.path.join(HERE, "figures"); os.makedirs(FIG, exist_ok=True)
 NAMES = {1: "Gelcoat", 2: "Glass triax", 3: "Foam", 4: "Carbon", 5: "Glass uniax", 6: "Glass biax"}
-FILL = {1: "#bbbbbb", 2: "#9ec7e8", 3: "#f0a3a3", 4: "#d9c69a", 5: "#c8b3de", 6: "#f6b78b"}
+_mk = [1, 2, 3, 4, 5, 6]
+FILL = {m: plt.cm.rainbow(i / (len(_mk) - 1)) for i, m in enumerate(_mk)}   # rainbow by material
 
 
 def rowf(v):
@@ -57,8 +58,9 @@ ax.set_aspect("equal"); ax.autoscale(); ax.axis("off")
 h = [Patch(facecolor=FILL[m], edgecolor="0.4", label=NAMES[m]) for m in sorted(set(mat))]
 h += [plt.Line2D([], [], color="#1f77b4", lw=2, label="circumferential (LP)"),
       plt.Line2D([], [], color="#d62728", lw=2, marker="o", ms=4, label="cap through-thickness")]
-ax.legend(handles=h, loc="lower center", ncol=4, fontsize=8.5, frameon=False, bbox_to_anchor=(0.5, -0.12))
-fig.tight_layout(rect=[0, 0.05, 1, 1])
+ax.legend(handles=h, loc="center left", ncol=1, fontsize=9, frameon=False,
+          bbox_to_anchor=(1.01, 0.5))                                 # vertical, right, off the image
+fig.tight_layout(rect=[0, 0, 0.86, 1])
 fig.savefig(os.path.join(FIG, "r020_section_paths.png"), dpi=170, bbox_inches="tight")
 plt.close(fig); print("wrote r020_section_paths.png")
 
@@ -106,11 +108,11 @@ U = np.loadtxt(UF)                                   # id y2 y3 u1 u2 u3
 uxy = U[:, 1:3]; u1 = U[:, 3]; uip = U[:, 4:6]       # axial warping u1, in-plane (u2,u3)
 sc = 0.15 * (np.ptp(uxy, 0).max()) / (np.linalg.norm(uip, axis=1).max() + 1e-30)
 fig, ax = plt.subplots(1, 2, figsize=(13, 4.4))
-s0 = ax[0].scatter(uxy[:, 0], uxy[:, 1], c=u1 * 1e3, s=2, cmap="coolwarm", linewidths=0)
+s0 = ax[0].scatter(uxy[:, 0], uxy[:, 1], c=u1 * 1e3, s=2, cmap="rainbow", linewidths=0)
 ax[0].set_title(r"axial warping $u_1$ (mm)", fontsize=10); fig.colorbar(s0, ax=ax[0], shrink=0.8)
 mag = np.linalg.norm(uip, axis=1) * 1e3
 s1 = ax[1].scatter(uxy[:, 0] + sc * uip[:, 0], uxy[:, 1] + sc * uip[:, 1], c=mag, s=2,
-                   cmap="viridis", linewidths=0)
+                   cmap="rainbow", linewidths=0)
 ax[1].set_title(r"in-plane displacement (deformed $\times%.0f$, $|u_{23}|$ mm)" % sc, fontsize=10)
 fig.colorbar(s1, ax=ax[1], shrink=0.8)
 for a in ax:
