@@ -187,5 +187,61 @@ OUTPUT (line 91)
 STORED OUTPUT: examples/data/benchmark/st15_rm_plate_8x8.dat  (rm_8x8_st15.py)
     -- the 8x8 for every st15 wall laminate (10), OML reference, plus the 2x2 G.
 
-RIGOR VERIFICATION: see the appended opensg-msg-expert review (PART 4, filled in
-after the agent report) confirming/qualifying each step against Yu's MSG papers.
+================================================================================
+ PART 4 -- RIGOR VERIFICATION (opensg-msg-expert review, 2026-07-12)
+================================================================================
+Reviewed against Yu 2005 (IJSS 42, RM plate), Yu-Hodges-Volovoi 2002 (CMAME 191,
+RM shell), Yu-Kim-Hodges-Cho 2008 (AST 12, RM-model evaluation), Yu 2024 (MSG
+textbook), Yu 2012 (IJES 59, VABS).  [Equation numbers are from the distilled MSG
+knowledge-base notes, not a fresh PDF render -- page-verify before journal submission.]
+
+A1  CLASSICAL 6x6 ABD  ......  SOUND, and it is the CORRECT MSG statement (not CLT).
+  - D_eff = D_ee + V0^T F = D_ee - F^T K^{-1} F is the Schur complement = the MSG
+    effective-stiffness form  Cbar = V0^T D_he + D_ee  (MSG textbook Eq 7.55 / 6.81;
+    homogenization 7.50-7.55).  Verified algebraically (V0^T F = F^T V0, V0^T K V0 =
+    -V0^T F).
+  - Using the FULL 3-D C with gamma_h = [0,0,dv3/dx,dv2/dx,dv1/dx,0] is the DEFINING
+    MSG/VAPAS feature over CLT: it condenses e33 through the transverse warping
+    (Yu 2005 Eq 15, Dk = De - Det Det^T / Dt) instead of assuming plane stress.
+    STATE THIS AS A STRENGTH ("Kirchhoff ABD without a plane-stress assumption",
+    MSG textbook Sec 5.6.1).  compute_ABD_CLT (plane-stress Qbar) is the approximation.
+  - Nullspace (3 constant translations) = the MSG constraint <w_i> = 0 (Yu 2005 Eq 6,
+    c_i=0).  For a 1-D through-thickness SG exactly 3 zero-energy modes -> correct.
+  - z_ref shift = parallel-axis (K origin-invariant, only Ge x-columns move) =
+    shift_abd_reference; G reference-independent (z_na absorbs the origin).  OK.
+
+A2  2x2 TRANSVERSE-SHEAR G  ......  SOUND as a WHITNEY-1973 complementary-energy G;
+    MISATTRIBUTED if called "the Yu-2005 G".  << SINGLE MOST IMPORTANT CORRECTION >>
+  - Mechanics verified: isotropic F = (5/6) G h EXACT (z_na=h/2, D_eff=Qh^3/12,
+    g=(Q/2)z(z-h), int g^2/G = (Q^2/4G)(h^5/30) -> F = 5Gh/6); g(0)=g(h)=0 (free
+    surfaces); coupled M -> diagonal Whitney when Gbar diagonal.  All correct.
+  - BUT this is the equilibrium/complementary-energy route (a PRESUMED shear-flow
+    shape g(z) from 3-D equilibrium of the classical bending stress) = Whitney
+    (1973) = the EFSDT "(e)" philosophy of Yu 2008.  Yu 2005's G assumes NO shear
+    distribution: it recasts the 2nd-order asymptotic energy into RM form (Eq 37)
+    and minimizes the residual by SDP over 33 constants (Yu 2005 Eq 45; Yu 2002 RM
+    Eq 77).  Different mathematical objects; agree for isotropic, close for mild
+    laminates, can differ for sandwich cores.
+  - Two truncations to acknowledge: (i) the shear flow uses only Qbar_11/Qbar_22 --
+    it drops the Q12/Q16 (Poisson/off-axis) contribution to d(sigma11)/dx and the
+    d(sigma12)/dx2 term in 3-D equilibrium; (ii) the 8x8 is a HYBRID -- full-3-D-C
+    VAM ABD block + plane-stress-Qbar Whitney shear block (each conventional for its
+    own block, but not one unified asymptotic law).  State the hybrid.
+  - CITATION: attribute G to Whitney, J.M., J. Appl. Mech. 40 (1973) 302-304
+    (NOT in the KB -- add to bibliography.bib).  Do NOT assign a Yu equation number.
+
+CORRECTIONS FOR THE JOURNAL (apply in theory_body.tex sec:wall):
+  1. Relabel: A/B/D = genuine MSG/VAM plate homogenization (full-C, no plane stress);
+     G = Whitney-1973 complementary-energy / 3-D-equilibrium shear-flow stiffness,
+     coupling-aware 2x2 generalization.  "In the spirit of Yu 2005 / no shear-
+     correction factor" is OK ONLY in the narrow sense that no ad-hoc 5/6 is inserted
+     (the 5/6 EMERGES).  Do NOT claim it IS the Yu-2005 (VAPAS) G or "asymptotically
+     correct in the VAM sense" for the shear.  [The paper's current wording --
+     "coupling-aware generalization of Whitney's energy equivalence, in the spirit of
+     the correction-factor-free construction of Yu 2005" -- is CONSISTENT with this.]
+  2. The 8x8 is a hybrid (VAM ABD + Whitney shear); say so.
+  3. Block-diagonal [[A,B,0],[B,D,0],[0,0,G]] drops the D-G coupling Y that
+     bagla2025asc Eq 17 keeps for general anisotropy (Y=0 only for orthotropic) and
+     Yu's load term F; the A/B/D is the classical (zeroth-order) ABD, not Yu's
+     O((h/l)^2)-corrected A_R.  List these as modeling assumptions, not full generality.
+  4. Add Whitney 1973 to the bibliography (it is the true provenance of G).

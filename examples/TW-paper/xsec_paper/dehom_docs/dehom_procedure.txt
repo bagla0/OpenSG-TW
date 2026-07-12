@@ -177,4 +177,50 @@ using the SAME shear-flow shapes that built the 2x2 G (8x8 doc PART 2):
   out-of-plane sigma33 ~0.01 MPa, sigma13/sigma23 recovered by STEP 3 (~0.04 MPa),
     both ~4000x below the in-plane -> physically negligible at this station.
 
-RIGOR VERIFICATION: opensg-msg-expert review appended below (PART R) once returned.
+================================================================================
+ PART R -- RIGOR VERIFICATION (opensg-msg-expert review, 2026-07-12)
+================================================================================
+B1  STEP-1 shell-strain recovery  ......  SOUND (matches the VABS Timoshenko dehom).
+  Substituting w = V0 eps + V1 eps' into Gamma = Gamma_h w + Gamma_e eps + Gamma_l w'
+  gives Gamma = (Gamma_h V0 + Gamma_e)eps + Gamma_h V1 eps' + Gamma_l V0 eps'
+  + Gamma_l V1 eps'', mapping term-for-term onto eps_h(a1)+eps_e(st_m) [=(Gh V0+Ge)eps],
+  eps_h(a2) [=Gh V1 eps'], eps_l(a4) [=Gl V0 eps'], eps_l(a3) [=Gl V1 eps''].  The
+  eps'/eps'' via the fixed R1=recov([1,0,0,0,0,0]) chain is the VABS "derivatives from
+  1-D equilibrium" device (Yu 2012 Eqs 110-116; MSG textbook 7.57-7.61).  OK.
+  Scope note: outputs the 6 KIRCHHOFF strains, no 2g13/2g23 -> that is why sigma13/23
+  are ~0 without STEP 3.
+
+B2  STEP-2 plate stress at depth  ......  SOUND (correct MSG plate dehomogenization).
+  SC = B V0 + Ge, Gamma = SC ss, Sigma = C_layer Gamma = the MSG recovery
+  Gamma = (Gamma_h S V0 + Gamma_e)eps, sigma = C Gamma (MSG textbook 6.82; Yu 2005
+  Eqs 46-47; Yu 2002 RM Eqs 78-82).  Full 3-D C, consistent with A1.  The
+  energy-consistency int Gamma:Sigma dz = ss^T ABD ss is PROVABLY EXACT (int SC^T C SC
+  = V0^T K V0 + V0^T F + F^T V0 + D_ee -> D_ee + V0^T F = D_eff, using K V0 = -F), i.e.
+  SC is the exact adjoint of the homogenization.  Material-frame rotation invariant. OK.
+
+B3  STEP-3 transverse-shear recovery  ......  CONSISTENT with A2's G; label it
+    EQUILIBRIUM (EFSDT-style), NOT VAPAS constitutive recovery.
+  sigma13(z) = ghat_x(z) Q1 is the EXACT INVERSE of the complementary-energy G (both
+  are the Whitney/equilibrium route) -> self-consistent, free-surface-satisfying,
+  standard FSDT recovery.  Driving it by Q = G_2x2 [2g13, 2g23] is the RIGHT resultant.
+  This is the equilibrium "(e)" recovery of Yu 2008, NOT the VAPAS constitutive "(c)"
+  recovery (Yu 2005 Eqs 48-51, transverse stress from the 2nd-order warping).  Valid in
+  the LINEAR regime; the equilibrium route does not extend to nonlinear.
+  IMPLEMENTATION PITFALLS TO LOCK DOWN (all verified/handled in the code):
+    (1) ENGINEERING shear: G was built with rows/cols [2g13,2g23], so Q MUST use the
+        engineering 2g13,2g23 (the 8-component RM shell strain already stores these) --
+        forming Q from tensorial g13,g23 loses a factor of 2.
+    (2) The recovery is DIAGONAL (g_x/D_x, g_y/D_y with per-direction z_na) while the
+        stiffness G is the COUPLED 2x2 M^{-1}; recovered sigma13/23 are energy-consistent
+        with G only when Gbar is diagonal (on-axis / G13=G23).  For st15's balanced
+        layups Gbar is ~diagonal (G12=0 in the .dat), so this is satisfied.
+    (3) OML->IML e3 SIGN: g(z)=int_bot^z integrates from z=0 (OML) upward, so the depth
+        used to sample g MUST equal the physical inward normal (n2,n3 toward the
+        centroid) in stress_at_points -- a mismatch FLIPS sigma13's sign.  The sigma23
+        "2"=tangent sign rides on node ordering (see the check-e3-orientation skill and
+        the airfoil-web-orientation note).  Verify per element.
+
+CITATIONS (per formula): Step-1 Yu 2012 Eqs 110-116 + MSG 6.82/7.57-7.61; Step-2 Yu
+2005 Eqs 46-47, Yu 2002 RM Eqs 78-82, MSG 6.82; the Whitney-G recovery (B3) Whitney
+1973 + Yu 2008 (e)-recovery; the VAPAS constitutive alternative Yu 2005 Eqs 48-51.
+[Equation numbers from the distilled KB -- page-verify before submission.]
