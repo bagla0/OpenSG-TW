@@ -1,0 +1,15 @@
+\begin{table}[t]\centering\small
+\caption{Wall-clock cost of the three homogenizers on the four examples: the RM 6-DOF shell ring (1-D contour), the OpenSG-JAX 2-D solid, and the OpenSG-FEniCS 2-D solid (same mesh). JAX time is the compiled-kernel solve; its one-off JIT compilation is excluded. The blade row sums all eight stations.}\label{tab:timing4}
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{l|rr|rr|rr}
+\toprule
+& \multicolumn{2}{c|}{RM shell (1-D)} & \multicolumn{2}{c|}{JAX 2-D solid} & \multicolumn{2}{c}{FEniCS 2-D solid}\\
+example & DOF & $t$ (s) & DOF & $t$ (s) & DOF & $t$ (s)\\
+\midrule
+two-cell tube & 1434 & $0.28$ & 3585 & $1.45$ & 3585 & $0.49$\\
+elliptic four-cell & 1098 & $0.66$ & 4941 & $2.13$ & 4941 & $0.53$\\
+IEA-22 $r/R=0.2$ & 1236 & $0.73$ & 2559 & $0.59$ & 2559 & $1.28$\\
+full IEA-22 blade (8 stations) & --- & $5.28$ & --- & $4.33$ & --- & $10.79$\\
+\bottomrule
+\end{tabular}
+\end{table}
