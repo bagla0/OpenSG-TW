@@ -29,9 +29,13 @@ lines = ["# MSG Reissner-Mindlin plate 8x8 stiffness  [[A,B,0],[B,D,0],[0,0,G]]"
          "# Station 15 (BAR-URC) wall laminates.  Plate strain order",
          "#   [eps11, eps22, 2eps12, kappa11, kappa22, 2kappa12 | 2gamma13, 2gamma23].",
          "# A = D6[0:3,0:3] (membrane), B = D6[0:3,3:6], D = D6[3:6,3:6] (bending),",
-         "# G = 2x2 transverse-shear block (MSG complementary-energy shear flow, no",
-         "# shear-correction factor).  Reference surface = OML (bottom face, z=0).",
-         "# Units: A,B,D SI (N/m, N, N.m); G in N/m.", ""]
+         "# G = 2x2 transverse-shear block, DEFAULT = coupled MSG complementary-energy",
+         "#     shear flow (no shear-correction factor).  Reference surface = OML (z=0).",
+         "# Units: A,B,D SI (N/m, N, N.m); G in N/m.",
+         "# References for the 2x2 G: Whitney, J. Appl. Mech. 40 (1973) 302-304",
+         "#   (complementary-energy shear flow); the RM plate model it belongs to is",
+         "#   Yu, Int. J. Solids Struct. 42 (2005) 6680-6699 and Yu-Hodges-Volovoi,",
+         "#   CMAME 191 (2002) 5087-5109.", ""]
 
 for ln, info in layup_db.items():
     th, an, mn = info["thick"], info["angles"], info["mat_names"]

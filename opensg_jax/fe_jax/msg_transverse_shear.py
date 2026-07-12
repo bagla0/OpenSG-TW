@@ -5,6 +5,20 @@ RM-specific addition to the Kirchhoff 6x6 ABD; computed by the FSDT /
 3D-equilibrium shear-flow method with complementary-energy equivalence, NOT the
 crude (5/6) sum(G t).
 
+DEFAULT for the RM cross-section work is the coupled MSG form (coupled=True).
+
+References (the papers this 2x2 G is referred to):
+  * Whitney, J.M. (1973), "Shear correction factors for orthotropic laminates
+    under static load", J. Appl. Mech. 40(1):302-304 -- the complementary-energy /
+    3D-equilibrium shear-flow construction implemented here (the ``coupled`` route
+    is its coupling-aware 2x2 generalization).
+  * Yu, W. (2005), "Mathematical construction of a Reissner-Mindlin plate theory
+    for composite laminates", Int. J. Solids Struct. 42:6680-6699; and
+    Yu, Hodges & Volovoi (2002), CMAME 191:5087-5109 -- the MSG Reissner-Mindlin
+    plate model this G is the transverse-shear block of (correction-factor-free).
+  NB: this G is the Whitney complementary-energy stiffness in the spirit of the
+  Yu-2005 RM plate; it is NOT the Yu-2005 minimum-information-loss G itself.
+
 Physics (per direction; x = ply-1 / beam, y = ply-2 / tangent):
   pure bending    : sigma_11(z) = Q11(z) (z - z_na) kappa        (z_na = neutral axis)
   3D equilibrium  : d sigma_13/dz = - d sigma_11/dx
