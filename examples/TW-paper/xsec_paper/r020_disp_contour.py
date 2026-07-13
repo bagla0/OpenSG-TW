@@ -35,19 +35,20 @@ def arclen(p):
 # NOTE: the full-section displacement CONTOURS (r020_disp_contour_cmp.png etc.) are produced by
 # r020_contours.py on the real solid-mesh triangulation.  This script owns only the path plots.
 
-# ---------------- u1,u2,u3 along each path, INDIVIDUAL files ----------------
-def path_disp(P, name, xl, xscale, out):
+# ---------------- u1,u2,u3 along each path, INDIVIDUAL files (non-dim x-axis 0..1) ----------------
+def path_disp(P, name, xl, kind, out):
     Uv = U[utree.query(P)[1], 3:6] * 1e3                     # VABS .U (mm)
     Ur = np.asarray(dehom_rm.disp_at_points(B, P, beam_force_vabs=FF)) * 1e3   # RM warping (mm)
-    x = arclen(P) * xscale
+    col = 0 if kind == "circ" else 1                         # circ: y2 (LE->TE) ; cap: y3 (OML->IML)
+    x = (P[:, col] - P[0, col]) / (P[-1, col] - P[0, col])   # normalized 0..1
     fig, ax = plt.subplots(1, 3, figsize=(13, 3.7))
     for k, comp in enumerate(["u_1", "u_2", "u_3"]):
         a = ax[k]
         a.plot(x, Ur[:, k], "r--o", ms=3, lw=1.6, label="OpenSG RM")
         a.plot(x, Uv[:, k], "g-^", ms=3, lw=1.6, label="VABS ($.\\mathrm{U}$)")
         a.set_title(r"$%s$" % comp, fontsize=11)
-        a.set_xlabel(xl); a.set_ylabel(r"$%s$ (mm)" % comp); a.grid(True, ls=":", alpha=0.6)
-        a.legend(fontsize=8)
+        a.set_xlabel(xl); a.set_ylabel(r"$%s$ (mm)" % comp); a.set_xlim(0, 1)
+        a.grid(True, ls=":", alpha=0.6); a.legend(fontsize=8)
     fig.suptitle("Local displacement along the %s: OpenSG RM vs VABS" % name,
                  fontsize=12, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
@@ -55,7 +56,9 @@ def path_disp(P, name, xl, xscale, out):
     print("wrote", os.path.basename(out))
 
 
-path_disp(circ, "circumferential path (LP, LE$\\to$TE)", "arc length (m)", 1.0,
+path_disp(circ, "circumferential path (LP, LE$\\to$TE)",
+          r"normalized chord $\bar y_2$ (0=LE, 1=TE)", "circ",
           os.path.join(FIG, "r020_disp_circ.png"))
-path_disp(cap, "left spar-cap through-thickness", "OML$\\to$IML (mm)", 1e3,
+path_disp(cap, "left spar-cap through-thickness",
+          r"normalized thickness $\bar y_3$ (0=OML, 1=IML)", "cap",
           os.path.join(FIG, "r020_disp_cap.png"))

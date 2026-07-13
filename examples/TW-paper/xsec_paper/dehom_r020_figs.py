@@ -42,12 +42,30 @@ tree = cKDTree(sm_xy)
 bundle = dehom_rm.build_rm_bundle(SHELL, ref="oml")   # RM ring (C0, MITC-g23)
 
 
-def make(fn, xlabel, title, out, around=False):
+def sample_along_column(coords, perp_w=3.0):
+    """VABS gauss stress sampled ALONG the through-thickness column (lateral offset penalised by
+    perp_w).  Plain nearest-neighbour wanders laterally to the glass overwrap at the spar-cap
+    edge, so an interface node picks the adjacent ply's stress-concentration; weighting the
+    across-column direction keeps the sample on the column at the correct depth (perp_w in [2,4]
+    is stable: on the OML surface it still returns the surface ply, at 3-4 mm it returns the cap)."""
+    u = coords[-1] - coords[0]; u = u / (np.linalg.norm(u) + 1e-30)
+    v = np.array([-u[1], u[0]]); c0 = coords[0]
+
+    def xf(P):
+        d = np.atleast_2d(P) - c0
+        return np.column_stack([d @ u, (d @ v) * perp_w])
+    return cKDTree(xf(sm_xy)).query(xf(coords))[1]
+
+
+def make(fn, xlabel, title, out, kind):
     coords = np.loadtxt(os.path.join(D2, fn))[:, :2]
-    z = np.r_[0.0, np.cumsum(np.hypot(np.diff(coords[:, 0]), np.diff(coords[:, 1])))]
-    xs = z * (1.0 if around else 1e3)
     S = np.asarray(dehom_rm.stress_at_points(bundle, coords, beam_force_vabs=FF, frame="material")["stress"])
-    V = sm_s[tree.query(coords)[1]]
+    if kind == "cap":                                  # through-thickness column: 0=OML -> 1=IML by y3
+        V = sm_s[sample_along_column(coords)]          # robust to the cap-edge glass overwrap
+        xs = (coords[:, 1] - coords[0, 1]) / (coords[-1, 1] - coords[0, 1])
+    else:                                              # circumferential: 0=LE -> 1=TE by y2
+        V = sm_s[tree.query(coords)[1]]                # on the OML surface, plain nearest is fine
+        xs = (coords[:, 0] - coords[0, 0]) / (coords[-1, 0] - coords[0, 0])
     fig, ax = plt.subplots(2, 3, figsize=(11, 7))
     fig.suptitle(title, fontsize=12, fontweight="bold")
     for k, c in enumerate(COMP):
@@ -56,7 +74,7 @@ def make(fn, xlabel, title, out, around=False):
         a.plot(xs, V[:, k] / 1e6, "g-^", ms=4, label="VABS (.SM)")
         a.set_title(r"$\sigma_{%s}$" % c[1:],
                     color=("darkred" if oop else "black"), fontsize=10)
-        a.set_xlabel(xlabel); a.set_ylabel("%s (MPa)" % c)
+        a.set_xlabel(xlabel); a.set_ylabel("%s (MPa)" % c); a.set_xlim(0, 1)
         a.grid(True, ls=":", alpha=0.6); a.legend(fontsize=7.5)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(out, dpi=170, bbox_inches="tight"); plt.close(fig)
@@ -65,9 +83,10 @@ def make(fn, xlabel, title, out, around=False):
 
 
 make("solid.lp_sparcap_left_thickness_r020.coords",
-     "through-thickness (mm, OML$\\to$IML)",
+     r"normalized thickness $\bar y_3$ (0=OML, 1=IML)",
      "LP spar-cap (left) through-thickness: RM shell vs VABS",
-     os.path.join(FIG, "dehom_r020_capleft.png"))
-make("solid.circumferential_r020.coords", "upper-surface arc length (m, LE$\\to$TE)",
+     os.path.join(FIG, "dehom_r020_capleft.png"), kind="cap")
+make("solid.circumferential_r020.coords",
+     r"normalized chord $\bar y_2$ (0=LE, 1=TE)",
      "Upper-surface (LP) circumferential: RM shell vs VABS",
-     os.path.join(FIG, "dehom_r020_circumferential.png"), around=True)
+     os.path.join(FIG, "dehom_r020_circumferential.png"), kind="circ")
