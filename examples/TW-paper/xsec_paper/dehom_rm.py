@@ -118,6 +118,23 @@ def _macro_fields(B, beam_force_vabs=None, beam_strain=None):
     return st, st_m, aA, aB
 
 
+def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None):
+    """RM-recovered warping DISPLACEMENT (u1,u2,u3) at query points (mid-surface, leading
+    order): the same RM warping w=V0 st_m + V1 st_cl1 the stress recovery uses, its first
+    three (displacement) DOF interpolated to each arc position.  Both RM and VABS warping are
+    constrained orthogonal to the rigid/classical modes, so they are directly comparable."""
+    pts = np.atleast_2d(np.asarray(points_2d, float))
+    st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
+    wn = np.asarray(aA).reshape(-1, 6)                       # per-node [u1,u2,u3,om1,om2,om3]
+    corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"])
+    out = np.zeros((len(pts), 3))
+    for i in range(len(pts)):
+        e, xi, pr = _project_point(corners, rc, pts[i])
+        c0, c1 = int(rc[e, 0]), int(rc[e, 1])
+        out[i] = (1.0 - xi) * wn[c0, 0:3] + xi * wn[c1, 0:3]     # mid-surface warping (leading order)
+    return out
+
+
 def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
                      frame="global", n_per_layer=2, elem_order=2, rm_shear=False,
                      s2_scheme="mitc4_g23"):
