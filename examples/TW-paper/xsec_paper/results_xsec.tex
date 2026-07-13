@@ -254,28 +254,57 @@ axis scale, $\lesssim\!0.006$~MPa) are the plate plane-stress limit.}\label{fig:
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/dehom_r020_capcentre.png}
-\caption{Spar-cap centre through-thickness (OML$\to$IML, $88$~mm): RM shell vs.\ VABS. The
-in-plane $\sigma_{11}$ overlaps VABS through the full carbon cap ($\approx\!-21$~MPa);
-the endpoint departures are the thin glass facesheets, where the stress transitions over a
-few plies.}\label{fig:dehom_r020_cap}
+\includegraphics[width=\textwidth]{figures/dehom_r020_capleft.png}
+\caption{LP spar-cap through-thickness (left of the cap, OML$\to$IML, $88$~mm): RM shell vs.\
+VABS. The in-plane $\sigma_{11}$ overlaps VABS through the full carbon cap
+($\approx\!-21$~MPa); the endpoint departures are the thin glass facesheets, where the stress
+transitions over a few plies.}\label{fig:dehom_r020_cap}
 \end{figure}
 
-The in-plane stress---which carries essentially all of the strength-relevant field---is
-reproduced along the whole LP surface and through the full $88$~mm carbon cap: the axial
-$\sigma_{11}$ recovered by the $1$-D RM solve lies on top of the VABS solid recovery. The
-transverse-normal $\sigma_{33}$ and the transverse shears $\sigma_{13},\sigma_{23}$ are three
-to four orders of magnitude below the in-plane and are reported at the plate plane-stress
-limit; a physical $\sigma_{13},\sigma_{23}$ (an equilibrium shear-flow effect rather than a
-local constitutive one) is left to future work and does not affect the strength-relevant
-in-plane field. Finally, dehomogenization recovers the full local \emph{displacement} state,
-not only stress: Figure~\ref{fig:r020_disp} shows the recovered warping field under the same
-load---the out-of-plane axial warping $u_1$ ($\pm1.5$~mm about the section) and the in-plane
-deformed shape, with the compliant trailing edge distorting most.
+The agreement is field-wide, not only on the two paths. Figure~\ref{fig:r020_contour} contours
+the in-plane stress over the whole section, VABS solid beside the RM shell recovery: the
+strength-driving $\sigma_{11}$ (bending compression in the LP cap, tension in the HP cap) is
+reproduced point-for-point, while $\sigma_{22}$ and $\sigma_{12}$ are one to two orders
+smaller. The transverse-normal $\sigma_{33}$ and the transverse shears
+$\sigma_{13},\sigma_{23}$ are three to four orders below the in-plane and are reported at the
+plate plane-stress limit; a physical $\sigma_{13},\sigma_{23}$ (an equilibrium shear-flow
+effect rather than a local constitutive one) is left to future work.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/r020_disp.png}
-\caption{IEA $r=0.2$ local displacement recovered by dehomogenization under the same beam
-load: the axial (out-of-plane) warping $u_1$ (left) and the in-plane displacement on the
-deformed section (right, magnified).}\label{fig:r020_disp}
+\includegraphics[width=\textwidth]{figures/r020_stress_contour_cmp.png}
+\caption{In-plane stress over the section, VABS solid (left) vs.\ OpenSG RM shell
+dehomogenization (right) for $\sigma_{11},\sigma_{22},\sigma_{12}$ (shared scale per row). The
+strength-driving $\sigma_{11}$ matches; the smaller components differ mainly in the web shear
+flow.}\label{fig:r020_contour}
+\end{figure}
+
+Dehomogenization also recovers the full local \emph{displacement} state. Along the LP
+circumferential path the recovered warping $u_1,u_2,u_3$ tracks VABS
+(Figure~\ref{fig:r020_disp_circ})---the axial warping $u_1$ within $\sim\!0.05$~mm over the
+$8$~m surface and the in-plane $u_2,u_3$ essentially on top of the solid recovery. The
+agreement is field-wide: Figure~\ref{fig:r020_disp_contour} contours all three warping
+components over the whole section, VABS solid beside the RM shell recovery, and the patterns
+coincide point-for-point. Rendered as an exaggerated three-dimensional surface
+(Figure~\ref{fig:r020_iso}) the axial warping $u_1$ on the distorted mesh is indistinguishable
+between the two recoveries.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/r020_disp_circ.png}
+\caption{Recovered warping displacement $u_1,u_2,u_3$ along the LP circumferential path
+(LE$\to$TE): OpenSG RM shell dehomogenization vs.\ VABS $.\mathrm{U}$. All three components
+overlap the solid recovery along the entire surface.}\label{fig:r020_disp_circ}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/r020_disp_contour_cmp.png}
+\caption{Local warping displacement $u_1,u_2,u_3$ over the section, VABS solid (left) vs.\
+OpenSG RM shell dehomogenization (right), shared scale per row. The axial warping $u_1$ and the
+in-plane $u_2,u_3$ are reproduced across the whole cross-section.}\label{fig:r020_disp_contour}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/r020_iso_warp.png}
+\caption{Axial warping $u_1$ on the distorted section (isometric, exaggerated $\times1558$):
+VABS solid (left) vs.\ OpenSG RM shell dehomogenization (right). The recovered warped surface is
+reproduced by the $1$-D RM solve.}\label{fig:r020_iso}
 \end{figure}
