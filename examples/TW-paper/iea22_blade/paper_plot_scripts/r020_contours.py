@@ -73,9 +73,10 @@ NL = 24
 
 
 def tcf(ax, val, vmin, vmax, sym=True):
-    lv = np.linspace(vmin, vmax, NL)
-    # clip to the level range so tricontourf fills everything WITHOUT an extend triangle on the bar
-    cs = ax.tricontourf(tri, np.clip(val, vmin, vmax), levels=lv, cmap=CMAP, extend="neither")
+    # tripcolor on the ACTUAL mesh cells (Gouraud) -- every triangle is rendered faithfully, so web
+    # junctions and thin structure are correct (no tricontourf cross-cell contouring artifacts); this
+    # is the same nodal Gouraud shading ParaView/VTK produce from the exported .vtk.
+    cs = ax.tripcolor(tri, np.clip(val, vmin, vmax), shading="gouraud", cmap=CMAP, vmin=vmin, vmax=vmax)
     ax.set_aspect("equal"); ax.axis("off")
     return cs
 
@@ -136,9 +137,29 @@ cs = None
 for a, (dat, ip, tag) in zip(ax, [(magV, ipV, "VABS (solid)"), (magR, ipR, "OpenSG RM")]):
     dxy = xy + ip * sc                                             # distorted section
     dtri = mtri.Triangulation(dxy[:, 0], dxy[:, 1], tris)
-    cs = a.tricontourf(dtri, np.clip(dat, 0, vmax), levels=lv, cmap=CMAP, extend="neither")
+    cs = a.tripcolor(dtri, np.clip(dat, 0, vmax), shading="gouraud", cmap=CMAP, vmin=0, vmax=vmax)
     a.set_aspect("equal"); a.axis("off")
     a.set_title(r"$|u|$ -- %s" % tag, fontsize=11)
 cb = fig.colorbar(cs, ax=ax.tolist(), shrink=0.85, pad=0.02)       # one shared bar, no label, no triangle
 fig.savefig(os.path.join(FIG, "r020_disp_mag.png"), dpi=155, bbox_inches="tight"); plt.close(fig)
 print("wrote r020_disp_mag.png  (distort x%.0f, |u| max V=%.3f RM=%.3f mm)" % (sc, magV.max(), magR.max()))
+
+# ---- export the solid mesh + all dehom fields as .vtk (one file per contour) for ParaView ----
+try:
+    import pyvista as pv
+    VTK = os.path.join(HERE, "vtk"); os.makedirs(VTK, exist_ok=True)
+    pts3 = np.column_stack([xy[:, 0], xy[:, 1], np.zeros(len(xy))])
+    faces = np.hstack([np.full((len(tris), 1), 3), tris]).astype(np.int64).ravel()
+    base = pv.PolyData(pts3, faces)
+    fields = {"S11": (sV[:, 0], sR[:, 0]), "S22": (sV[:, 1], sR[:, 1]), "S12": (sV[:, 2], sR[:, 2]),
+              "u1": (uV[:, 0], uR[:, 0]), "u2": (uV[:, 1], uR[:, 1]), "u3": (uV[:, 2], uR[:, 2]),
+              "umag": (magV, magR)}
+    for name, (fv, fr) in fields.items():                          # one .vtk per contour (VABS + RM arrays)
+        m = base.copy()
+        m.point_data["VABS_" + name] = np.asarray(fv)
+        m.point_data["OpenSG_RM_" + name] = np.asarray(fr)
+        m.save(os.path.join(VTK, "r020_%s.vtk" % name))
+    print("wrote %d .vtk contour files -> %s (open in ParaView, colour by VABS_/OpenSG_RM_)" %
+          (len(fields), VTK))
+except Exception as e:
+    print("vtk export skipped:", repr(e)[:100])

@@ -118,20 +118,32 @@ def _macro_fields(B, beam_force_vabs=None, beam_strain=None):
     return st, st_m, aA, aB
 
 
-def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None):
-    """RM-recovered warping DISPLACEMENT (u1,u2,u3) at query points (mid-surface, leading
-    order): the same RM warping w=V0 st_m + V1 st_cl1 the stress recovery uses, its first
-    three (displacement) DOF interpolated to each arc position.  Both RM and VABS warping are
-    constrained orthogonal to the rigid/classical modes, so they are directly comparable."""
+def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, director=True):
+    """RM-recovered warping DISPLACEMENT (u1,u2,u3) at query points.  The RM shell warping w=V0 st_m
+    + V1 st_cl1 carries the mid-surface displacement (first 3 DOF) and the director rotation (last 3
+    DOF, omega).  A point at through-thickness depth z from the reference contour moves as the RM
+    kinematics dictate: u(z) = u_mid + z (omega x e3).  With ``director`` the depth term is included
+    (needed for through-thickness paths); the circumferential path lies on the contour (z~=0) so it
+    is unaffected.  Both RM and VABS warping are orthogonal to the rigid/classical modes, so they are
+    directly comparable."""
     pts = np.atleast_2d(np.asarray(points_2d, float))
     st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
     wn = np.asarray(aA).reshape(-1, 6)                       # per-node [u1,u2,u3,om1,om2,om3]
-    corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"])
+    corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"]); cen = corners.mean(0)
     out = np.zeros((len(pts), 3))
     for i in range(len(pts)):
         e, xi, pr = _project_point(corners, rc, pts[i])
         c0, c1 = int(rc[e, 0]), int(rc[e, 1])
-        out[i] = (1.0 - xi) * wn[c0, 0:3] + xi * wn[c1, 0:3]     # mid-surface warping (leading order)
+        umid = (1.0 - xi) * wn[c0, 0:3] + xi * wn[c1, 0:3]      # mid-surface warping
+        if director:
+            om = (1.0 - xi) * wn[c0, 3:6] + xi * wn[c1, 3:6]    # director rotation omega
+            t2, t3 = corners[c1] - corners[c0]; tl = np.hypot(t2, t3); t2, t3 = t2 / tl, t3 / tl
+            n2, n3 = t3, -t2
+            if (cen[0] - pr[0]) * n2 + (cen[1] - pr[1]) * n3 < 0.0:
+                n2, n3 = -n2, -n3                               # inward normal (contour -> interior)
+            z = (pts[i, 0] - pr[0]) * n2 + (pts[i, 1] - pr[1]) * n3   # depth from the contour
+            umid = umid + z * np.cross(om, np.array([0.0, n2, n3]))   # + z (omega x e3)
+        out[i] = umid
     return out
 
 

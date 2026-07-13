@@ -36,25 +36,23 @@ def arclen(p):
 # r020_contours.py on the real solid-mesh triangulation.  This script owns only the path plots.
 
 # ---------------- u1,u2,u3 along each path, INDIVIDUAL files (non-dim x-axis 0..1) ----------------
-def path_disp(P, kind, out):
+def path_disp(P, kind, tag):
     Uv = U[utree.query(P)[1], 3:6] * 1e3                     # VABS .U (mm)
-    Ur = np.asarray(dehom_rm.disp_at_points(B, P, beam_force_vabs=FF)) * 1e3   # RM warping (mm)
+    Ur = np.asarray(dehom_rm.disp_at_points(B, P, beam_force_vabs=FF)) * 1e3   # RM warping + director (mm)
     col = 0 if kind == "circ" else 1                         # circ: y2 (LE->TE) ; cap: y3 (OML->IML)
     x = (P[:, col] - P[0, col]) / (P[-1, col] - P[0, col])   # normalized 0..1
-    fig, ax = plt.subplots(1, 3, figsize=(13, 3.7))
-    for k, comp in enumerate(["u_1", "u_2", "u_3"]):
-        a = ax[k]
-        a.plot(x, Ur[:, k], "r--o", ms=3, lw=1.6, label="OpenSG RM")
-        a.plot(x, Uv[:, k], "g-^", ms=3, lw=1.6, label="VABS ($.\\mathrm{U}$)")
-        a.set_title(r"$%s$" % comp, fontsize=11)
-        a.set_xlabel("non-dim parameter"); a.set_ylabel(r"$%s$ (mm)" % comp); a.set_xlim(0, 1)
-        a.grid(True, ls=":", alpha=0.6)
-    h, l = ax[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=9, frameon=False)  # outside
-    fig.tight_layout(rect=(0, 0, 0.92, 1))
-    fig.savefig(out, dpi=160, bbox_inches="tight"); plt.close(fig)
-    print("wrote", os.path.basename(out))
+    for k, comp in enumerate(["u_1", "u_2", "u_3"]):         # ONE figure per displacement component
+        fig, a = plt.subplots(figsize=(6.2, 4.2))
+        a.plot(x, Ur[:, k], "r--o", ms=4, lw=1.7, label="OpenSG RM")
+        a.plot(x, Uv[:, k], "g-^", ms=4, lw=1.7, label="VABS ($.\\mathrm{U}$)")
+        a.set_xlabel("non-dim parameter"); a.set_ylabel(r"$%s$ (mm)" % comp)
+        a.set_xlim(-0.03, 1.03); a.grid(True, ls=":", alpha=0.6)
+        a.legend(loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=9, frameon=False)  # outside
+        fig.tight_layout()
+        fig.savefig(os.path.join(FIG, "r020_disp_%s_%s.png" % (tag, comp)), dpi=160, bbox_inches="tight")
+        plt.close(fig)
+    print("wrote r020_disp_%s_u*.png (3 individual)" % tag)
 
 
-path_disp(circ, "circ", os.path.join(FIG, "r020_disp_circ.png"))
-path_disp(cap, "cap", os.path.join(FIG, "r020_disp_cap.png"))
+path_disp(circ, "circ", "circ")
+path_disp(cap, "cap", "cap")
