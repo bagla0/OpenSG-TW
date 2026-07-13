@@ -148,20 +148,24 @@ residual is the model error itself, not two errors in fortuitous opposition.
 
 %----------------------------------------------------------------------------------
 \subsection{Example 4: the full IEA-22 blade}\label{sec:res_blade}
-Homogenizing every span station assembles the blade's complete one-dimensional beam
-model---the same full-blade verification performed for the Kirchhoff--Love cross-section
-in the companion study \cite{bagla2024asc,camarena2025}, here with the single RM 6-DOF
-element throughout. Figure~\ref{fig:span_loft} shows the eight cross-sections lofted
-along the beam reference axis, from $r=0.2$ to $0.9$, coloured by wall region as in
-Figure~\ref{fig:iea_mesh}.
-Table~\ref{tab:fullblade} and Figure~\ref{fig:span} give the RM shell against the 2-D
-solid at all eight stations ($r=0.2$ to $0.9$). Extension and both bendings track the
-solid within $1.5\%$, $1.4\%$, and $3.9\%$ respectively at \emph{every} station, and the
-chordwise shear within $3.3\%$. The flapwise shear and torsion drift from $-5.6\%$ and
-$-2.8\%$ inboard to $-12.3\%$ and $-11.2\%$ at the thin outboard stations---the
-transverse-shear-flexible walls thin faster than the section contracts, and the
-single-director wall progressively under-resolves the through-thickness shear of the
-sandwich panels. Each station homogenizes in about one second.
+Homogenizing at the \emph{actual} windIO airfoil-definition stations assembles the blade's
+complete one-dimensional beam model on the real section geometries, with no interpolated
+stations. The IEA-22 windIO description places its airfoils at the \texttt{spanwise\_position}
+entries FFA-W3-330blend, -301, -270blend, -241 and -211 ($r=0.247,0.399,0.534,0.739$ and
+$0.980$); together with the $r=0.2$ root section of Examples~3 and~5 these are the six stations
+used here. This repeats the full-blade verification of the Kirchhoff--Love companion study
+\cite{bagla2024asc,camarena2025} with the single RM 6-DOF element, now against a full VABS
+analysis of the 2-D solid at each station. Figure~\ref{fig:span_loft} lofts representative
+cross-sections along the beam reference axis to show the taper.
+
+Table~\ref{tab:fullblade_real} and Figure~\ref{fig:span} give the RM shell against the VABS
+solid. The full $6\times6$ agrees to a Frobenius error of $1.5$--$2.4\%$ at \emph{every}
+station; extension and both bendings track VABS within $1.5\%$, $1.4\%$ and---bar the thin
+$r=0.98$ tip ($+6.2\%$ on $EI_3$)---about $2\%$, and the chordwise shear $GA_2$ within $3.2\%$.
+The flapwise transverse shear $GA_3$ ($-5\%$ to $-11\%$) and the torsion $GJ$ ($-3\%$ to $-9\%$)
+drift outboard: the transverse-shear-flexible sandwich walls thin faster than the section
+contracts, so the single-director wall progressively under-resolves the through-thickness shear.
+Each station homogenizes in about one second.
 
 \begin{figure}[htbp]\centering
 \begin{minipage}[c]{0.86\textwidth}\centering
@@ -170,18 +174,18 @@ sandwich panels. Each station homogenizes in about one second.
 \begin{minipage}[c]{0.12\textwidth}\centering
 \includegraphics[width=\textwidth]{figures/iea_span_legend.png}
 \end{minipage}
-\caption{The eight IEA-22 blade cross-sections lofted along the beam reference axis
-(dotted), from $r=0.2$ to $0.9$, coloured by wall region with the legend at
-right.}\label{fig:span_loft}
+\caption{Representative IEA-22 cross-sections lofted along the beam reference axis (dotted),
+coloured by wall region, illustrating the blade taper; the $6\times6$ comparison
+(Table~\ref{tab:fullblade_real}) is taken at the windIO airfoil stations.}\label{fig:span_loft}
 \end{figure}
 
-\input{tab_rm/fullblade.tex}
+\input{tab_rm/fullblade_real.tex}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/full_blade_rm_span.png}
-\caption{Full IEA-22 blade: RM 6-DOF cross-section diagonal \% error vs.\ the 2-D solid
-across the span (left: transverse shear and torsion; right: extension and bending), OML
-laminate reference.}\label{fig:span}
+\includegraphics[width=\textwidth]{figures/full_blade_rm_span_real.png}
+\caption{Full IEA-22 blade at the windIO airfoil stations: RM 6-DOF cross-section diagonal
+\% error vs.\ the VABS 2-D solid across the span (left: transverse shear and torsion; right:
+extension and bending), OML laminate reference.}\label{fig:span}
 \end{figure}
 
 %----------------------------------------------------------------------------------
@@ -284,9 +288,8 @@ circumferential path the recovered warping $u_1,u_2,u_3$ tracks VABS
 $8$~m surface and the in-plane $u_2,u_3$ essentially on top of the solid recovery. The
 agreement is field-wide: Figure~\ref{fig:r020_disp_contour} contours all three warping
 components over the whole section, VABS solid beside the RM shell recovery, and the patterns
-coincide point-for-point. Rendered as an exaggerated three-dimensional surface
-(Figure~\ref{fig:r020_iso}) the axial warping $u_1$ on the distorted mesh is indistinguishable
-between the two recoveries.
+coincide point-for-point; the total displacement magnitude $|u|=\sqrt{u_1^2+u_2^2+u_3^2}$
+(Figure~\ref{fig:r020_mag}) is likewise reproduced across the cross-section.
 
 \begin{figure}[htbp]\centering
 \includegraphics[width=\textwidth]{figures/r020_disp_circ.png}
@@ -303,8 +306,26 @@ in-plane $u_2,u_3$ are reproduced across the whole cross-section.}\label{fig:r02
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/r020_iso_warp.png}
-\caption{Axial warping $u_1$ on the distorted section (isometric, exaggerated $\times1558$):
-VABS solid (left) vs.\ OpenSG RM shell dehomogenization (right). The recovered warped surface is
-reproduced by the $1$-D RM solve.}\label{fig:r020_iso}
+\includegraphics[width=\textwidth]{figures/r020_disp_mag.png}
+\caption{Total local displacement magnitude $|u|=\sqrt{u_1^2+u_2^2+u_3^2}$ over the section:
+VABS solid (left) vs.\ OpenSG RM shell dehomogenization (right). The combined warping field is
+reproduced across the whole cross-section.}\label{fig:r020_mag}
+\end{figure}
+
+The recovery is not confined to the root. Applying each station's own VABS beam load, the RM
+two-step dehomogenization reproduces the VABS local field along the whole blade at the windIO
+airfoil stations of Example~4. Figure~\ref{fig:span_dehom} traces the in-plane stress and the
+displacement at the section crown across the span: the axial $\sigma_{11}$ recovered by the
+$1$-D RM solve lies on the VABS solid recovery at every station ($-2.05$ vs.\ $-2.07$~MPa at
+$r=0.247$, $+0.15$ vs.\ $+0.15$~MPa at $r=0.98$), and the local displacement tracks within
+$\sim\!5\%$ ($3.08$ vs.\ $2.98$~mm at $r=0.247$ down to $0.11$ vs.\ $0.11$~mm at the tip). A
+single one-dimensional Reissner--Mindlin element thus recovers the pointwise three-dimensional
+stress and displacement of the full composite blade section, everywhere along the span.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\textwidth]{figures/span_dehom.png}
+\caption{Spanwise dehomogenization at the windIO airfoil stations: local in-plane stress (left)
+and local displacement (right) recovered at the section crown under each station's own beam load,
+OpenSG RM shell (dashed) vs.\ VABS $2$-D solid (solid). Both track across the
+span.}\label{fig:span_dehom}
 \end{figure}

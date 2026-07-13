@@ -1,10 +1,9 @@
-"""IEA r=0.2 local DISPLACEMENT recovery, OpenSG-RM vs VABS:
-  (1) figures/r020_disp_contour_cmp.png -- full-section contour of u1,u2,u3, VABS solid
-      beside the RM shell dehomogenization (rainbow, shared scale per row);
-  (2) figures/r020_disp_circ.png        -- u1,u2,u3 along the LP circumferential path (individual);
-  (3) figures/r020_disp_cap.png         -- u1,u2,u3 along the LEFT spar-cap column (individual).
-Same beam load FF as the stress recovery.  RM warping = dehom_rm.disp_at_points (leading-order
-mid-surface); VABS = the .U warping field nearest each node."""
+"""IEA r=0.2 local DISPLACEMENT recovery along the paths, OpenSG-RM vs VABS:
+  figures/r020_disp_circ.png  -- u1,u2,u3 along the LP circumferential path (individual);
+  figures/r020_disp_cap.png   -- u1,u2,u3 along the LEFT spar-cap column (individual).
+(The full-section displacement CONTOURS are produced by r020_contours.py on the real solid
+mesh triangulation.)  Same beam load FF as the stress recovery.  RM warping =
+dehom_rm.disp_at_points (leading-order mid-surface); VABS = the .U warping field nearest each node."""
 import os, sys
 import numpy as np
 from scipy.spatial import cKDTree
@@ -33,29 +32,10 @@ def arclen(p):
 
 
 # ---------------- (1) full-section contour: VABS vs RM, u1,u2,u3 ----------------
-step = max(1, len(U) // 3500)
-pts = U[::step, 1:3]
-Vu = U[::step, 3:6] * 1e3                                    # VABS warping (mm)
-Ru = np.asarray(dehom_rm.disp_at_points(B, pts, beam_force_vabs=FF)) * 1e3   # RM warping (mm)
-comps = [(0, "u_1"), (1, "u_2"), (2, "u_3")]
-fig, ax = plt.subplots(3, 2, figsize=(12, 10.5))
-for r, (ci, lab) in enumerate(comps):
-    v = Vu[:, ci]; rm = Ru[:, ci]
-    lo, hi = np.percentile(np.r_[v, rm], [2, 98]); m = max(abs(lo), abs(hi)) or 1e-6
-    for c, (dat, tag) in enumerate([(v, "VABS (solid)"), (rm, "OpenSG RM (shell dehom)")]):
-        a = ax[r, c]
-        sc = a.scatter(pts[:, 0], pts[:, 1], c=dat, s=3, cmap="rainbow", vmin=-m, vmax=m, linewidths=0)
-        a.set_aspect("equal"); a.axis("off")
-        a.set_title(r"$%s$ -- %s (mm)" % (lab, tag), fontsize=10)
-        if c == 1:
-            fig.colorbar(sc, ax=ax[r, :].tolist(), shrink=0.75, pad=0.01)
-fig.suptitle("IEA r=0.2 local displacement (warping): VABS solid vs OpenSG RM shell dehomogenization",
-             fontsize=13, fontweight="bold")
-fig.savefig(os.path.join(FIG, "r020_disp_contour_cmp.png"), dpi=150, bbox_inches="tight"); plt.close(fig)
-print("wrote r020_disp_contour_cmp.png (%d points)" % len(pts))
+# NOTE: the full-section displacement CONTOURS (r020_disp_contour_cmp.png etc.) are produced by
+# r020_contours.py on the real solid-mesh triangulation.  This script owns only the path plots.
 
-
-# ---------------- (2)+(3) u1,u2,u3 along each path, INDIVIDUAL files ----------------
+# ---------------- u1,u2,u3 along each path, INDIVIDUAL files ----------------
 def path_disp(P, name, xl, xscale, out):
     Uv = U[utree.query(P)[1], 3:6] * 1e3                     # VABS .U (mm)
     Ur = np.asarray(dehom_rm.disp_at_points(B, P, beam_force_vabs=FF)) * 1e3   # RM warping (mm)
@@ -68,7 +48,7 @@ def path_disp(P, name, xl, xscale, out):
         a.set_title(r"$%s$" % comp, fontsize=11)
         a.set_xlabel(xl); a.set_ylabel(r"$%s$ (mm)" % comp); a.grid(True, ls=":", alpha=0.6)
         a.legend(fontsize=8)
-    fig.suptitle("IEA r=0.2 local displacement along the %s: OpenSG RM vs VABS" % name,
+    fig.suptitle("Local displacement along the %s: OpenSG RM vs VABS" % name,
                  fontsize=12, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(out, dpi=160, bbox_inches="tight"); plt.close(fig)

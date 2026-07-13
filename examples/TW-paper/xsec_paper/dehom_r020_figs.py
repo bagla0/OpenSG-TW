@@ -66,8 +66,8 @@ def make(fn, xlabel, title, out, around=False):
 
 make("solid.lp_sparcap_left_thickness_r020.coords",
      "through-thickness (mm, OML$\\to$IML)",
-     "IEA r=0.2 LP spar-cap (LEFT) through-thickness: RM shell vs VABS",
+     "LP spar-cap (left) through-thickness: RM shell vs VABS",
      os.path.join(FIG, "dehom_r020_capleft.png"))
 make("solid.circumferential_r020.coords", "upper-surface arc length (m, LE$\\to$TE)",
-     "IEA r=0.2 upper-surface (LP) circumferential: RM shell vs VABS",
+     "Upper-surface (LP) circumferential: RM shell vs VABS",
      os.path.join(FIG, "dehom_r020_circumferential.png"), around=True)
