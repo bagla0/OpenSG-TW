@@ -57,7 +57,10 @@ nn = cKDTree(sm_xy).query(xy)[1]
 bad = ~np.isfinite(sV).all(1); sV[bad] = sm_s[nn][bad][:, [0, 1, 5]]
 sV = sV / 1e6                                                 # MPa  [S11,S22,S12]
 
-# node coords from the solid yaml must match .U ordering -> use the .U coords for the triangulation
+# the solid YAML `tris` index node ids 1..N; VABS .U (sorted by id) must share that ordering, so
+# .U row i == YAML node id i+1.  Guard it: a mismatch would silently scramble the triangulation.
+assert xy.shape == xy_yaml.shape and np.allclose(xy, xy_yaml, atol=1e-3), \
+    "VABS .U node order != solid-YAML node order -- triangulation would be scrambled"
 tri = mtri.Triangulation(xy[:, 0], xy[:, 1], tris)
 
 # ---- RM fields at the SAME nodes ----
