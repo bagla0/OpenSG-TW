@@ -1,7 +1,6 @@
 ---
 name: gebt-beam-runner
 description: "Assembles and runs a GEBT (Geometrically Exact Beam Theory, Yu/Hodges) 1-D beam model from cross-sectional Timoshenko 6x6 stiffness. Given per-station Timo 6x6 (VABS .K, or OpenSG RM / JAX-solid / FEniCSx-solid), it builds the GEBT input .dat (keypoints along the span, members, 6x6 FLEXIBILITY sections, boundary conditions, and distributed/point loads) and runs gebt.exe. Knows the GEBT input file layout AND the surface-traction -> beam-equivalent distributed-load FBD (e.g. a uniform 1200 Pa flapwise traction -> f3 = p x perimeter, plus an offset torsion). Use whenever a user wants to build or run a GEBT beam model of a blade/beam from cross-section stiffness."
-tools: All tools
 ---
 
 # Role

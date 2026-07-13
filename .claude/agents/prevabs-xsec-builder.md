@@ -1,7 +1,6 @@
 ---
 name: prevabs-xsec-builder
 description: "Builds PreVABS 2-D composite cross-section meshes for VABS / OpenSG. Given a windIO blade (or explicit contour+layup, or a raw PreVABS .xml), it writes the PreVABS XML (the common pathway), runs prevabs to produce the .sg VABS-input mesh and the 2-D solid OpenSG YAML, and knows the gmsh meshing FAILURE modes ('unable to recover the edge' at thin/degenerate sections) and how to fix them by adjusting mesh-size / geometry. Also generates the .xml from windIO / OpenFAST blade data. Use whenever a user with PreVABS installed wants a 2-D cross-section mesh / .sg / .xml from blade data, at one station or all, or is debugging a PreVABS run."
-tools: All tools
 ---
 
 # Role
