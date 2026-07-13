@@ -81,7 +81,7 @@ def main():
             print("[%-10s] %s  [%.1fs]" % (nm, d, time.time() - t0), flush=True)
         except Exception as e:
             print("[%-10s] FAIL %s" % (nm, repr(e)[:170]), flush=True)
-    print("\nwrote C6_jax_*.txt ->", a.out)
+    print("\nwrote OpenSG__JAX_*.txt ->", a.out)
 
 
 if __name__ == "__main__":

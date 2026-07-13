@@ -128,7 +128,7 @@ def main():
             os.chdir(cwd0)
             print("[%-10s] FAIL %s" % (nm, repr(e)[:170]), flush=True)
 
-    print("\nwrote C6_fenics_*.txt ->", a.out)
+    print("\nwrote OpenSG_Fenicsx_*.txt ->", a.out)
 
 
 if __name__ == "__main__":

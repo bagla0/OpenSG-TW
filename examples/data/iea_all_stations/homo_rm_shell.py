@@ -88,7 +88,7 @@ def main():
     else:
         for f in files:
             process(f, a.out)
-    print("\nwrote C6_rm_*.txt ->", a.out)
+    print("\nwrote OpenSG_RM_Shell_*.txt ->", a.out)
 
 
 if __name__ == "__main__":
