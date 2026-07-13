@@ -350,17 +350,36 @@ span.}\label{fig:span_disp}
 \end{figure}
 
 Assembling the station recoveries into the whole blade, Figure~\ref{fig:blade3d} lofts the six
-computed windIO cross-sections along the span and colours the outer surface by the recovered field,
-interpolated between adjacent stations: the axial stress $\sigma_{11}$ (top) and the displacement
-magnitude $|u|$ (bottom) both peak inboard and decay toward the slender tip---a full
-three-dimensional strength picture of the blade assembled from six one-dimensional cross-sectional
-solves, each a fraction of a second.
+computed windIO cross-sections along the span and colours the outer surface by each recovered
+dehomogenization field, interpolated between adjacent stations---the three warping displacements
+$u_1,u_2,u_3$ and the three in-plane stresses $\sigma_{11},\sigma_{22},\sigma_{12}$. The complete
+three-dimensional strength picture of the blade is assembled from six one-dimensional
+cross-sectional solves, each a fraction of a second.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=0.82\textwidth]{figures/blade3d_sigma11.png}\\[2pt]
-\includegraphics[width=0.82\textwidth]{figures/blade3d_umag.png}
-\caption{Full IEA-22 blade lofted from the six computed windIO cross-sections and coloured by the
-dehomogenized field on the outer mould line, interpolated between adjacent stations: axial stress
-$\sigma_{11}$ (top) and displacement magnitude $|u|$ (bottom) under the spanwise-varying beam load,
-each with a single colour bar spanning the whole blade.}\label{fig:blade3d}
+\includegraphics[width=0.49\textwidth]{figures/blade3d_u1.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/blade3d_S11.png}\\[1pt]
+\includegraphics[width=0.49\textwidth]{figures/blade3d_u2.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/blade3d_S22.png}\\[1pt]
+\includegraphics[width=0.49\textwidth]{figures/blade3d_u3.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/blade3d_S12.png}
+\caption{Full IEA-22 blade coloured by each recovered dehomogenization field on the outer surface,
+lofted from the six windIO cross-sections and interpolated between adjacent stations: warping
+displacements $u_1,u_2,u_3$ (left column) and in-plane stresses $\sigma_{11},\sigma_{22},\sigma_{12}$
+(right column) under the spanwise-varying beam load.}\label{fig:blade3d}
+\end{figure}
+
+The outer surface carries only the thin skin plies; the strength-driving stress lives in the carbon
+spar caps through the wall. Lofting the wall \emph{through its thickness}
+(Figure~\ref{fig:blade3d_solid}) recovers the full-solid field---the peak through-wall axial stress
+traces the spar caps down the blade. The complete field (VABS and RM, all six components) is stored
+as \texttt{blade3d\_solid.vtk} for section-by-section inspection in ParaView.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.82\textwidth]{figures/blade3d_solid_S11.png}
+\caption{Full-solid IEA-22 blade: the wall lofted through its thickness across the six stations, the
+surface coloured by the peak through-wall axial stress $\sigma_{11}$---the carbon spar caps carry the
+spanwise bending. The complete three-dimensional field is stored as \texttt{blade3d\_solid.vtk}
+(arrays \texttt{VABS\_*} and \texttt{RM\_*}) for slicing at any section in
+ParaView.}\label{fig:blade3d_solid}
 \end{figure}

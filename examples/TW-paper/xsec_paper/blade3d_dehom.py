@@ -61,34 +61,34 @@ for tag, r, shell in STATIONS:
     B = dehom_rm.build_rm_bundle(shell, ref="oml")
     FF = parse_glb(os.path.join(VABS, "iea_%s.sg.glb" % tag))
     oml = np.asarray(build_cross_section(blade, r=r)["nodes"], float)      # OML contour, ring frame
-    sig = np.asarray(dehom_rm.stress_at_points(B, oml, beam_force_vabs=FF, frame="global")["stress"])[:, 0] / 1e6
-    umag = np.linalg.norm(np.asarray(dehom_rm.disp_at_points(B, oml, beam_force_vabs=FF)), axis=1) * 1e3
-    xy_r, sig_r = resample_ring(oml, sig, N)
-    _, um_r = resample_ring(oml, umag, N)
-    rings.append((r, xy_r, sig_r, um_r))
-    print("  %-6s %.4f   [%7.2f, %7.2f]      %.3f" % (tag, r, sig.min(), sig.max(), umag.max()))
+    sig = np.asarray(dehom_rm.stress_at_points(B, oml, beam_force_vabs=FF, frame="material")["stress"]) / 1e6
+    u = np.asarray(dehom_rm.disp_at_points(B, oml, beam_force_vabs=FF)) * 1e3
+    raw = {"u1": u[:, 0], "u2": u[:, 1], "u3": u[:, 2],
+           "S11": sig[:, 0], "S22": sig[:, 1], "S12": sig[:, 5]}
+    xy_r, _ = resample_ring(oml, raw["S11"], N)
+    Fr = {k: resample_ring(oml, v, N)[1] for k, v in raw.items()}
+    rings.append((r, xy_r, Fr))
+    print("  %-6s %.4f  S11[%6.2f,%6.2f]  |u|max %.3f"
+          % (tag, r, sig[:, 0].min(), sig[:, 0].max(), np.linalg.norm(u, axis=1).max()))
 
 
-def loft_field(field_idx):
-    """Interpolate geometry + the chosen field (2=sigma11, 3=|u|) across the span."""
+def loft_field(name):
+    """Interpolate geometry + the named field across the span (rings = (r, xy, {field:array}))."""
     span = []
     for k in range(len(rings) - 1):
-        r0, xy0, *f0 = rings[k]; r1, xy1, *f1 = rings[k + 1]
+        r0, xy0, F0 = rings[k]; r1, xy1, F1 = rings[k + 1]
         for m in range(MPER):
             t = m / MPER
             span.append((r0 + t * (r1 - r0), (1 - t) * xy0 + t * xy1,
-                         (1 - t) * f0[field_idx - 2] + t * f1[field_idx - 2]))
-    span.append((rings[-1][0], rings[-1][1], rings[-1][field_idx]))   # rings = (r, xy, sig11, umag)
+                         (1 - t) * F0[name] + t * F1[name]))
+    span.append((rings[-1][0], rings[-1][1], rings[-1][2][name]))
     return span
 
 
-def render(field_idx, label, out, symmetric):
-    span = loft_field(field_idx)
+def render(name, label, out):
+    span = loft_field(name)
     allf = np.concatenate([s[2] for s in span])
-    if symmetric:
-        m = np.nanpercentile(np.abs(allf), 99.5); vmin, vmax = -m, m
-    else:
-        vmin, vmax = 0.0, np.nanpercentile(allf, 99.5)
+    m = np.nanpercentile(np.abs(allf), 99.5) or 1e-9; vmin, vmax = -m, m
     norm = Normalize(vmin, vmax)
     quads, cols = [], []
     for j in range(len(span) - 1):
@@ -128,5 +128,7 @@ def render(field_idx, label, out, symmetric):
     print("wrote", os.path.basename(out), "range [%.2f, %.2f]" % (vmin, vmax))
 
 
-render(2, r"$\sigma_{11}$ (MPa)", os.path.join(FIG, "blade3d_sigma11.png"), symmetric=True)
-render(3, r"$|u|$ (mm)", os.path.join(FIG, "blade3d_umag.png"), symmetric=False)
+FIELDS = [("u1", r"$u_1$ (mm)"), ("u2", r"$u_2$ (mm)"), ("u3", r"$u_3$ (mm)"),
+          ("S11", r"$\sigma_{11}$ (MPa)"), ("S22", r"$\sigma_{22}$ (MPa)"), ("S12", r"$\sigma_{12}$ (MPa)")]
+for nm, lab in FIELDS:
+    render(nm, lab, os.path.join(FIG, "blade3d_%s.png" % nm))
