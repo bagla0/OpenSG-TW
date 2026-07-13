@@ -51,11 +51,12 @@ U = U[np.argsort(U[:, 0])]
 xy = U[:, 1:3]; uV = U[:, 3:6] * 1e3                          # node disp (mm)
 d = np.loadtxt(os.path.join(VABS, "iea_r020.sg.SM"), skiprows=2)
 sm_xy, sm_s = d[:, :2], d[:, 2:8][:, [0, 3, 5, 4, 2, 1]]      # [S11,S22,S33,S23,S13,S12]
-# VABS stress interpolated to nodes (linear, fill boundary gaps with nearest)
-sV = griddata(sm_xy, sm_s[:, [0, 1, 5]], xy, method="linear")
+# VABS stress interpolated to nodes (linear, fill boundary gaps with nearest) -- ALL 6 components
+sV6 = griddata(sm_xy, sm_s, xy, method="linear")
 nn = cKDTree(sm_xy).query(xy)[1]
-bad = ~np.isfinite(sV).all(1); sV[bad] = sm_s[nn][bad][:, [0, 1, 5]]
-sV = sV / 1e6                                                 # MPa  [S11,S22,S12]
+bad = ~np.isfinite(sV6).all(1); sV6[bad] = sm_s[nn][bad]
+sV6 = sV6 / 1e6                                               # MPa [S11,S22,S33,S23,S13,S12]
+sV = sV6[:, [0, 1, 5]]                                        # in-plane subset for the contour figures
 
 # the solid YAML `tris` index node ids 1..N; VABS .U (sorted by id) must share that ordering, so
 # .U row i == YAML node id i+1.  Guard it: a mismatch would silently scramble the triangulation.
@@ -66,8 +67,8 @@ tri = mtri.Triangulation(xy[:, 0], xy[:, 1], tris)
 # ---- RM fields at the SAME nodes ----
 B = dehom_rm.build_rm_bundle(SHELL, ref="oml")
 uR = np.asarray(dehom_rm.disp_at_points(B, xy, beam_force_vabs=FF)) * 1e3               # (N,3) mm
-sR = np.asarray(dehom_rm.stress_at_points(B, xy, beam_force_vabs=FF, frame="material")["stress"])
-sR = sR[:, [0, 1, 5]] / 1e6                                                             # (N,3) MPa
+sR6 = np.asarray(dehom_rm.stress_at_points(B, xy, beam_force_vabs=FF, frame="material")["stress"]) / 1e6
+sR = sR6[:, [0, 1, 5]]                                                                  # in-plane subset
 
 NL = 24
 
@@ -159,7 +160,15 @@ try:
         m.point_data["VABS_" + name] = np.asarray(fv)
         m.point_data["OpenSG_RM_" + name] = np.asarray(fr)
         m.save(os.path.join(VTK, "r020_%s.vtk" % name))
-    print("wrote %d .vtk contour files -> %s (open in ParaView, colour by VABS_/OpenSG_RM_)" %
+    # ONE combined .vtk: all coords + ALL 6 stress + 3 disp (+|u|), VABS and RM
+    allm = base.copy()
+    for j, nm in enumerate(["S11", "S22", "S33", "S23", "S13", "S12"]):
+        allm.point_data["VABS_" + nm] = sV6[:, j]; allm.point_data["OpenSG_RM_" + nm] = sR6[:, j]
+    for j, nm in enumerate(["u1", "u2", "u3"]):
+        allm.point_data["VABS_" + nm] = uV[:, j]; allm.point_data["OpenSG_RM_" + nm] = uR[:, j]
+    allm.point_data["VABS_umag"] = magV; allm.point_data["OpenSG_RM_umag"] = magR
+    allm.save(os.path.join(VTK, "r020_dehom_all.vtk"))
+    print("wrote %d per-field + r020_dehom_all.vtk (all coords + 6 stress + 3 disp, VABS & RM) -> %s" %
           (len(fields), VTK))
 except Exception as e:
     print("vtk export skipped:", repr(e)[:100])

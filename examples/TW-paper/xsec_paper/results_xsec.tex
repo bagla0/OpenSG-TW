@@ -249,22 +249,32 @@ the same beam load to the RM recovery and to the VABS solid recovery, and compar
 paths; Figures~\ref{fig:dehom_r020_circ} and~\ref{fig:dehom_r020_cap} show the result.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=0.62\textwidth]{figures/dehom_r020_circ_S11.png}
-\caption{Circumferential path (LP suction surface, LE$\to$TE), against the non-dimensional path
-parameter: the dominant axial stress $\sigma_{11}$ recovered by the RM two-step dehomogenization
-(dashed) vs.\ VABS $.\mathrm{SM}$ (solid) overlaps along the entire surface. Each stress component
-is stored as its own plot; the remaining ones ($\sigma_{22},\sigma_{12}$ and the transverse
-plate-limit terms) are provided individually.}\label{fig:dehom_r020_circ}
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_circ_S11.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_circ_S22.png}\\[1pt]
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_circ_S33.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_circ_S23.png}\\[1pt]
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_circ_S13.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_circ_S12.png}
+\caption{Circumferential path (LP suction surface, LE$\to$TE) against the non-dimensional path
+parameter---all six stress components as individual plots: RM shell two-step dehomogenization (red
+dashed) vs.\ VABS $.\mathrm{SM}$ (green solid). The dominant axial $\sigma_{11}$ overlaps VABS along
+the entire surface; the transverse $\sigma_{33},\sigma_{13},\sigma_{23}$ are the plate plane-stress
+limit.}\label{fig:dehom_r020_circ}
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=0.62\textwidth]{figures/dehom_r020_cap_S11.png}
-\caption{LP spar-cap through-thickness (a right-of-centre cap column, OML$\to$IML, $88$~mm): the
-axial stress $\sigma_{11}$, RM shell (dashed) vs.\ VABS (solid). The path is built from the VABS
-Gauss points, so every sample is exact in both models (no interpolation, no lateral weighting); the
-$1$-D RM recovery reproduces the full laminate---outer glass facesheets ($\approx\!-4$~MPa), carbon
-core ($\approx\!-20$~MPa) and both glass/carbon interfaces---to $0.8\%$ in-plane. The other
-components are provided as individual plots.}\label{fig:dehom_r020_cap}
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_cap_S11.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_cap_S22.png}\\[1pt]
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_cap_S33.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_cap_S23.png}\\[1pt]
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_cap_S13.png}\hfill
+\includegraphics[width=0.49\textwidth]{figures/dehom_r020_cap_S12.png}
+\caption{LP spar-cap through-thickness (right-of-centre column, OML$\to$IML, $88$~mm)---all six
+stress components as individual plots: RM shell (red dashed) vs.\ VABS (green solid). The path is
+built from the VABS Gauss points, so every sample is exact in both (no interpolation, no lateral
+weighting); the in-plane $\sigma_{11}$ reproduces the full laminate---outer glass ($\approx\!-4$~MPa),
+carbon core ($\approx\!-20$~MPa) and both glass/carbon interfaces---to $0.8\%$, while the transverse
+$\sigma_{33},\sigma_{13},\sigma_{23}$ sit at the plate plane-stress limit.}\label{fig:dehom_r020_cap}
 \end{figure}
 
 The agreement is field-wide, not only on the two paths. Figure~\ref{fig:r020_contour} contours
@@ -296,17 +306,22 @@ $|u|=\sqrt{u_1^2+u_2^2+u_3^2}$ (Figure~\ref{fig:r020_mag}) is likewise reproduce
 cross-section.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=0.6\textwidth]{figures/r020_disp_circ_u_1.png}
-\caption{Axial warping displacement $u_1$ along the LP circumferential path (LE$\to$TE), against
-the non-dimensional path parameter: OpenSG RM (dashed) vs.\ VABS $.\mathrm{U}$ (solid), overlapping
-along the surface. Each component is stored as an individual plot.}\label{fig:r020_disp_circ}
+\includegraphics[width=0.32\textwidth]{figures/r020_disp_circ_u_1.png}\hfill
+\includegraphics[width=0.32\textwidth]{figures/r020_disp_circ_u_2.png}\hfill
+\includegraphics[width=0.32\textwidth]{figures/r020_disp_circ_u_3.png}
+\caption{Warping displacement $u_1,u_2,u_3$ along the LP circumferential path (LE$\to$TE) against the
+non-dimensional path parameter, as individual plots: OpenSG RM (red dashed) vs.\ VABS $.\mathrm{U}$
+(green solid), overlapping along the surface.}\label{fig:r020_disp_circ}
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=0.6\textwidth]{figures/r020_disp_cap_u_1.png}
-\caption{Axial warping $u_1$ through the LP spar-cap thickness (OML$\to$IML): with the director term
-$z\,(\omega\times e_3)$ the RM recovery (dashed) declines through the wall in step with VABS (solid),
-to a residual $\sim\!5\%$ leading-order offset.}\label{fig:r020_disp_cap}
+\includegraphics[width=0.32\textwidth]{figures/r020_disp_cap_u_1.png}\hfill
+\includegraphics[width=0.32\textwidth]{figures/r020_disp_cap_u_2.png}\hfill
+\includegraphics[width=0.32\textwidth]{figures/r020_disp_cap_u_3.png}
+\caption{Warping displacement $u_1,u_2,u_3$ through the LP spar-cap thickness (OML$\to$IML), as
+individual plots: with the director term $z\,(\omega\times e_3)$ the RM recovery (red dashed)
+declines through the wall in step with VABS (green solid), to a residual $\sim\!5\%$ leading-order
+offset.}\label{fig:r020_disp_cap}
 \end{figure}
 
 \begin{figure}[htbp]\centering
