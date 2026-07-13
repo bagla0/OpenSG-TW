@@ -70,6 +70,41 @@ uR = np.asarray(dehom_rm.disp_at_points(B, xy, beam_force_vabs=FF)) * 1e3       
 sR6 = np.asarray(dehom_rm.stress_at_points(B, xy, beam_force_vabs=FF, frame="material")["stress"]) / 1e6
 sR = sR6[:, [0, 1, 5]]                                                                  # in-plane subset
 
+# ---- Gauss-point-based fields for CONFORMAL, NON-bleeding stress contours ----
+# VABS reports 3 Gauss points per element (.SM), each interior to ONE element (unambiguous material).
+# Map every Gauss point to its element, fit a linear field through the 3 Gauss stresses and extrapolate
+# to that element's 3 corners.  Rendered on an EXPLODED mesh (each element keeps its OWN nodes),
+# ParaView then interpolates WITHIN each element while the stress stays discontinuous across material
+# (web/skin) boundaries -- no Gouraud bleeding, exactly like a VABS stress plot.
+M = tris.shape[0]
+eg = tri.get_trifinder()(sm_xy[:, 0], sm_xy[:, 1])                  # element index of each Gauss point
+sVg = sm_s / 1e6                                                    # VABS Gauss stress (MPa), 6 comp
+sRg = np.asarray(dehom_rm.stress_at_points(B, sm_xy, beam_force_vabs=FF,
+                                           frame="material")["stress"]) / 1e6   # RM at the SAME Gauss pts
+ordered = eg.size == 3 * M and np.array_equal(eg.reshape(M, 3), np.arange(M)[:, None].repeat(3, 1))
+if ordered:                                                        # .SM is 3-per-element in element order
+    gxy = sm_xy.reshape(M, 3, 2)
+    Ai = np.linalg.inv(np.concatenate([np.ones((M, 3, 1)), gxy], 2))         # inv[1 x y] at Gauss pts
+    Cc = np.concatenate([np.ones((M, 3, 1)), xy[tris]], 2)                   # [1 x y] at corners
+    cornerV = Cc @ (Ai @ sVg.reshape(M, 3, 6))                     # (M,3,6) VABS extrapolated to corners
+    cornerR = Cc @ (Ai @ sRg.reshape(M, 3, 6))                     # (M,3,6) RM   extrapolated to corners
+else:                                                             # robust fallback: group Gauss pts / elem
+    from collections import defaultdict
+    gpe = defaultdict(list)
+    for gi, e in enumerate(eg):
+        if e >= 0 and len(gpe[e]) < 3:
+            gpe[e].append(gi)
+    cornerV = np.zeros((M, 3, 6)); cornerR = np.zeros((M, 3, 6)); kd = cKDTree(sm_xy)
+    for e in range(M):
+        cxy = xy[tris[e]]; gl = gpe.get(e, [])
+        if len(gl) == 3:
+            A = np.column_stack([np.ones(3), sm_xy[gl, 0], sm_xy[gl, 1]])
+            Cc = np.column_stack([np.ones(3), cxy[:, 0], cxy[:, 1]])
+            cornerV[e] = Cc @ np.linalg.solve(A, sVg[gl]); cornerR[e] = Cc @ np.linalg.solve(A, sRg[gl])
+        else:
+            j = kd.query(cxy.mean(0))[1]; cornerV[e] = sVg[j]; cornerR[e] = sRg[j]
+print("Gauss->corner extrapolation done (ordered=%s, %d elements)" % (ordered, M))
+
 NL = 24
 
 
@@ -145,30 +180,31 @@ cb = fig.colorbar(cs, ax=ax.tolist(), shrink=0.85, pad=0.02)       # one shared 
 fig.savefig(os.path.join(FIG, "r020_disp_mag.png"), dpi=155, bbox_inches="tight"); plt.close(fig)
 print("wrote r020_disp_mag.png  (distort x%.0f, |u| max V=%.3f RM=%.3f mm)" % (sc, magV.max(), magR.max()))
 
-# ---- export the solid mesh + all dehom fields as .vtk (one file per contour) for ParaView ----
+# ---- export EXPLODED-mesh .vtk (Gauss-based, NON-bleeding) for ParaView ----
+# Each element keeps its OWN 3 nodes: stress = per-element Gauss-extrapolated corner values
+# (discontinuous across material boundaries), disp = continuous nodal field.  ParaView interpolates
+# WITHIN each element -> a smooth, VABS-style contour with clean web/skin junctions.
 try:
     import pyvista as pv
     VTK = os.path.join(HERE, "vtk"); os.makedirs(VTK, exist_ok=True)
-    pts3 = np.column_stack([xy[:, 0], xy[:, 1], np.zeros(len(xy))])
-    faces = np.hstack([np.full((len(tris), 1), 3), tris]).astype(np.int64).ravel()
-    base = pv.PolyData(pts3, faces)
-    fields = {"S11": (sV[:, 0], sR[:, 0]), "S22": (sV[:, 1], sR[:, 1]), "S12": (sV[:, 2], sR[:, 2]),
-              "u1": (uV[:, 0], uR[:, 0]), "u2": (uV[:, 1], uR[:, 1]), "u3": (uV[:, 2], uR[:, 2]),
-              "umag": (magV, magR)}
-    for name, (fv, fr) in fields.items():                          # one .vtk per contour (VABS + RM arrays)
-        m = base.copy()
-        m.point_data["VABS_" + name] = np.asarray(fv)
-        m.point_data["OpenSG_RM_" + name] = np.asarray(fr)
-        m.save(os.path.join(VTK, "r020_%s.vtk" % name))
-    # ONE combined .vtk: all coords + ALL 6 stress + 3 disp (+|u|), VABS and RM
-    allm = base.copy()
+    EP = xy[tris].reshape(-1, 2)                                     # (3M,2) per-element corner coords
+    ep3 = np.column_stack([EP[:, 0], EP[:, 1], np.zeros(len(EP))])
+    efaces = np.column_stack([np.full(M, 3), np.arange(3 * M).reshape(M, 3)]).astype(np.int64).ravel()
+    ex = pv.PolyData(ep3, efaces)
+    sVc = cornerV.reshape(-1, 6); sRc = cornerR.reshape(-1, 6)       # stress at exploded corners
+    uVc = uV[tris].reshape(-1, 3); uRc = uR[tris].reshape(-1, 3)     # disp at exploded corners (continuous)
     for j, nm in enumerate(["S11", "S22", "S33", "S23", "S13", "S12"]):
-        allm.point_data["VABS_" + nm] = sV6[:, j]; allm.point_data["OpenSG_RM_" + nm] = sR6[:, j]
+        ex.point_data["VABS_" + nm] = sVc[:, j]; ex.point_data["OpenSG_RM_" + nm] = sRc[:, j]
     for j, nm in enumerate(["u1", "u2", "u3"]):
-        allm.point_data["VABS_" + nm] = uV[:, j]; allm.point_data["OpenSG_RM_" + nm] = uR[:, j]
-    allm.point_data["VABS_umag"] = magV; allm.point_data["OpenSG_RM_umag"] = magR
-    allm.save(os.path.join(VTK, "r020_dehom_all.vtk"))
-    print("wrote %d per-field + r020_dehom_all.vtk (all coords + 6 stress + 3 disp, VABS & RM) -> %s" %
-          (len(fields), VTK))
+        ex.point_data["VABS_" + nm] = uVc[:, j]; ex.point_data["OpenSG_RM_" + nm] = uRc[:, j]
+    ex.point_data["VABS_umag"] = np.linalg.norm(uVc, axis=1)
+    ex.point_data["OpenSG_RM_umag"] = np.linalg.norm(uRc, axis=1)
+    ex.save(os.path.join(VTK, "r020_dehom_all.vtk"))                # the file used for ALL ParaView plots
+    for nm in ["S11", "S22", "S12", "u1", "u2", "u3", "umag"]:      # per-field convenience copies
+        m = pv.PolyData(ep3, efaces)
+        m.point_data["VABS_" + nm] = ex.point_data["VABS_" + nm]
+        m.point_data["OpenSG_RM_" + nm] = ex.point_data["OpenSG_RM_" + nm]
+        m.save(os.path.join(VTK, "r020_%s.vtk" % nm))
+    print("wrote EXPLODED r020_dehom_all.vtk + 7 per-field (%d elems, Gauss-extrapolated) -> %s" % (M, VTK))
 except Exception as e:
-    print("vtk export skipped:", repr(e)[:100])
+    print("vtk export skipped:", repr(e)[:120])
