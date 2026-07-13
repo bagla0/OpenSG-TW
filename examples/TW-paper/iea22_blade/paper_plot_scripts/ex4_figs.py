@@ -39,35 +39,40 @@ fig.tight_layout(rect=(0, 0, 0.90, 1))
 fig.savefig(os.path.join(FIG, "full_blade_rm_span_real.png"), dpi=200, bbox_inches="tight"); plt.close(fig)
 print("wrote full_blade_rm_span_real.png")
 
-# ================= (2) spanwise local stress + displacement (VABS vs RM) =================
-fig, ax = plt.subplots(1, 2, figsize=(12, 4.4))
-# stress: S11, S22, S12  (indices 0,1,5)
+# ============ (2) spanwise local stress + displacement (VABS vs RM), INDIVIDUAL figures ============
+xr = (r - r.min()) / (r.max() - r.min())          # non-dim spanwise position, 0 (root sta.) .. 1 (tip sta.)
+XL = r"normalized spanwise position $\bar r$"
+
+# --- (2a) local in-plane stress at the crown ---
+fig, a = plt.subplots(figsize=(7, 4.2))
 S_ID = [(0, "\\sigma_{11}", "#d62728", "o"), (1, "\\sigma_{22}", "#1f77b4", "s"),
         (5, "\\sigma_{12}", "#2ca02c", "^")]
 for ci, lab, col, mk in S_ID:
-    ax[0].plot(r, sv[:, ci], color=col, marker=mk, ls="-", lw=1.7, ms=6, label="$%s$ VABS" % lab)
-    ax[0].plot(r, sr[:, ci], color=col, marker=mk, ls="--", lw=1.7, ms=6, mfc="none",
-               label="$%s$ RM" % lab)
-ax[0].axhline(0, color="0.6", lw=0.8)
-ax[0].set_xlabel("span station  $r$"); ax[0].set_ylabel("local stress at crown (MPa)")
-ax[0].set_title("local in-plane stress (section top)"); ax[0].grid(alpha=0.3)
-ax[0].legend(fontsize=8, ncol=1, loc="best")
-# displacement: |u| and components
+    a.plot(xr, sv[:, ci], color=col, marker=mk, ls="-", lw=1.7, ms=6, label="$%s$ VABS" % lab)
+    a.plot(xr, sr[:, ci], color=col, marker=mk, ls="--", lw=1.7, ms=6, mfc="none", label="$%s$ RM" % lab)
+a.axhline(0, color="0.6", lw=0.8); a.set_xlim(0, 1)
+a.set_xlabel(XL); a.set_ylabel("local in-plane stress at crown (MPa)"); a.grid(alpha=0.3)
+a.legend(fontsize=8, ncol=1, loc="best")
+fig.tight_layout()
+fig.savefig(os.path.join(FIG, "span_stress.png"), dpi=180, bbox_inches="tight"); plt.close(fig)
+print("wrote span_stress.png")
+
+# --- (2b) local displacement at the crown ---
 magV = np.linalg.norm(uv, axis=1); magR = np.linalg.norm(ur, axis=1)
+fig, a = plt.subplots(figsize=(7, 4.2))
 D_ID = [(None, "|u|", "#000000", "o", magV, magR),
         (0, "u_1", "#d62728", "s", uv[:, 0], ur[:, 0]),
         (1, "u_2", "#1f77b4", "^", uv[:, 1], ur[:, 1]),
         (2, "u_3", "#2ca02c", "v", uv[:, 2], ur[:, 2])]
 for _, lab, col, mk, V, R in D_ID:
-    ax[1].plot(r, V, color=col, marker=mk, ls="-", lw=1.7, ms=6, label="$%s$ VABS" % lab)
-    ax[1].plot(r, R, color=col, marker=mk, ls="--", lw=1.7, ms=6, mfc="none", label="$%s$ RM" % lab)
-ax[1].axhline(0, color="0.6", lw=0.8)
-ax[1].set_xlabel("span station  $r$"); ax[1].set_ylabel("local displacement at crown (mm)")
-ax[1].set_title("local displacement (section top)"); ax[1].grid(alpha=0.3)
-ax[1].legend(fontsize=8, ncol=2, loc="best")
+    a.plot(xr, V, color=col, marker=mk, ls="-", lw=1.7, ms=6, label="$%s$ VABS" % lab)
+    a.plot(xr, R, color=col, marker=mk, ls="--", lw=1.7, ms=6, mfc="none", label="$%s$ RM" % lab)
+a.axhline(0, color="0.6", lw=0.8); a.set_xlim(0, 1)
+a.set_xlabel(XL); a.set_ylabel("local displacement at crown (mm)"); a.grid(alpha=0.3)
+a.legend(fontsize=8, ncol=2, loc="best")
 fig.tight_layout()
-fig.savefig(os.path.join(FIG, "span_dehom.png"), dpi=180, bbox_inches="tight"); plt.close(fig)
-print("wrote span_dehom.png")
+fig.savefig(os.path.join(FIG, "span_disp.png"), dpi=180, bbox_inches="tight"); plt.close(fig)
+print("wrote span_disp.png")
 
 # ================= (3) table =================
 lines = [r"\begin{table}[t]\centering\small",

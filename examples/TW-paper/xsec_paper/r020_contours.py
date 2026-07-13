@@ -74,7 +74,8 @@ NL = 24
 
 def tcf(ax, val, vmin, vmax, sym=True):
     lv = np.linspace(vmin, vmax, NL)
-    cs = ax.tricontourf(tri, val, levels=lv, cmap=CMAP, extend="both")
+    # clip to the level range so tricontourf fills everything WITHOUT an extend triangle on the bar
+    cs = ax.tricontourf(tri, np.clip(val, vmin, vmax), levels=lv, cmap=CMAP, extend="neither")
     ax.set_aspect("equal"); ax.axis("off")
     return cs
 
@@ -122,15 +123,22 @@ comp_single(uR, DISP, os.path.join(FIG, "r020_disp_contour_rm.png"), "u", "OpenS
 comp_single(sV, STRS, os.path.join(FIG, "r020_stress_contour_vabs.png"), "\\sigma", "VABS (solid)")
 comp_single(sR, STRS, os.path.join(FIG, "r020_stress_contour_rm.png"), "\\sigma", "OpenSG RM")
 
-# ---- displacement MAGNITUDE |u| : VABS | RM, ONE shared colorbar, no label ----
+# ---- displacement MAGNITUDE |u| on the DISTORTED shape (deform by in-plane u2,u3), VABS | RM,
+#      ONE shared colorbar (no label, no extend triangle) ----
 magV = np.linalg.norm(uV, axis=1); magR = np.linalg.norm(uR, axis=1)
 vmax = np.nanpercentile(np.r_[magV, magR], 99.5)
-fig, ax = plt.subplots(1, 2, figsize=(12, 4.4))
+ipV = uV[:, 1:3] * 1e-3; ipR = uR[:, 1:3] * 1e-3                    # in-plane (u2,u3) in m
+ext = max(np.ptp(xy[:, 0]), np.ptp(xy[:, 1]))
+sc = 0.11 * ext / max(np.linalg.norm(np.r_[ipV, ipR], axis=1).max(), 1e-12)   # visual exaggeration
 lv = np.linspace(0, vmax, NL)
-for a, (dat, tag) in zip(ax, [(magV, "VABS (solid)"), (magR, "OpenSG RM")]):
-    cs = a.tricontourf(tri, dat, levels=lv, cmap=CMAP, extend="max")
+fig, ax = plt.subplots(1, 2, figsize=(12, 4.6))
+cs = None
+for a, (dat, ip, tag) in zip(ax, [(magV, ipV, "VABS (solid)"), (magR, ipR, "OpenSG RM")]):
+    dxy = xy + ip * sc                                             # distorted section
+    dtri = mtri.Triangulation(dxy[:, 0], dxy[:, 1], tris)
+    cs = a.tricontourf(dtri, np.clip(dat, 0, vmax), levels=lv, cmap=CMAP, extend="neither")
     a.set_aspect("equal"); a.axis("off")
     a.set_title(r"$|u|$ -- %s" % tag, fontsize=11)
-cb = fig.colorbar(cs, ax=ax.tolist(), shrink=0.85, pad=0.02)     # single colorbar, no label
+cb = fig.colorbar(cs, ax=ax.tolist(), shrink=0.85, pad=0.02)       # one shared bar, no label, no triangle
 fig.savefig(os.path.join(FIG, "r020_disp_mag.png"), dpi=155, bbox_inches="tight"); plt.close(fig)
-print("wrote r020_disp_mag.png  (|u| max V=%.3f RM=%.3f mm)" % (magV.max(), magR.max()))
+print("wrote r020_disp_mag.png  (distort x%.0f, |u| max V=%.3f RM=%.3f mm)" % (sc, magV.max(), magR.max()))

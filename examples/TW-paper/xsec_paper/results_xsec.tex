@@ -307,25 +307,49 @@ in-plane $u_2,u_3$ are reproduced across the whole cross-section.}\label{fig:r02
 
 \begin{figure}[htbp]\centering
 \includegraphics[width=\textwidth]{figures/r020_disp_mag.png}
-\caption{Total local displacement magnitude $|u|=\sqrt{u_1^2+u_2^2+u_3^2}$ over the section:
-VABS solid (left) vs.\ OpenSG RM shell dehomogenization (right). The combined warping field is
-reproduced across the whole cross-section.}\label{fig:r020_mag}
+\caption{Total local displacement magnitude $|u|=\sqrt{u_1^2+u_2^2+u_3^2}$ on the distorted
+section (deformed by the recovered in-plane warping, exaggerated): VABS solid (left) vs.\ OpenSG RM
+shell dehomogenization (right). The combined warping field is reproduced across the whole
+cross-section.}\label{fig:r020_mag}
 \end{figure}
 
 The recovery is not confined to the root. Applying each station's own VABS beam load, the RM
 two-step dehomogenization reproduces the VABS local field along the whole blade at the windIO
-airfoil stations of Example~4. Figure~\ref{fig:span_dehom} traces the in-plane stress and the
-displacement at the section crown across the span: the axial $\sigma_{11}$ recovered by the
-$1$-D RM solve lies on the VABS solid recovery at every station ($-2.05$ vs.\ $-2.07$~MPa at
-$r=0.247$, $+0.15$ vs.\ $+0.15$~MPa at $r=0.98$), and the local displacement tracks within
-$\sim\!5\%$ ($3.08$ vs.\ $2.98$~mm at $r=0.247$ down to $0.11$ vs.\ $0.11$~mm at the tip). A
-single one-dimensional Reissner--Mindlin element thus recovers the pointwise three-dimensional
-stress and displacement of the full composite blade section, everywhere along the span.
+airfoil stations of Example~4. Figures~\ref{fig:span_stress} and~\ref{fig:span_disp} trace the
+in-plane stress and the displacement at the section crown across the span (against the normalized
+spanwise position $\bar r$): the axial $\sigma_{11}$ recovered by the $1$-D RM solve lies on the
+VABS solid recovery at every station ($-2.05$ vs.\ $-2.07$~MPa at $r=0.247$, $+0.15$ vs.\ $+0.15$~MPa
+at $r=0.98$), and the local displacement tracks within $\sim\!5\%$ ($3.08$ vs.\ $2.98$~mm at
+$r=0.247$ down to $0.11$ vs.\ $0.11$~mm at the tip). A single one-dimensional Reissner--Mindlin
+element thus recovers the pointwise three-dimensional stress and displacement of the full composite
+blade section, everywhere along the span.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/span_dehom.png}
-\caption{Spanwise dehomogenization at the windIO airfoil stations: local in-plane stress (left)
-and local displacement (right) recovered at the section crown under each station's own beam load,
-OpenSG RM shell (dashed) vs.\ VABS $2$-D solid (solid). Both track across the
-span.}\label{fig:span_dehom}
+\includegraphics[width=0.72\textwidth]{figures/span_stress.png}
+\caption{Spanwise local in-plane stress at the section crown, recovered by dehomogenization under
+each windIO station's own beam load: OpenSG RM shell (dashed) vs.\ VABS $2$-D solid (solid). The
+axial $\sigma_{11}$ tracks the solid across the span.}\label{fig:span_stress}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.72\textwidth]{figures/span_disp.png}
+\caption{Spanwise local displacement at the section crown (components and magnitude $|u|$),
+recovered by dehomogenization: OpenSG RM shell (dashed) vs.\ VABS $2$-D solid (solid). Both track across the
+span.}\label{fig:span_disp}
+\end{figure}
+
+Assembling the station recoveries into the whole blade, Figure~\ref{fig:blade3d} lofts the six
+computed windIO cross-sections along the span and colours the outer surface by the recovered field,
+interpolated between adjacent stations: the axial stress $\sigma_{11}$ (top) and the displacement
+magnitude $|u|$ (bottom) both peak inboard and decay toward the slender tip---a full
+three-dimensional strength picture of the blade assembled from six one-dimensional cross-sectional
+solves, each a fraction of a second.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=0.82\textwidth]{figures/blade3d_sigma11.png}\\[2pt]
+\includegraphics[width=0.82\textwidth]{figures/blade3d_umag.png}
+\caption{Full IEA-22 blade lofted from the six computed windIO cross-sections and coloured by the
+dehomogenized field on the outer mould line, interpolated between adjacent stations: axial stress
+$\sigma_{11}$ (top) and displacement magnitude $|u|$ (bottom) under the spanwise-varying beam load,
+each with a single colour bar spanning the whole blade.}\label{fig:blade3d}
 \end{figure}
