@@ -213,16 +213,16 @@ which is what makes a beam model usable for strength. We demonstrate it on the I
 section at $r=0.2$ (the same blade as Examples~3 and~4; a $7.2$~m chord with three shear
 webs and carbon spar caps whose wall is $\sim\!88$~mm thick), and compare the RM shell
 two-step recovery against a full VABS analysis of the \emph{same} PreVABS $2$-D solid mesh.
-The section, its material regions and the two sampling paths---a through-thickness column at
-the LP spar-cap centre and a circumferential path along the LP (suction) surface from the
-leading to the trailing edge---are shown in Figure~\ref{fig:r020_section}; both paths are
-taken directly on the solid outer mould line.
+The section, its material regions and the two sampling paths---a through-thickness column
+through the LP spar cap (a right-of-centre column, built from the VABS Gauss points so every
+sample coincides exactly in both models) and a circumferential path along the LP (suction)
+surface from the leading to the trailing edge---are shown in Figure~\ref{fig:r020_section}.
 
 \begin{figure}[htbp]\centering
 \includegraphics[width=\textwidth]{figures/r020_section_paths.png}
 \caption{IEA $r=0.2$ root section (PreVABS $2$-D solid, coloured by material) with the two
-dehomogenization paths: the LP-surface circumferential path (blue, LE$\to$TE) and the
-spar-cap through-thickness column (red), both on the solid OML.}\label{fig:r020_section}
+dehomogenization paths: the LP-surface circumferential path (blue, LE$\to$TE) and the LP spar-cap
+through-thickness column (red).}\label{fig:r020_section}
 \end{figure}
 
 Homogenization comes first: Table~\ref{tab:r020_homo} lists every nonzero $C_{ij}$ of the RM
@@ -258,11 +258,12 @@ axis scale, $\lesssim\!0.006$~MPa) are the plate plane-stress limit.}\label{fig:
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/dehom_r020_capleft.png}
-\caption{LP spar-cap through-thickness (left of the cap, OML$\to$IML, $88$~mm): RM shell vs.\
-VABS. The in-plane $\sigma_{11}$ overlaps VABS through the full carbon cap
-($\approx\!-21$~MPa); the endpoint departures are the thin glass facesheets, where the stress
-transitions over a few plies.}\label{fig:dehom_r020_cap}
+\includegraphics[width=\textwidth]{figures/dehom_r020_capright.png}
+\caption{LP spar-cap through-thickness (a right-of-centre cap column, OML$\to$IML, $88$~mm): RM
+shell vs.\ VABS. The path is built from the VABS Gauss points, so every sample is exact in both
+models (no interpolation, no lateral weighting); the $1$-D RM recovery reproduces the full
+laminate---outer glass facesheets ($\approx\!-4$~MPa), carbon core ($\approx\!-20$~MPa), and
+both glass/carbon interfaces---to $0.8\%$ in the in-plane stress.}\label{fig:dehom_r020_cap}
 \end{figure}
 
 The agreement is field-wide, not only on the two paths. Figure~\ref{fig:r020_contour} contours

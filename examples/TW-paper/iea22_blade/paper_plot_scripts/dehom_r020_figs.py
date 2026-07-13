@@ -42,51 +42,42 @@ tree = cKDTree(sm_xy)
 bundle = dehom_rm.build_rm_bundle(SHELL, ref="oml")   # RM ring (C0, MITC-g23)
 
 
-def sample_along_column(coords, perp_w=3.0):
-    """VABS gauss stress sampled ALONG the through-thickness column (lateral offset penalised by
-    perp_w).  Plain nearest-neighbour wanders laterally to the glass overwrap at the spar-cap
-    edge, so an interface node picks the adjacent ply's stress-concentration; weighting the
-    across-column direction keeps the sample on the column at the correct depth (perp_w in [2,4]
-    is stable: on the OML surface it still returns the surface ply, at 3-4 mm it returns the cap)."""
-    u = coords[-1] - coords[0]; u = u / (np.linalg.norm(u) + 1e-30)
-    v = np.array([-u[1], u[0]]); c0 = coords[0]
-
-    def xf(P):
-        d = np.atleast_2d(P) - c0
-        return np.column_stack([d @ u, (d @ v) * perp_w])
-    return cKDTree(xf(sm_xy)).query(xf(coords))[1]
-
-
-def make(fn, xlabel, title, out, kind):
+def make(fn, out, kind):
     coords = np.loadtxt(os.path.join(D2, fn))[:, :2]
-    S = np.asarray(dehom_rm.stress_at_points(bundle, coords, beam_force_vabs=FF, frame="material")["stress"])
-    if kind == "cap":                                  # through-thickness column: 0=OML -> 1=IML by y3
-        V = sm_s[sample_along_column(coords)]          # robust to the cap-edge glass overwrap
-        xs = (coords[:, 1] - coords[0, 1]) / (coords[-1, 1] - coords[0, 1])
-    else:                                              # circumferential: 0=LE -> 1=TE by y2
-        V = sm_s[tree.query(coords)[1]]                # on the OML surface, plain nearest is fine
-        xs = (coords[:, 0] - coords[0, 0]) / (coords[-1, 0] - coords[0, 0])
-    fig, ax = plt.subplots(2, 3, figsize=(11, 7))
-    fig.suptitle(title, fontsize=12, fontweight="bold")
+    # RIGOROUS sampling -- no lateral penalty, no artificial change.  The cap path is built FROM the
+    # VABS gauss points, so every point is exact in BOTH VABS and RM; drop any point that does not
+    # coincide with a gauss point to 1e-5 (per-point, robust).  The circumferential path lies on the
+    # OML surface where plain nearest is exact enough.
+    dist, gi = tree.query(coords)
+    if kind == "cap":
+        ok = dist <= 1e-5
+        if not ok.all():
+            print("  dropped %d/%d cap points with no exact VABS gauss (dist>1e-5)"
+                  % (int((~ok).sum()), len(coords)))
+        coords, gi = coords[ok], gi[ok]
+        npl, xs = 4, (coords[:, 1] - coords[0, 1]) / (coords[-1, 1] - coords[0, 1])   # finer SG; y3 0..1
+    else:
+        npl, xs = 2, (coords[:, 0] - coords[0, 0]) / (coords[-1, 0] - coords[0, 0])   # y2 0..1
+    S = np.asarray(dehom_rm.stress_at_points(bundle, coords, beam_force_vabs=FF,
+                                             frame="material", n_per_layer=npl)["stress"])
+    V = sm_s[gi]
+    fig, ax = plt.subplots(2, 3, figsize=(12, 7))
     for k, c in enumerate(COMP):
         a = ax.flat[k]; oop = c in ("S33", "S13", "S23")
         a.plot(xs, S[:, k] / 1e6, "r--o", ms=3.5, label="RM shell (two-step)")
         a.plot(xs, V[:, k] / 1e6, "g-^", ms=4, label="VABS (.SM)")
-        a.set_title(r"$\sigma_{%s}$" % c[1:],
-                    color=("darkred" if oop else "black"), fontsize=10)
-        a.set_xlabel(xlabel); a.set_ylabel("%s (MPa)" % c); a.set_xlim(0, 1)
-        a.grid(True, ls=":", alpha=0.6); a.legend(fontsize=7.5)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+        a.set_title(r"$\sigma_{%s}$" % c[1:], color=("darkred" if oop else "black"), fontsize=10)
+        a.set_xlabel("non-dim parameter"); a.set_ylabel("%s (MPa)" % c); a.set_xlim(0, 1)
+        a.grid(True, ls=":", alpha=0.6)
+    h, l = ax.flat[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=10, frameon=False)  # outside
+    fig.tight_layout(rect=(0, 0, 0.9, 1))
     fig.savefig(out, dpi=170, bbox_inches="tight"); plt.close(fig)
     ip = np.linalg.norm(S[:, [0, 1, 5]] - V[:, [0, 1, 5]]) / np.linalg.norm(V[:, [0, 1, 5]]) * 100
-    print("wrote", os.path.basename(out), "| in-plane ||.|| = %.1f%%" % ip)
+    print("wrote", os.path.basename(out), "| %d pts | in-plane ||.|| = %.1f%%" % (len(coords), ip))
 
 
-make("solid.lp_sparcap_left_thickness_r020.coords",
-     r"normalized thickness $\bar y_3$ (0=OML, 1=IML)",
-     "LP spar-cap (left) through-thickness: RM shell vs VABS",
-     os.path.join(FIG, "dehom_r020_capleft.png"), kind="cap")
+make("solid.lp_sparcap_right_thickness_r020.coords",
+     os.path.join(FIG, "dehom_r020_capright.png"), kind="cap")
 make("solid.circumferential_r020.coords",
-     r"normalized chord $\bar y_2$ (0=LE, 1=TE)",
-     "Upper-surface (LP) circumferential: RM shell vs VABS",
      os.path.join(FIG, "dehom_r020_circumferential.png"), kind="circ")

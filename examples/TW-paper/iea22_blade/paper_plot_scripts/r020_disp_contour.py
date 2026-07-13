@@ -22,7 +22,7 @@ FF = np.array([32230.4005595904, -7663.907852209771, 251712.81004955297,
                -55608.54410550957, -4170203.8641732424, -123224.93244239496])
 U = np.loadtxt(os.path.join(D2, "iea_r020.sg.U"))            # id y2 y3 u1 u2 u3
 utree = cKDTree(U[:, 1:3])
-cap = np.loadtxt(os.path.join(D2, "solid.lp_sparcap_left_thickness_r020.coords"))[:, :2]
+cap = np.loadtxt(os.path.join(D2, "solid.lp_sparcap_right_thickness_r020.coords"))[:, :2]
 circ = np.loadtxt(os.path.join(D2, "solid.circumferential_r020.coords"))[:, :2]
 B = dehom_rm.build_rm_bundle(SHELL, ref="oml")
 
@@ -36,7 +36,7 @@ def arclen(p):
 # r020_contours.py on the real solid-mesh triangulation.  This script owns only the path plots.
 
 # ---------------- u1,u2,u3 along each path, INDIVIDUAL files (non-dim x-axis 0..1) ----------------
-def path_disp(P, name, xl, kind, out):
+def path_disp(P, kind, out):
     Uv = U[utree.query(P)[1], 3:6] * 1e3                     # VABS .U (mm)
     Ur = np.asarray(dehom_rm.disp_at_points(B, P, beam_force_vabs=FF)) * 1e3   # RM warping (mm)
     col = 0 if kind == "circ" else 1                         # circ: y2 (LE->TE) ; cap: y3 (OML->IML)
@@ -47,18 +47,14 @@ def path_disp(P, name, xl, kind, out):
         a.plot(x, Ur[:, k], "r--o", ms=3, lw=1.6, label="OpenSG RM")
         a.plot(x, Uv[:, k], "g-^", ms=3, lw=1.6, label="VABS ($.\\mathrm{U}$)")
         a.set_title(r"$%s$" % comp, fontsize=11)
-        a.set_xlabel(xl); a.set_ylabel(r"$%s$ (mm)" % comp); a.set_xlim(0, 1)
-        a.grid(True, ls=":", alpha=0.6); a.legend(fontsize=8)
-    fig.suptitle("Local displacement along the %s: OpenSG RM vs VABS" % name,
-                 fontsize=12, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+        a.set_xlabel("non-dim parameter"); a.set_ylabel(r"$%s$ (mm)" % comp); a.set_xlim(0, 1)
+        a.grid(True, ls=":", alpha=0.6)
+    h, l = ax[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=9, frameon=False)  # outside
+    fig.tight_layout(rect=(0, 0, 0.92, 1))
     fig.savefig(out, dpi=160, bbox_inches="tight"); plt.close(fig)
     print("wrote", os.path.basename(out))
 
 
-path_disp(circ, "circumferential path (LP, LE$\\to$TE)",
-          r"normalized chord $\bar y_2$ (0=LE, 1=TE)", "circ",
-          os.path.join(FIG, "r020_disp_circ.png"))
-path_disp(cap, "left spar-cap through-thickness",
-          r"normalized thickness $\bar y_3$ (0=OML, 1=IML)", "cap",
-          os.path.join(FIG, "r020_disp_cap.png"))
+path_disp(circ, "circ", os.path.join(FIG, "r020_disp_circ.png"))
+path_disp(cap, "cap", os.path.join(FIG, "r020_disp_cap.png"))

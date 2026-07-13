@@ -44,7 +44,7 @@ for grp in ds["sets"]["element"]:
     mi = int("".join(c for c in grp["name"] if c.isdigit()))
     for lab in grp["labels"]:
         mat[int(lab) - 1] = mi
-cap = np.loadtxt(os.path.join(D2, "solid.lp_sparcap_center_thickness_r020.coords"))[:, :2]
+cap = np.loadtxt(os.path.join(D2, "solid.lp_sparcap_right_thickness_r020.coords"))[:, :2]
 circ = np.loadtxt(os.path.join(D2, "solid.circumferential_r020.coords"))[:, :2]
 
 # ---------------- section + paths figure ----------------
