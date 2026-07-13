@@ -277,8 +277,11 @@ carbon core ($\approx\!-20$~MPa) and both glass/carbon interfaces---to $0.8\%$, 
 $\sigma_{33},\sigma_{13},\sigma_{23}$ sit at the plate plane-stress limit.}\label{fig:dehom_r020_cap}
 \end{figure}
 
-The agreement is field-wide, not only on the two paths. Figure~\ref{fig:r020_contour} contours
-the in-plane stress over the whole section, VABS solid beside the RM shell recovery: the
+The agreement is field-wide, not only on the two paths. The complete recovered field over the full
+$2$-D solid section---all node coordinates, the three displacements and all six stress components,
+for both VABS and the RM recovery---is exported as \texttt{r020\_dehom\_all.vtk} for any view or
+section in ParaView; Figure~\ref{fig:r020_contour} shows the in-plane stress rendered from it, VABS
+solid beside the RM shell recovery: the
 strength-driving $\sigma_{11}$ (bending compression in the LP cap, tension in the HP cap) is
 reproduced point-for-point, while $\sigma_{22}$ and $\sigma_{12}$ are one to two orders
 smaller. The transverse-normal $\sigma_{33}$ and the transverse shears
@@ -287,11 +290,14 @@ plate plane-stress limit; a physical $\sigma_{13},\sigma_{23}$ (an equilibrium s
 effect rather than a local constitutive one) is left to future work.
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/r020_stress_contour_cmp.png}
-\caption{In-plane stress over the section, VABS solid (left) vs.\ OpenSG RM shell
-dehomogenization (right) for $\sigma_{11},\sigma_{22},\sigma_{12}$ (shared scale per row). The
-strength-driving $\sigma_{11}$ matches; the smaller components differ mainly in the web shear
-flow.}\label{fig:r020_contour}
+\includegraphics[width=\textwidth]{figures/pv_r020_S11.png}\\[1pt]
+\includegraphics[width=\textwidth]{figures/pv_r020_S22.png}\\[1pt]
+\includegraphics[width=\textwidth]{figures/pv_r020_S12.png}
+\caption{In-plane stress over the full $2$-D solid section (with the three shear webs), rendered in
+ParaView from the exported \texttt{.vtk}: VABS solid (left) vs.\ OpenSG RM (right) for
+$\sigma_{11},\sigma_{22},\sigma_{12}$ (individual). The strength-driving $\sigma_{11}$
+(compression in the LP cap, tension in the HP cap) matches point-for-point; the smaller components
+differ mainly in the web shear flow.}\label{fig:r020_contour}
 \end{figure}
 
 Dehomogenization also recovers the full local \emph{displacement} state. Along the LP
@@ -325,10 +331,13 @@ offset.}\label{fig:r020_disp_cap}
 \end{figure}
 
 \begin{figure}[htbp]\centering
-\includegraphics[width=\textwidth]{figures/r020_disp_contour_cmp.png}
-\caption{Local warping displacement $u_1,u_2,u_3$ over the section, VABS solid (left) vs.\
-OpenSG RM shell dehomogenization (right), shared scale per row. The axial warping $u_1$ and the
-in-plane $u_2,u_3$ are reproduced across the whole cross-section.}\label{fig:r020_disp_contour}
+\includegraphics[width=\textwidth]{figures/pv_r020_u1.png}\\[1pt]
+\includegraphics[width=\textwidth]{figures/pv_r020_u2.png}\\[1pt]
+\includegraphics[width=\textwidth]{figures/pv_r020_u3.png}
+\caption{Local warping displacement over the full $2$-D solid section (with the three shear webs),
+rendered in ParaView from the exported \texttt{.vtk}: VABS solid (left) vs.\ OpenSG RM (right) for
+$u_1,u_2,u_3$ (individual). All three components are reproduced across the whole
+cross-section.}\label{fig:r020_disp_contour}
 \end{figure}
 
 \begin{figure}[htbp]\centering
