@@ -1,0 +1,175 @@
+\section{Introduction}\label{sec:intro}
+Local buckling of the skin and shear-web panels is a dominant limit state for large composite
+wind-turbine blades~\citep{berg2011,cmc2011}. Industrial practice maps the one-dimensional beam loads onto
+a full three-dimensional shell finite-element model of the blade and solves a global linear-buckling
+eigenvalue problem~\citep{berg2011}. That model is expensive and, crucially, throws away the cost advantage
+of the cross-sectional (beam) analysis that produced the loads in the first place. Isolating a single
+tapered segment and buckling it independently is cheaper but introduces spurious low modes: the cut faces
+carry no physical restraint, so the segment fails in an artificial free-edge mode far below the true value.
+
+We keep the buckling analysis at the cross-section level. The Reissner--Mindlin (RM) Mechanics-of-Structure
+Genome (MSG) homogenization~\citep{yu2016msg,deoyu2020} reduces each station to a one-dimensional contour and
+returns the per-wall laminate stiffness $\ABD$; the two-step dehomogenization returns the pre-buckling
+three-dimensional stress at any point of the wall~\citep{bagla2025}, whose through-thickness integral is the
+membrane stress resultant $\NN$. These are precisely the inputs of the semi-analytical Finite Strip Method
+(FSM)~\citep{cheung1976,schafer2006}: the contour is the strip mesh, the buckle mode is analytic
+(sinusoidal) along the span so the end conditions are ideal simply-supported---eliminating the
+segment-boundary artifact---and only a small cross-section eigenvalue is solved. For the isotropic wall a
+single harmonic is exact; for a general laminate the anisotropic membrane--shear and bend--twist couplings
+require a multi-harmonic series, which we derive and verify below.
+
+\section{Cross-section pre-buckling state from RM homogenization}\label{sec:pre}
+The RM MSG homogenization models each wall as a shell strip and yields, per wall segment, the
+$8\times8$ plate stiffness
+\begin{equation}
+\begin{Bmatrix}\NN\\ \mathbf M\\ \mathbf Q\end{Bmatrix}
+=\begin{bmatrix}\mathbf A&\mathbf B&\mathbf 0\\ \mathbf B&\mathbf D&\mathbf 0\\ \mathbf 0&\mathbf 0&\mathbf G_s\end{bmatrix}
+\begin{Bmatrix}\boldsymbol\varepsilon\\ \boldsymbol\kappa\\ \boldsymbol\gamma\end{Bmatrix},\qquad
+\boldsymbol\varepsilon=\!\begin{Bmatrix}\varepsilon_{11}\\\varepsilon_{22}\\2\varepsilon_{12}\end{Bmatrix}\!,\ \
+\boldsymbol\kappa=\!\begin{Bmatrix}\kappa_{11}\\\kappa_{22}\\2\kappa_{12}\end{Bmatrix}\!,\ \
+\boldsymbol\gamma=\!\begin{Bmatrix}2\varepsilon_{13}\\2\varepsilon_{23}\end{Bmatrix}\!,
+\label{eq:abd}
+\end{equation}
+referenced to the wall mid-surface (so $\mathbf B\!\approx\!\bm0$), with index $1$ the beam (span) axis and
+$2$ the contour tangent. Under the design beam load the dehomogenization recovers the shell strains
+$\mathbf s_6=(\varepsilon_{11},\varepsilon_{22},2\varepsilon_{12},\kappa_{11},\kappa_{22},2\kappa_{12})$
+at every contour point, and the pre-buckling membrane resultant follows as
+\begin{equation}
+\NN=(N_{11},N_{22},N_{12})=\mathbf A\,\mathbf s_6[1{:}3]+\mathbf B\,\mathbf s_6[4{:}6]
+=\textstyle\int \boldsymbol\sigma\,dz .
+\label{eq:N}
+\end{equation}
+$\NN$ is the \emph{only} pre-buckling quantity that enters the geometric stiffness (Sec.~\ref{sec:kg}); the
+pre-buckling moment $\mathbf M$ and transverse shear $\mathbf Q$ contribute geometric terms that are
+identically zero at the mid-surface reference or of order $h^2/L^2$, and are omitted---consistent with the
+membrane-force formulation of Abaqus \texttt{*BUCKLE} and Ansys. The full $\ABD$ and $\mathbf G_s$, by
+contrast, enter the \emph{elastic} stiffness and carry the wall's bending, coupling and transverse-shear
+resistance.
+
+\section{Finite strip formulation}\label{sec:fsm}
+
+\subsection{Strip kinematics and shape functions}\label{sec:kin}
+The contour is divided into flat \emph{strips} between nodal lines. A strip of width $b$ (transverse
+coordinate $y\in[0,b]$) runs the full buckle length; the displacement varies analytically along the span
+$x$ with half-wavelength $a$ and wavenumber $k=\pi/a$:
+\begin{equation}
+u=U(y)\cos kx,\qquad v=V(y)\sin kx,\qquad w=W(y)\sin kx ,
+\label{eq:disp}
+\end{equation}
+where $u$ is the longitudinal (warping) membrane displacement, $v$ the transverse membrane displacement and
+$w$ the out-of-plane deflection. Transversely, $U,V$ are linear ($N_1=1-y/b$, $N_2=y/b$) and $W$ is the
+cubic Hermite interpolation with the rotation $\theta=\partial w/\partial y$; the nodal degrees of freedom
+are $[u,v,w,\theta]$, four per nodal line, eight per strip:
+$\mathbf d_e=[u_1,v_1,w_1,\theta_1,\,u_2,v_2,w_2,\theta_2]^{\!\top}$.
+
+The membrane strains and plate curvatures follow from \eqref{eq:disp}:
+\begin{align}
+\varepsilon_x&=u_{,x}=-kU\sin kx, & \varepsilon_y&=v_{,y}=V'\sin kx, &
+2\varepsilon_{xy}&=(U'+kV)\cos kx,\label{eq:mem}\\
+\kappa_x&=-w_{,xx}=k^2W\sin kx, & \kappa_y&=-w_{,yy}=-W''\sin kx, &
+2\kappa_{xy}&=-2w_{,xy}=-2kW'\cos kx.\label{eq:bend}
+\end{align}
+The amplitudes define the strain--displacement operators $\mathbf B_m(y),\mathbf B_b(y)$ (membrane, bending)
+so that $\{\varepsilon\}=\mathbf B_m\mathbf d_e\,(\sin\text{ or }\cos)$ and
+$\{\kappa\}=\mathbf B_b\mathbf d_e$.
+
+\subsection{Elastic and geometric strip stiffness (single harmonic)}\label{sec:kg}
+The strip strain energy uses the full $\ABD$; because $\int_0^a\sin^2kx\,dx=\int_0^a\cos^2kx\,dx=a/2$ the
+longitudinal integral factors out, giving the $8\times8$ elastic stiffness
+\begin{equation}
+\Ke=\frac a2\!\int_0^b\!\big(\mathbf B_m^{\!\top}\mathbf A\,\mathbf B_m
++\mathbf B_m^{\!\top}\mathbf B\,\mathbf B_b+\mathbf B_b^{\!\top}\mathbf B^{\!\top}\mathbf B_m
++\mathbf B_b^{\!\top}\mathbf D\,\mathbf B_b\big)\,dy .
+\label{eq:ke}
+\end{equation}
+The geometric (initial-stress) stiffness is built from the membrane resultants
+$\hat\NN=\left[\begin{smallmatrix}N_x&N_{xy}\\N_{xy}&N_y\end{smallmatrix}\right]$ acting on the out-of-plane
+deflection gradients $\mathbf G_w=[w_{,x};\,w_{,y}]$:
+\begin{equation}
+\Kge=\frac a2\!\int_0^b \mathbf G_w^{\!\top}\hat\NN\,\mathbf G_w\,dy .
+\label{eq:kge}
+\end{equation}
+Both integrals are evaluated by two-point Gauss quadrature in $y$. Equation~\eqref{eq:ke} contains the
+bending $\mathbf D$ and coupling $\mathbf B$ in full; \eqref{eq:kge} contains only the membrane pre-stress,
+as argued in Sec.~\ref{sec:pre}.
+
+\subsection{Why a single harmonic drops the anisotropic coupling}\label{sec:drop}
+Separate the six generalized strains by their longitudinal trigonometric type:
+$\varepsilon_x,\varepsilon_y,\kappa_x,\kappa_y\!\propto\!\sin kx$ (``sine strains'') and
+$2\varepsilon_{xy},2\kappa_{xy}\!\propto\!\cos kx$ (``cosine strains''), from \eqref{eq:mem}--\eqref{eq:bend}.
+The anisotropic terms $A_{16},A_{26},B_{16},B_{26},D_{16},D_{26}$ multiply a sine strain by a cosine strain,
+and their energy carries the factor
+\begin{equation}
+\int_0^a \sin kx\,\cos kx\,dx=0 .
+\label{eq:orth}
+\end{equation}
+A single harmonic therefore \emph{cannot feel} the membrane--shear or bend--twist coupling: the laminate is
+silently reduced to its orthotropic core $\{A_{11},A_{12},A_{22},A_{66},D_{11},D_{12},D_{22},D_{66}\}$.
+For an isotropic wall this loses nothing; for a $[\pm45^\circ]$ laminate it discards $D_{16},D_{26}$ and
+over-predicts the local buckling load (Sec.~\ref{sec:results}).
+
+\subsection{Multi-harmonic formulation}\label{sec:multi}
+Restore the coupling by expanding the buckle over $M$ harmonics on a fixed length $L$ (wavenumber
+$k_m=m\pi/L$):
+\begin{equation}
+w=\sum_{m=1}^{M}W_m(y)\sin\frac{m\pi x}{L},\quad
+u=\sum_{m}U_m(y)\cos\frac{m\pi x}{L},\quad v=\sum_m V_m(y)\sin\frac{m\pi x}{L}.
+\label{eq:series}
+\end{equation}
+Same-harmonic products give the diagonal blocks---the single-harmonic matrices of \eqref{eq:ke}--\eqref{eq:kge}
+with the orthotropic $\ABD$ (denote $\mathbf A_{ss},\mathbf A_{cc}$ etc.\ the sine--sine and cosine--cosine
+sub-blocks). The coupling now survives \emph{between opposite-parity harmonics}, because
+\begin{equation}
+c_{mm'}=\int_0^L\sin\frac{m\pi x}{L}\cos\frac{m'\pi x}{L}\,dx
+=\frac{2L}{\pi}\frac{m}{m^2-m'^2}\quad(m+m'\ \text{odd}),\ \ 0\ \text{otherwise}.
+\label{eq:coupint}
+\end{equation}
+Collecting the sine-strain operator $\mathbf B_{s}$ (rows $\varepsilon_x,\varepsilon_y,\kappa_x,\kappa_y$)
+and cosine-strain operator $\mathbf B_{c}$ (rows $2\varepsilon_{xy},2\kappa_{xy}$), and letting
+$\mathbf A_{sc}$ be the $\ABD$ block coupling sine to cosine strains (i.e.\ the $16/26$ entries), the
+off-diagonal elastic block is
+\begin{equation}
+\Ke^{(m,m')}=c_{mm'}\!\int_0^b\!\mathbf B_{s}^{(m)\top}\mathbf A_{sc}\,\mathbf B_{c}^{(m')}dy
++c_{m'm}\!\int_0^b\!\mathbf B_{c}^{(m)\top}\mathbf A_{sc}^{\!\top}\mathbf B_{s}^{(m')}dy .
+\label{eq:kcouple}
+\end{equation}
+The diagonal blocks use the length factor $L/2$. The geometric stiffness stays \emph{block-diagonal}
+($\KG^{(m,m')}=\bm0$, $m\neq m'$) because the uniform membrane pre-stress produces only same-harmonic work.
+The global elastic matrix is therefore block-tridiagonal in the harmonics (parity coupling), and the
+eigenproblem has $M\!\times\!(4\,n_{\text{node}})$ unknowns---still tiny.
+
+\subsection{Closed-section assembly, eigenproblem and signature curve}\label{sec:assembly}
+Each strip's eight local degrees of freedom are rotated to the global cross-section frame at each nodal
+line. The longitudinal warping $u$ and the rotation $\theta$ (about the beam axis) are invariant; the
+in-plane translations $(v,w)$ rotate by the strip's chord angle $\alpha$ (chord direction
+$(c_y,c_z)$):
+\begin{equation}
+\mathbf T_{\text{node}}=\begin{bmatrix}1&0&0&0\\0&c_y&c_z&0\\0&-c_z&c_y&0\\0&0&0&1\end{bmatrix},\qquad
+\Ke^{\text{glob}}=\mathbf T^{\!\top}\Ke\,\mathbf T,\ \ \mathbf T=\mathrm{diag}(\mathbf T_{\text{node}},\mathbf T_{\text{node}}).
+\label{eq:transform}
+\end{equation}
+Assembling all strips (a closed contour shares its nodal lines, watertight, no seam) gives the global
+$\Kmat,\KG$ and the linear buckling eigenproblem
+\begin{equation}
+\big(\Kmat+\lambda\,\KG\big)\phivec=\bm0 ,
+\label{eq:eig}
+\end{equation}
+solved for the smallest positive load factor $\lambda_1$ (equivalently the largest $1/\lambda$ of
+$-\KG\phivec=\tfrac1\lambda\Kmat\phivec$). $\lambda_1$ scales the reference pre-buckling stress $\NN$ to the
+critical value. For the single-harmonic method one sweeps the half-wavelength $a$ and plots $\lambda_1(a)$
+---the \emph{signature curve}---whose minimum is the local buckling load; for the multi-harmonic method a
+single solve on a length $L$ spanning several buckle wavelengths returns it directly.
+
+\subsection{Application to a tapered blade: per-station cross-sections}\label{sec:perstation}
+A blade is non-prismatic, so it is represented by a set of cross-sections. Each station $s$ supplies its
+own contour, per-wall $\ABD$ (from RM homogenization) and pre-buckling $\NN_s$ (from dehomogenization under
+the station's beam internal forces); the FSM eigenproblem \eqref{eq:eig} is solved per station and the
+blade local buckling factor is the minimum over stations,
+\begin{equation}
+\lambda_{\text{blade}}=\min_s\ \lambda_1(s).
+\label{eq:min}
+\end{equation}
+The analytic longitudinal shape furnishes ideal end conditions for every station, so \eqref{eq:min} does
+\emph{not} suffer the free-edge artifact of an isolated three-dimensional segment. Equation~\eqref{eq:min}
+captures the local (skin/panel) mode; a mode spanning several stations (distortional or global) requires a
+coupled model or the full three-dimensional analysis, and is bounded from below by \eqref{eq:min}.

@@ -1,0 +1,4 @@
+# large mode-eigenvector caches (regenerable from modes_export.py / rerender_iso.py);
+# the mode SHAPES are committed as png/, the loads as dat/
+data/*.npz
+__pycache__/

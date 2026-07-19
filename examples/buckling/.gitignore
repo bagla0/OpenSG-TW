@@ -1,0 +1,6 @@
+# regenerable compute caches (large; rebuilt by the scripts)
+data/*.npz
+data/blade_cache/
+data/iso_cache/
+data/*.pkl
+__pycache__/

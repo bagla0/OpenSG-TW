@@ -1,0 +1,6 @@
+# cylinder axial local buckling eigenvalues (N_cr, N/m).  REFINED shell nc=240.
+# case   method       mode1        mode2
+  iso    JAX-Shell    4.58246e+07  4.58657e+07
+  iso    FSM-RM       4.68362e+07  4.68362e+07
+  m45    JAX-Shell    5.31548e+06  5.31612e+06
+  m45    FSM-RM       5.89251e+06  5.89251e+06

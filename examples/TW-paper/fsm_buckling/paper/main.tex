@@ -1,0 +1,100 @@
+%% OpenSG -- Cross-section-based LOCAL BUCKLING of thin-walled composite beams via the
+%% Finite Strip Method driven by Reissner--Mindlin MSG homogenization + dehomogenization.
+%% Companion to the RM cross-sectional paper (Composite Structures).
+\documentclass[preprint,12pt]{elsarticle}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{siunitx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{url}
+\newcommand{\NN}{\mathbf{N}}
+\newcommand{\Kmat}{\mathbf{K}}
+\newcommand{\KG}{\mathbf{K}_{\mathrm{G}}}
+\newcommand{\ABD}{\mathbf{ABD}}
+\newcommand{\Ke}{\mathbf{k}}
+\newcommand{\Kge}{\mathbf{k}_{\mathrm{G}}}
+\newcommand{\phivec}{\boldsymbol{\phi}}
+\newcommand{\RMFSM}{RM--OpenSG/FSM}
+\newcommand{\JAXFEA}{JAX--Shell FEA}
+
+\journal{Composite Structures}
+\begin{document}
+\begin{frontmatter}
+
+\title{Cross-Section-Based Local Buckling of Thin-Walled Composite Beams:
+A Multi-Harmonic Finite Strip Method Driven by Reissner--Mindlin Homogenization}
+
+\author[purdue]{Akshat Bagla\corref{cor1}}
+\ead{bagla0@purdue.edu}
+\author[snl]{Ernesto Camarena}
+\author[afrl]{Keith Ballard}
+\author[purdue]{Wenbin Yu}
+\cortext[cor1]{Corresponding author.}
+\affiliation[purdue]{organization={Purdue University}, city={West Lafayette},
+            postcode={47906}, state={IN}, country={USA}}
+\affiliation[afrl]{organization={Air Force Research Laboratory}, city={Dayton},
+            state={OH}, country={USA}}
+\affiliation[snl]{organization={Sandia National Laboratories}, city={Albuquerque},
+            state={NM}, country={USA}}
+
+\begin{abstract}
+Skin and panel local buckling governs the design of large composite wind-turbine blades, yet the
+standard route---mapping beam loads onto a full three-dimensional shell finite-element model of the whole
+blade and solving a global eigenvalue problem---discards the very cost advantage of the beam
+(cross-sectional) model that produced those loads. We pose local buckling instead at the
+\emph{cross-section} level. The Reissner--Mindlin (RM) Mechanics-of-Structure-Genome (MSG)
+homogenization reduces each station to a one-dimensional contour and returns the per-wall laminate
+$\ABD$; its two-step dehomogenization returns the pre-buckling wall stress, whose through-thickness
+integral is the membrane resultant $\NN$. These two quantities are exactly the inputs a semi-analytical
+\emph{Finite Strip Method} (FSM) needs: the contour becomes the strip mesh, the buckle is taken sinusoidal
+along the span, and a tiny cross-section eigenvalue $(\Kmat+\lambda\KG)\phivec=\bm0$ is swept over the
+half-wavelength to give the local buckling load, at two-to-four orders of magnitude below the cost of a
+three-dimensional model and free of the boundary-condition artifacts that plague isolated-segment
+analyses. A single longitudinal harmonic is exact for isotropic walls but silently drops the anisotropic
+bend--twist coupling ($D_{16},D_{26}$) of realistic laminates, over-predicting a $[\pm45^\circ]$ tube by
+$20\%$; a \emph{multi-harmonic} formulation, in which opposite-parity harmonics couple through those very
+terms, recovers it. The method is verified against three-dimensional MITC4 shell eigenvalue analysis on an
+axially-compressed cylinder (isotropic and $[\pm45^\circ]$) and on a tapered cone represented by three
+cross-sections, establishing the cross-section-based pathway for the full composite blade.
+\end{abstract}
+
+\begin{keyword}
+Local buckling \sep Finite strip method \sep Mechanics of Structure Genome \sep Reissner--Mindlin shell
+\sep Composite wind-turbine blade \sep Dehomogenization
+\end{keyword}
+\end{frontmatter}
+
+\input{fsm_theory}
+\input{fsm_results}
+
+\section{Conclusion}\label{sec:concl}
+We posed the local buckling of thin-walled composite beams at the cross-section level, driven directly by
+the Reissner--Mindlin MSG homogenization (per-wall $\ABD$) and its dehomogenization (pre-buckling membrane
+$\NN$), rather than by a full three-dimensional shell model of the whole structure. The semi-analytical
+finite strip method reduces the three-dimensional eigenvalue to a one-dimensional contour problem with an
+analytic sinusoidal span shape, giving the local buckling load at two-to-four orders of magnitude below the
+cost of a shell model and---because the sinusoid furnishes ideal simply-supported ends---without the
+free-edge artifact that drives isolated three-dimensional segment analyses below the true value.
+
+A single harmonic is exact for isotropic walls (isotropic cylinder within $2\%$ of the shell FEA and closer
+than it to the classical value) but silently discards the anisotropic bend--twist coupling $D_{16},D_{26}$,
+over-predicting a $[\pm45^\circ]$ tube by $20\%$; the multi-harmonic formulation, in which opposite-parity
+harmonics couple through those terms, recovers it and converges to $1.09\times$ the shell FEA by
+$M\!\ge\!12$. Mesh refinement shows the remaining anisotropic margin is transverse-shear flexibility, not a
+reference artifact---a Reissner--Mindlin strip is the identified route to the $<\!5\%$ target and is
+essential for foam-core sandwich panels. On a tapered cone the cone represented by three cross-sections
+reproduces the full three-dimensional buckling to within the same margin and correctly localizes the
+critical (tip) station, establishing the per-station pathway \eqref{eq:min} for the non-prismatic blade,
+where each station contributes its own contour, laminate and dehomogenized pre-buckling stress. Future work
+adds the transverse-shear (RM) strip and applies the method across all stations of the IEA-22-280-RWT blade.
+
+\bibliographystyle{elsarticle-num}
+\bibliography{refs}
+\end{document}
