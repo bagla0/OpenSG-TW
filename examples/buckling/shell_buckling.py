@@ -20,12 +20,17 @@ Validated (see SHELL_BUCKLING_FORMULATION.md):
 
 Run `python shell_buckling.py [plate|cyl|all]` for the self-tests.
 """
+import os
 import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import eigsh
 
 G2 = np.array([-1.0, 1.0]) / np.sqrt(3.0)                 # 2x2 Gauss points (weight 1 each)
 _KDR_SCALE = 1e-3                                          # drilling-penalty scale (rel. to mean membrane diag)
+_COPLANAR_ONLY = bool(int(os.environ.get("COPLANAR_DRILL", "1")))
+"""Apply the drilling spring only at near-coplanar nodes (skip folds).  Correct for a box corner, where the
+spring would leak into the neighbour wall's bending.  BUT a structure with many folds (blade TE + web/skin
+T-junctions) can lose too much stabilization -> set COPLANAR_DRILL=0 to penalize every node."""
 
 
 def _shape(xi, eta):
@@ -91,18 +96,16 @@ def solve_buckling(nodes, quads, ABD_e, Gs_e, Nvec_e, fixed_dof, n_modes=6):
     """Global GEP.  nodes (nn,3); quads (ne,4); per-element ABD_e (ne,6,6),Gs_e (ne,2,2),Nvec_e (ne,3);
     fixed_dof = list of constrained global DOF (6/node).  Returns (loads[n_modes], modes[nn,6,n_modes])."""
     nn = len(nodes); ndof = 6 * nn; ne = len(quads)
-    flat = _flat_node_mask(nodes, quads)                        # drilling spring only at coplanar nodes (skip folds)
+    flat = _flat_node_mask(nodes, quads) if _COPLANAR_ONLY else np.ones(len(nodes), bool)
     KD = np.zeros((ne, 24, 24)); KGD = np.zeros((ne, 24, 24)); GDOF = np.zeros((ne, 24), int)
     for e, q in enumerate(quads):
         T, xyl = _elem_frame(nodes, q)
         Ke, KGe = element_K_KG(xyl, ABD_e[e], Gs_e[e], Nvec_e[e])
         L = _L_lg(T)                                            # local 20 <- global 24
         Kd = L.T @ Ke @ L; KGd = L.T @ KGe @ L
-        kdr = _KDR_SCALE * np.mean(np.abs(np.diag(Ke)[2::5]))    # small drilling penalty
-        Kn = kdr * np.outer(T[2], T[2])                          # about the ELEMENT NORMAL (flat facet e3=z ->
-        for a in range(4):                                      # old theta_z term); NOT at folds (leaks to bending)
-            if flat[q[a]]:
-                Kd[6 * a + 3:6 * a + 6, 6 * a + 3:6 * a + 6] += Kn
+        kdr = _KDR_SCALE * np.mean(np.abs(np.diag(Ke)[2::5]))
+        Kn = kdr * np.outer(T[2], T[2])
+        _add_drill(Kd, Kn, flat, q)
         KD[e] = Kd; KGD[e] = KGd
         GDOF[e] = np.concatenate([np.arange(6 * n, 6 * n + 6) for n in q])
     I = np.broadcast_to(GDOF[:, :, None], (ne, 24, 24)).ravel()  # vectorized COO assembly
@@ -148,6 +151,32 @@ def _flat_node_mask(nodes, quads, cos_thresh=0.5):
     return flat
 
 
+def _add_drill(Kd, Kn, flat, q):
+    """DEVIATORIC drilling stabilization: penalize (theta_a - mean_theta).n, NOT the absolute theta_a.n.
+
+    A UNIFORM drilling rotation of a facet IS a rigid-body rotation about its normal and must cost ZERO
+    energy; only the DIFFERENTIAL (hourglass-like) drilling mode is spurious.  A spring to GROUND
+    (kdr * (theta_a.n)^2 per node) penalizes the uniform part too, so K stops annihilating rigid rotation --
+    measured on the cylinder as u^T K u = 2.4e10 for a rigid rotation about y, and on the blade as a loss of
+    applied moment.  Subtracting the element mean restores exact rotation invariance while still removing
+    the differential zero-energy mode:
+
+        E = kdr * sum_a ((theta_a - mean).n)^2   ->   block coefficient (delta_ab - 1/m) * Kn
+
+    `flat` still skips fold nodes, where the junction geometry already couples the drilling and a spring
+    would leak into the neighbour wall's physical bending.
+    """
+    idx = [a for a in range(4) if flat[q[a]]]
+    if not idx:
+        return
+    m = len(idx)
+    for a in idx:
+        for b in idx:
+            c = (1.0 if a == b else 0.0) - 1.0 / m
+            if c:
+                Kd[6 * a + 3:6 * a + 6, 6 * b + 3:6 * b + 6] += c * Kn
+
+
 def _elem_frame(nodes, q):
     """local orthonormal frame T (rows e1,e2,e3) and in-plane coords xyl (4,2) for a quad."""
     X = nodes[q]
@@ -159,11 +188,24 @@ def _elem_frame(nodes, q):
 
 
 def _L_lg(T):
-    """local-20 (u v w tx ty) <- global-24 (ux uy uz rx ry rz) transform: u_loc = L u_glob."""
+    """local-20 (u v w beta_x beta_y) <- global-24 (ux uy uz rx ry rz) transform: u_loc = L u_glob.
+
+    The Mindlin fiber rotations are  beta_x = +e2.theta ,  beta_y = -e1.theta :
+    a fiber point at height z displaces by  theta x (z e3) = z (theta2 e1 - theta1 e2), and _B_at defines
+    dof3 = beta_x through kappa_xx = beta_x,x and gamma_xz = w,x + beta_x.
+
+    Using (e1.theta, e2.theta) instead -- the same pair rotated 90 deg about e3 -- makes
+    gamma_xz = w,x + beta_x NONZERO under a rigid-body rotation, so K stops annihilating rigid rotation and
+    the element absorbs applied moment as fictitious transverse shear (penalized by the stiff Gs=(5/6)Gh).
+    On a SMOOTH surface every node has one e3, so the swap is an exact change of variables and plate /
+    cylinder answers are unchanged -- which is why this hid.  It breaks wherever e3 is not nodewise unique:
+    box corners, blade LE/TE, and web/skin folds (blade lost 63% of the applied moment; tip 0.89 -> 34 m).
+    """
     L = np.zeros((20, 24))
     for a in range(4):
         L[5 * a:5 * a + 3, 6 * a:6 * a + 3] = T
-        L[5 * a + 3:5 * a + 5, 6 * a + 3:6 * a + 6] = T[:2]
+        L[5 * a + 3, 6 * a + 3:6 * a + 6] = T[1]        # beta_x = +e2 . theta
+        L[5 * a + 4, 6 * a + 3:6 * a + 6] = -T[0]       # beta_y = -e1 . theta
     return L
 
 
@@ -171,17 +213,15 @@ def assemble_K(nodes, quads, ABD_e, Gs_e):
     """Global material stiffness K (6/node), same element + drilling as solve_buckling (KG omitted)."""
     nn = len(nodes); ndof = 6 * nn; ne = len(quads)
     z3 = np.zeros(3)
-    flat = _flat_node_mask(nodes, quads)                        # drilling spring only at coplanar nodes (skip folds)
+    flat = _flat_node_mask(nodes, quads) if _COPLANAR_ONLY else np.ones(len(nodes), bool)
     KD = np.zeros((ne, 24, 24)); GDOF = np.zeros((ne, 24), int)
     for e, q in enumerate(quads):
         T, xyl = _elem_frame(nodes, q)
         Ke, _ = element_K_KG(xyl, ABD_e[e], Gs_e[e], z3)         # Nvec=0 -> KG unused
         L = _L_lg(T); Kd = L.T @ Ke @ L
         kdr = _KDR_SCALE * np.mean(np.abs(np.diag(Ke)[2::5]))
-        Kn = kdr * np.outer(T[2], T[2])                          # drilling penalty about the element normal
-        for a in range(4):
-            if flat[q[a]]:                                      # NOT at folds (would leak into wall bending)
-                Kd[6 * a + 3:6 * a + 6, 6 * a + 3:6 * a + 6] += Kn
+        Kn = kdr * np.outer(T[2], T[2])
+        _add_drill(Kd, Kn, flat, q)
         KD[e] = Kd; GDOF[e] = np.concatenate([np.arange(6 * n, 6 * n + 6) for n in q])
     I = np.broadcast_to(GDOF[:, :, None], (ne, 24, 24)).ravel()
     J = np.broadcast_to(GDOF[:, None, :], (ne, 24, 24)).ravel()

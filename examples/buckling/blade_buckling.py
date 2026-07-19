@@ -102,14 +102,41 @@ def station_abd(i):
         P[wnode(w, 0):wnode(w, 0) + NWI] = Pa[None, :] + tl[:, None] * (Pb - Pa)[None, :]
     tree, names = station_layup_lookup(shell)
     ay = load_station_abd(os.path.join(ABDD, "iea_s%02d_abd.yaml" % i))["by_name"]
-    ABD = np.zeros((NSE, 6, 6)); Gs = np.zeros((NSE, 2, 2))
-    mids = 0.5 * (P[sec_elems[:, 0]] + P[sec_elems[:, 1]])
-    idx = tree.query(mids + (tree.data.mean(0) - mids.mean(0)))[1]   # align conformal frame -> yaml frame
-    for se in range(NSE):
-        nm = names[idx[se]]
-        A, G, thk = ay[nm]
-        ABD[se] = A; Gs[se] = G
+    ABD, Gs = assign_abd(P, tree, names, ay)
     return P, ABD, Gs
+
+
+NSUB = 12          # sample points per section element for the arc-length-conserving layup assignment
+
+
+def assign_abd(P, tree, names, ay, nsub=NSUB):
+    """Per-element ABD/Gs by ARC-LENGTH-WEIGHTED sampling of the station's native layup map.
+
+    The conformal section (NSE~135 elements) is COARSER than the station's own ring (254-310), so a single
+    nearest-midpoint lookup assigns each element ONE layup all-or-nothing.  An element straddling the
+    spar-cap boundary then takes the full cap (or full panel) stiffness, and the ARC-LENGTH BUDGET breaks:
+    the stiff cap gets over-assigned while the soft panel is starved.  Measured effect on the real IEA
+    blade: the reduced-axial-stiffness identity  oint (A11 - A12^2/A22) ds / EA  drifts 1.03 -> 1.33
+    growing outboard, mis-scaling the pre-buckling N (and hence the buckling load) by 3-33%.
+
+    Sampling `nsub` points along each element and averaging the ABD restores the budget at ANY resolution
+    mismatch: a straddling element receives a proportional MIX instead of a winner-take-all layup.
+    Verify with robust_checks.abd_ea_consistency (expect ratio -> 1.00).
+    """
+    mids = 0.5 * (P[sec_elems[:, 0]] + P[sec_elems[:, 1]])
+    shift = tree.data.mean(0) - mids.mean(0)                 # align conformal frame -> yaml frame
+    tq = (np.arange(nsub) + 0.5) / nsub                      # midpoint rule along the element
+    Pa = P[sec_elems[:, 0]]; Pb = P[sec_elems[:, 1]]
+    pts = Pa[:, None, :] + tq[None, :, None] * (Pb - Pa)[:, None, :]        # (NSE, nsub, 2)
+    idx = tree.query(pts.reshape(-1, 2) + shift)[1].reshape(len(sec_elems), nsub)
+    cacheA = {}; cacheG = {}
+    for nm, (A, G, thk) in ay.items():
+        cacheA[nm] = np.asarray(A, float); cacheG[nm] = np.asarray(G, float)
+    ABD = np.zeros((NSE, 6, 6)); Gs = np.zeros((NSE, 2, 2))
+    for se in range(NSE):
+        As = [cacheA[names[k]] for k in idx[se]]; Gsl = [cacheG[names[k]] for k in idx[se]]
+        ABD[se] = np.mean(As, axis=0); Gs[se] = np.mean(Gsl, axis=0)
+    return ABD, Gs
 
 
 def build_blade(verbose=True):
