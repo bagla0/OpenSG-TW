@@ -91,15 +91,18 @@ def solve_buckling(nodes, quads, ABD_e, Gs_e, Nvec_e, fixed_dof, n_modes=6):
     """Global GEP.  nodes (nn,3); quads (ne,4); per-element ABD_e (ne,6,6),Gs_e (ne,2,2),Nvec_e (ne,3);
     fixed_dof = list of constrained global DOF (6/node).  Returns (loads[n_modes], modes[nn,6,n_modes])."""
     nn = len(nodes); ndof = 6 * nn; ne = len(quads)
+    flat = _flat_node_mask(nodes, quads)                        # drilling spring only at coplanar nodes (skip folds)
     KD = np.zeros((ne, 24, 24)); KGD = np.zeros((ne, 24, 24)); GDOF = np.zeros((ne, 24), int)
     for e, q in enumerate(quads):
         T, xyl = _elem_frame(nodes, q)
         Ke, KGe = element_K_KG(xyl, ABD_e[e], Gs_e[e], Nvec_e[e])
         L = _L_lg(T)                                            # local 20 <- global 24
         Kd = L.T @ Ke @ L; KGd = L.T @ KGe @ L
-        kdr = _KDR_SCALE * np.mean(np.abs(np.diag(Ke)[2::5]))    # small drilling penalty (about the normal)
-        for a in range(4):
-            Kd[6 * a + 5, 6 * a + 5] += kdr
+        kdr = _KDR_SCALE * np.mean(np.abs(np.diag(Ke)[2::5]))    # small drilling penalty
+        Kn = kdr * np.outer(T[2], T[2])                          # about the ELEMENT NORMAL (flat facet e3=z ->
+        for a in range(4):                                      # old theta_z term); NOT at folds (leaks to bending)
+            if flat[q[a]]:
+                Kd[6 * a + 3:6 * a + 6, 6 * a + 3:6 * a + 6] += Kn
         KD[e] = Kd; KGD[e] = KGd
         GDOF[e] = np.concatenate([np.arange(6 * n, 6 * n + 6) for n in q])
     I = np.broadcast_to(GDOF[:, :, None], (ne, 24, 24)).ravel()  # vectorized COO assembly
@@ -121,6 +124,28 @@ def solve_buckling(nodes, quads, ABD_e, Gs_e, Nvec_e, fixed_dof, n_modes=6):
         full[:] = 0; full[free] = vecs[:, m]
         modes[:, :, m] = full.reshape(nn, 6)
     return vals, modes
+
+
+def _flat_node_mask(nodes, quads, cos_thresh=0.5):
+    """True at nodes whose incident element normals are ~coplanar -> safe to add a drilling spring.
+    False at FOLDS/corners (dihedral > ~60 deg), where the junction geometry already couples the
+    drilling rotation into the neighbour wall's bending and removes the singularity; adding a spring
+    there would LEAK into that wall's PHYSICAL bending rotation and over-stiffen the fold (a square-tube
+    corner clamps toward k=6.97 instead of the correct k=4).  |dot| is winding-insensitive."""
+    ne = len(quads); nrm = np.zeros((ne, 3))
+    for e, q in enumerate(quads):
+        T, _ = _elem_frame(nodes, q); nrm[e] = T[2]
+    acc = [[] for _ in range(len(nodes))]
+    for e, q in enumerate(quads):
+        for n in q:
+            acc[n].append(e)
+    flat = np.ones(len(nodes), bool)
+    for n, es in enumerate(acc):
+        if len(es) > 1:
+            N = nrm[es]
+            if np.abs(N @ N.T).min() < cos_thresh:
+                flat[n] = False
+    return flat
 
 
 def _elem_frame(nodes, q):
@@ -146,14 +171,17 @@ def assemble_K(nodes, quads, ABD_e, Gs_e):
     """Global material stiffness K (6/node), same element + drilling as solve_buckling (KG omitted)."""
     nn = len(nodes); ndof = 6 * nn; ne = len(quads)
     z3 = np.zeros(3)
+    flat = _flat_node_mask(nodes, quads)                        # drilling spring only at coplanar nodes (skip folds)
     KD = np.zeros((ne, 24, 24)); GDOF = np.zeros((ne, 24), int)
     for e, q in enumerate(quads):
         T, xyl = _elem_frame(nodes, q)
         Ke, _ = element_K_KG(xyl, ABD_e[e], Gs_e[e], z3)         # Nvec=0 -> KG unused
         L = _L_lg(T); Kd = L.T @ Ke @ L
         kdr = _KDR_SCALE * np.mean(np.abs(np.diag(Ke)[2::5]))
+        Kn = kdr * np.outer(T[2], T[2])                          # drilling penalty about the element normal
         for a in range(4):
-            Kd[6 * a + 5, 6 * a + 5] += kdr
+            if flat[q[a]]:                                      # NOT at folds (would leak into wall bending)
+                Kd[6 * a + 3:6 * a + 6, 6 * a + 3:6 * a + 6] += Kn
         KD[e] = Kd; GDOF[e] = np.concatenate([np.arange(6 * n, 6 * n + 6) for n in q])
     I = np.broadcast_to(GDOF[:, :, None], (ne, 24, 24)).ravel()
     J = np.broadcast_to(GDOF[:, None, :], (ne, 24, 24)).ravel()

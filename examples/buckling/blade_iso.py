@@ -19,6 +19,8 @@ sec_elems = bb.sec_elems; NSE = len(sec_elems); DATA = bb.DATA
 IC = os.path.join(DATA, "iso_cache"); IY = os.path.join(IC, "yaml")
 os.makedirs(os.path.join(IY, "abd"), exist_ok=True)
 NMODES = 8
+CENTER_REF = bool(int(os.environ.get("CENTER_REF", "1")))   # 1=mid-surface loft (match reference:center homog.), 0=OML
+
 
 
 def iso_abd(t):
@@ -49,15 +51,31 @@ def homog_iso(i):
     return B
 
 
-def station_iso(i):
-    shell = os.path.join(bb.SHELLD, "iea_s%02d_shell.yaml" % i)
-    d = yaml.safe_load(open(shell)); r = i / 50.0
-    oml = bb.resample(np.asarray(bb.build_cross_section(bb.blade, r=r)["nodes"], float), bb.N)
+def _build_P(oml):
+    """place the skin loop + interpolate the web chains from it (topology fixed by web_ia/web_ib)."""
     P = np.zeros((Ntot, 2)); P[:bb.N] = oml
     for w in range(bb.NWEB):
         Pa, Pb = oml[bb.web_ia[w]], oml[bb.web_ib[w]]
         tl = np.linspace(0, 1, bb.NW)[1:-1]
         P[bb.wnode(w, 0):bb.wnode(w, 0) + bb.NWI] = Pa[None] + tl[:, None] * (Pb - Pa)[None]
+    return P
+
+
+def _to_midsurface(oml, tnode):
+    """offset the OML skin loop inward by t/2 along the (orientation-consistent) inward normal -> mid-surface."""
+    nxt = np.roll(oml, -1, 0); prv = np.roll(oml, 1, 0); tg = nxt - prv
+    area = 0.5 * np.sum(oml[:, 0] * nxt[:, 1] - nxt[:, 0] * oml[:, 1])     # signed area -> global CCW/CW sign
+    s = 1.0 if area > 0 else -1.0                                         # CCW: inward = left normal [-ty, tx]
+    ninw = s * np.stack([-tg[:, 1], tg[:, 0]], 1)
+    ninw /= (np.linalg.norm(ninw, axis=1, keepdims=True) + 1e-30)
+    return oml + 0.5 * tnode[:, None] * ninw
+
+
+def station_iso(i):
+    shell = os.path.join(bb.SHELLD, "iea_s%02d_shell.yaml" % i)
+    d = yaml.safe_load(open(shell)); r = i / 50.0
+    oml = bb.resample(np.asarray(bb.build_cross_section(bb.blade, r=r)["nodes"], float), bb.N)
+    P = _build_P(oml)
     tree, names = bb.station_layup_lookup(shell)
     thick = {s["elementSet"]: sum(float(p[1]) for p in s["layup"]) for s in d["sections"]}
     mids = 0.5 * (P[sec_elems[:, 0]] + P[sec_elems[:, 1]])
@@ -65,6 +83,14 @@ def station_iso(i):
     ABD = np.zeros((NSE, 6, 6)); Gs = np.zeros((NSE, 2, 2))
     for se in range(NSE):
         a, g = iso_abd(thick[names[idx[se]]]); ABD[se] = a; Gs[se] = g
+    if CENTER_REF:                                       # OML skin -> mid-surface (match reference:center homog.)
+        tnode = np.zeros(bb.N); cnt = np.zeros(bb.N)
+        for se in range(NSE):
+            a, b = int(sec_elems[se, 0]), int(sec_elems[se, 1])
+            if a < bb.N and b < bb.N:                    # skin element -> accumulate its thickness on both nodes
+                th = thick[names[idx[se]]]; tnode[a] += th; tnode[b] += th; cnt[a] += 1; cnt[b] += 1
+        tnode = np.where(cnt > 0, tnode / np.maximum(cnt, 1), tnode[cnt > 0].mean() if (cnt > 0).any() else 0.0)
+        P = _build_P(_to_midsurface(oml, tnode))
     return P, ABD, Gs
 
 

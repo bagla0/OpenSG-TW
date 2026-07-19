@@ -59,10 +59,13 @@ half-wavelength to give the local buckling load, at two-to-four orders of magnit
 three-dimensional model and free of the boundary-condition artifacts that plague isolated-segment
 analyses. A single longitudinal harmonic is exact for isotropic walls but silently drops the anisotropic
 bend--twist coupling ($D_{16},D_{26}$) of realistic laminates, over-predicting a $[\pm45^\circ]$ tube by
-$20\%$; a \emph{multi-harmonic} formulation, in which opposite-parity harmonics couple through those very
-terms, recovers it. The method is verified against three-dimensional MITC4 shell eigenvalue analysis on an
-axially-compressed cylinder (isotropic and $[\pm45^\circ]$) and on a tapered cone represented by three
-cross-sections, establishing the cross-section-based pathway for the full composite blade.
+nearly $50\%$; a \emph{multi-harmonic} formulation, in which opposite-parity harmonics couple through those
+very terms, recovers it to within $1.4\%$. The method is verified against three-dimensional MITC4 shell
+eigenvalue analysis on an axially-compressed cylinder (isotropic and $[\pm45^\circ]$), a square tube, and a
+tapered cone represented by cross-sections; a coplanar drilling stabilization makes the shell reference
+reproduce both the classical cylinder and the analytic square-plate coefficient, and the FSM then matches it
+to $1$--$4\%$ where the buckle is local and bounds it conservatively where the buckle spans the taper,
+establishing the cross-section-based pathway for the full composite blade.
 \end{abstract}
 
 \begin{keyword}
@@ -83,17 +86,22 @@ analytic sinusoidal span shape, giving the local buckling load at two-to-four or
 cost of a shell model and---because the sinusoid furnishes ideal simply-supported ends---without the
 free-edge artifact that drives isolated three-dimensional segment analyses below the true value.
 
-A single harmonic is exact for isotropic walls (isotropic cylinder within $2\%$ of the shell FEA and closer
-than it to the classical value) but silently discards the anisotropic bend--twist coupling $D_{16},D_{26}$,
-over-predicting a $[\pm45^\circ]$ tube by $20\%$; the multi-harmonic formulation, in which opposite-parity
-harmonics couple through those terms, recovers it and converges to $1.09\times$ the shell FEA by
-$M\!\ge\!12$. Mesh refinement shows the remaining anisotropic margin is transverse-shear flexibility, not a
-reference artifact---a Reissner--Mindlin strip is the identified route to the $<\!5\%$ target and is
-essential for foam-core sandwich panels. On a tapered cone the cone represented by three cross-sections
-reproduces the full three-dimensional buckling to within the same margin and correctly localizes the
-critical (tip) station, establishing the per-station pathway \eqref{eq:min} for the non-prismatic blade,
-where each station contributes its own contour, laminate and dehomogenized pre-buckling stress. Future work
-adds the transverse-shear (RM) strip and applies the method across all stations of the IEA-22-280-RWT blade.
+A single harmonic is exact for isotropic walls (isotropic cylinder within $3\%$ of the drilling-stabilized
+shell FEA) but silently discards the anisotropic bend--twist coupling $D_{16},D_{26}$, over-predicting a
+$[\pm45^\circ]$ tube by nearly $50\%$; the multi-harmonic formulation, in which opposite-parity harmonics
+couple through those terms, recovers it and converges to within $1.4\%$ ($1.014\times$) of the shell FEA by
+$M\!\ge\!12$. Correcting the flat-facet drilling stabilization---a spring about the element normal applied
+only at coplanar nodes---was essential: it makes the shell reference reproduce the classical cylinder
+($0.999$) and the analytic square-plate coefficient ($k=4$), removing a spurious $\sim\!5\%$ softening that
+had inflated the apparent FSM error. The small remaining anisotropic margin is transverse-shear flexibility,
+which a Reissner--Mindlin strip (future work) would close and which is essential for foam-core sandwich
+panels. On a tapered cone, three cross-sections reproduce the full three-dimensional buckling to within the
+same margin ($0.995$ iso, $1.039$ $[\pm45^\circ]$) and localize the critical tip station; on a tapered
+square, the same per-station minimum is a safe lower bound ($0.82$--$0.93$) because the plate buckle spans
+the taper---together bracketing the regime of validity of the per-station pathway \eqref{eq:min} for the
+non-prismatic blade, where each station contributes its own contour, laminate and dehomogenized pre-buckling
+stress. Future work reconciles the blade dehomogenization pre-stress with the three-dimensional stress and
+applies the method across all stations of the IEA-22-280-RWT blade.
 
 \bibliographystyle{elsarticle-num}
 \bibliography{refs}

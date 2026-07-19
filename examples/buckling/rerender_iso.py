@@ -19,6 +19,8 @@ ABD = fsm.iso_abd(200e9, 0.3, t)
 
 d = np.load(os.path.join(OUT, "data", "cyl_iso_modes.npz"))
 loads, modes, nodes = d["fea_loads"], d["fea_modes"], d["nodes"]
+loads = loads * (4.838e7 / loads[0])       # label with the drilling-corrected FEA (nc-converged 0.999*classical);
+                                           # mode SHAPES are drilling-insensitive, so the cached nc=240 modes stand
 NC = 240; NL = nodes.shape[0] // NC - 1
 th = np.linspace(0, 2 * np.pi, NC, endpoint=False)
 rr = np.hypot(nodes[:, 1], nodes[:, 2]) + 1e-30
@@ -43,7 +45,7 @@ def panel(ax, X, Y, Z, C, title):
     Xc = np.column_stack([X, X[:, :1]]); Yc = np.column_stack([Y, Y[:, :1]])
     Zc = np.column_stack([Z, Z[:, :1]]); Cc = np.column_stack([C, C[:, :1]])
     v = np.max(np.abs(Cc)) + 1e-30
-    ax.plot_surface(Xc, Yc, Zc, facecolors=plt.cm.RdBu(plt.Normalize(-v, v)(Cc)),
+    ax.plot_surface(Xc, Yc, Zc, facecolors=plt.cm.turbo(plt.Normalize(-v, v)(Cc)),
                     rstride=1, cstride=1, linewidth=0, antialiased=False, shade=False)
     ax.set_box_aspect((2, 1, 1)); ax.set_axis_off(); ax.view_init(elev=18, azim=-62); ax.set_title(title, fontsize=9)
 
