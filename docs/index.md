@@ -51,6 +51,15 @@ tutorials/st15_solid_vs_shell
 
 ```{toctree}
 :hidden:
+:caption: Dehomogenization & RM cross-section
+
+tutorials/st15_dehomogenization
+tutorials/iea_r020_homo_dehom
+tutorials/iea_spanwise
+```
+
+```{toctree}
+:hidden:
 :caption: Tapered 3-D segments
 
 tutorials/rm_taper_circle
