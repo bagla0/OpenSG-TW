@@ -76,17 +76,6 @@ section below.
    :members:
 ```
 
-## Shell buckling
-
-Linear (Euler) buckling $(\mathbf{K} + \lambda \mathbf{K}_G)\boldsymbol{\phi} = \mathbf{0}$ of a
-composite shell mesh driven by the laminate ABD — a consumer of the homogenization rather than part of
-it, kept here because it shares the plate constitutive law and the mid-surface reference convention.
-
-```{eval-rst}
-.. automodule:: opensg_jax.fe_jax.shell_buckling
-   :members:
-```
-
 ## Shared MSG core
 
 ```{eval-rst}
