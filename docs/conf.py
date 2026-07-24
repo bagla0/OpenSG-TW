@@ -8,6 +8,12 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))   # repo root, so autodoc can import opensg_jax.fe_jax.*
+# The RM cross-section drivers used by the paper and the IEA tutorials are top-level scripts that
+# live OUTSIDE the installed package and import each other by bare module name, so their own
+# directories must be importable for autodoc to document them (see the "RM cross-section drivers"
+# section of api.md).  Both import in well under a second and have __main__ guards.
+sys.path.insert(0, os.path.abspath("../examples/TW-paper/xsec_paper"))
+sys.path.insert(0, os.path.abspath("../mitc_rm_segment"))
 
 project = "OpenSG-TW"
 author = "Akshat Bagla (bagla0)"

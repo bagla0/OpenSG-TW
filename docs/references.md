@@ -18,6 +18,31 @@ these sources (DOIs are given where verified).
 - A. Bagla *et al.* Multi-cell thin-walled composite beam homogenization (ASC). *(The two-cell $[-45]$
   benchmark and the section-shear energy ordering used by the RM model.)*
 
+## Variational-asymptotic Reissner–Mindlin plate & shell (the wall law and 3-D recovery)
+
+The MSG-RM $8\times8$ wall law of {doc}`theory/reissner_mindlin` and the through-thickness reconstruction of
+{doc}`theory/dehomogenization` are built on the variational-asymptotic route to a Reissner–Mindlin plate —
+the transverse-shear block $G$ is *derived* from the plate structure gene, not assumed from a shear-flow
+closure. The Whitney entries are the classical load-assumed alternative, kept for historical contrast.
+
+- W. Yu. "Mathematical construction of a Reissner–Mindlin plate theory for composite laminates."
+  *International Journal of Solids and Structures* **42** (2005) 6680–6699. *(The VAM-derived RM plate model:
+  the source of the $2\times2$ transverse-shear block $G$ in the MSG-RM $8\times8$.)*
+- W. Yu, D. H. Hodges, V. V. Volovoi. "Asymptotic construction of Reissner-like composite plate theory with
+  accurate strain recovery." *International Journal of Solids and Structures* (2002). *(The asymptotic
+  Reissner-like plate with the recovery relations reused in step 2 of the dehomogenization.)*
+- W. Yu, D. H. Hodges, V. V. Volovoi. "Asymptotic generalization of Reissner–Mindlin theory: accurate
+  three-dimensional recovery for composite shells." *Computer Methods in Applied Mechanics and Engineering*
+  **191** (2002) 5087–5109. *(The shell counterpart; source of the initial-curvature $h/R$ correction.)*
+- W. Yu, J.-S. Kim, D. H. Hodges, M. Cho. "A critical evaluation of two Reissner–Mindlin type models for
+  composite laminated plates." *Aerospace Science and Technology* **12** (2008) 408–417. *(Why the residual
+  classical–shear coupling is folded into the minimization, giving the block-diagonal $8\times8$.)*
+- J. M. Whitney, N. J. Pagano. "Shear deformation in heterogeneous anisotropic plates."
+  *Journal of Applied Mechanics* **37** (1970) 1031–1036. *(Historical contrast: the load-assumed closure.)*
+- J. M. Whitney. "Shear correction factors for orthotropic laminates under static load."
+  *Journal of Applied Mechanics* **40** (1973) 302–304. *(The shear-correction-factor route the MSG-RM
+  construction replaces.)*
+
 ## Reissner–Mindlin shell, MITC & assumed natural strain
 
 - E. N. Dvorkin, K.-J. Bathe. "A continuum mechanics based four-node shell element for general non-linear

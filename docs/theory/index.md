@@ -6,7 +6,9 @@ assumptions with a single principle: minimize the difference between the strain 
 3-D (or 2-D) heterogeneous structure and that of an equivalent 1-D beam, over a periodic/free
 **Structure Gene (SG)**.
 
-The four pages below build up the theory used by the three solvers in this toolkit.
+The five pages below build up the theory used by the three solvers in this toolkit — the shared MSG
+statement, the three cross-sectional models, and the recovery step that turns a 1-D beam answer back into
+pointwise 3-D fields.
 
 ```{toctree}
 :maxdepth: 1
@@ -15,6 +17,7 @@ msg_structure_genome
 kirchhoff_love
 reissner_mindlin
 jax_solid
+dehomogenization
 ```
 
 ## How the pieces fit
@@ -34,10 +37,15 @@ jax_solid
   - classical normal-stays-normal shell; Hermite-$C^1$ arc elements; ABD plate constitutive law
 * - {doc}`reissner_mindlin`
   - 1-D arc (shell)
-  - independent director ⇒ transverse shear; MITC selective assumed-strain; the $GA_2,GA_3$ recovery
+  - independent director ⇒ transverse shear; MITC selective assumed-strain; the 5-d.o.f. strip and the
+    6-d.o.f. drilling-Lagrange ring; the MSG-RM $8\times8$ wall law
 * - {doc}`jax_solid`
   - 2-D section (solid)
   - full 3-D constitutive law on the filled mesh; rigid-body (Eq. 85) projection; VABS-matched 6×6
+* - {doc}`dehomogenization`
+  - 1-D arc **+** 1-D thickness
+  - the reduction run backwards: beam resultants → shell strains → ply-by-ply 3-D stress and
+    displacement; energy consistency, the warping gauge, the reference surface
 ```
 
 All three return the Timoshenko stiffness in the order
