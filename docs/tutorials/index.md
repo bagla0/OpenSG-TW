@@ -46,6 +46,39 @@ RM 8×8 plate `.dat`.
 :::
 ::::
 
+## RM cross-section — IEA-22 blade (paper reproduction)
+
+The two tutorials that reproduce the *Composites Part B* Reissner–Mindlin cross-section paper
+on the **IEA-22 MW reference blade**, at the mid-surface (center) reference. Both run **entirely
+from data committed under [`examples/data/iea_all_stations/`](https://github.com/bagla0/OpenSG-TW/tree/main/examples/data/iea_all_stations)**
+— clone and run, nothing read from any external machine — and each ships as both a runnable
+`.py` and an executed `.ipynb`. The 51-station VABS benchmark is a small pre-extracted landmark
+file, so no multi-hundred-MB VABS dumps are needed.
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} 5 · $r/R=0.2$ homogenization + 3-path dehomogenization
+:link: iea_r020_homo_dehom
+:link-type: doc
+The $r/R=0.2$ station: RM ring Timoshenko $6\times6$ vs the VABS `.K` (Frobenius $\approx3\%$),
+then two-step MSG-RM 3-D recovery along **three paths** — circumferential (leading edge to
+trailing edge), spar-cap through-thickness (OML→IML, $\sigma_{11}$ within $\sim0.5\%$ of VABS),
+and a connected cap→T-junction→web polyline showing $C^0$ displacement **continuity through the
+junction**. Runnable from `docs/tutorials/iea_r020_homo_dehom.py`.
+:::
+
+:::{grid-item-card} 6 · 51-station spanwise
+:link: iea_spanwise
+:link-type: doc
+Homogenization accuracy across all **51 span stations** — RM Timoshenko $6\times6$ diagonal vs
+the VABS `.K` (mean $|\%\mathrm{err}|$: $EA\,0.85$, $GA_2\,1.93$, $GA_3\,1.57$, $GJ\,1.57$,
+$EI_2\,0.23$, $EI_3\,2.54$) — plus the spanwise stress and displacement recovery vs the VABS
+landmark ($\sigma_{11}<1\%$; flapwise tip $\approx17.7$ m). Runnable from
+`docs/tutorials/iea_spanwise.py`.
+:::
+::::
+
 ## Tapered 3-D segments
 
 Two independent tracks. The **wind-blade tapered segment** homogenizes a real, layup-varying BAR-URC blade

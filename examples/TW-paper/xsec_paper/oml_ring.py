@@ -4,6 +4,8 @@
 'oml'      : contour on the OML, laminate stacked INWARD from the line (airfoil yamls:
              IEA-22, st15/BAR-URC -- official OpenSG shell frac=0 convention)
 'oml_flip' : reference shifted the full thickness the other way (diagnostic only)
+'iml'      : contour on the INNER mold line (a fraction=1.0 yaml), laminate stacked
+             OUTWARD from the line -- same full-thickness ABD shift as oml_flip
 """
 import os
 import sys
@@ -44,7 +46,7 @@ def load_ring_ref(path, ref="oml"):
         D_by, G_by = _material_by_section(sections, materials, center_ref=True)
     else:
         D_by, G_by = _material_by_section(sections, materials, center_ref=False)
-        if ref == "oml_flip":
+        if ref in ("oml_flip", "iml"):
             for si, sec in enumerate(sections):
                 t = sum(float(p[1]) for p in sec["layup"])
                 D_by[si] = shift_abd_reference(np.asarray(D_by[si]), t)

@@ -36,7 +36,9 @@ import json
 import numpy as np
 
 # --- make the opensg_jax package importable -------------------------------------
-REPO = r"C:\Users\bagla0\OneDrive - purdue.edu\2026_195\Claude_code"
+# repo root = two levels up from this file (mitc_rm_segment/solve_segment_jax.py),
+# resolved relative to the file so a standalone checkout works at any path.
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
 

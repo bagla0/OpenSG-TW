@@ -55,32 +55,76 @@ def _strip(rx3, cells, ax):
     return nodes, quads, h
 
 
-def build_rm_bundle(shell_yaml, ref="oml", shear="mitc4_g23"):
+def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     """Homogenize with the RM ring and package everything the two-step dehom needs.
+
+    ``ref`` defaults to ``None`` = read the reference from the yaml's ``reference`` field -- the
+    SINGLE source of truth, chosen once when the 1-D yaml is created (emit_opensg_yaml's ``fraction``:
+    0.5->"center", 0.0->"oml"); absent -> "center".  So the RM homogenization AND dehom automatically
+    follow whatever reference the yaml was built at.  center = mid-surface (frac=0.5, the default); the
+    BeamDyn 6x6 / FF are center-ref too, so the dehom stress/disp recovery stays consistent
+    (stress_at_points converts the mid-ref depth to the plate OML depth via frac).  Pass an explicit
+    ``ref="oml"``/``"center"`` only to override the yaml.
 
     Returns a bundle dict with the RM Timoshenko 6x6 ``Timo`` (=C6_RM), the RM warping
     ``V0``/``V1`` (6m x 4), the strip geometry, the per-element layup, and the plate-SG
     layup_db / material_db (reused from solve_tw_from_yaml -- geometry-independent, keyed
     by layup name).
     """
+    d = yaml.safe_load(open(shell_yaml))
+    if ref is None:                                       # single source of truth: yaml records its ref
+        ref = d.get("reference", "center")                # (set at 1-D-yaml creation; absent -> center)
     R = load_ring_ref(shell_yaml, ref)
-    C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], R["G_by"],
+    # THE single initial-stage reference decision: everything below (ring laminate reference via
+    # load_ring_ref above, plate-SG z_ref for the MSG G / recovery warping, the KL layup_db frac,
+    # the emitted ABD yaml, and the recovery depth conversion in stress_at_points) follows ``frac``.
+    frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
+    # wall transverse-shear source: "msg" (DEFAULT since 2026-07-21, SwiftComp-like Yu-2002 LS
+    # projection, msg_rm_plate.rm_plate_msg) or "whitney" (legacy complementary-energy shear flow).
+    # Section 6x6 is insensitive (<=0.02% at IEA r=0.2) but the MSG G is the theory-consistent value.
+    # (G_msg itself is reference-independent -- validated -- but the SG carries the recovery warping,
+    # so its z_ref must sit at the chosen reference surface.)
+    G_by = list(R["G_by"])
+    if g_source == "msg":
+        from msg_rm_plate import rm_plate_msg
+        from emit_abd import material_db_from_yaml
+        _mdb = material_db_from_yaml(d["materials"])
+        for si, sec in enumerate(d["sections"]):
+            _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
+            _h = sum(p[1] for p in _pl)
+            _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl], [p[0] for p in _pl],
+                               _mdb, z_ref=frac * _h)
+            if _rr["G_msg"] is not None:
+                G_by[si] = np.asarray(_rr["G_msg"])
+    C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
                             R["k22"], R["ax"], R["cross"], shear=shear, lam_space="elem",
                             return_fields=True)
     C6 = 0.5 * (C6 + C6.T)
     nodes, quads, h = _strip(R["rx"], R["cells"], R["ax"])
 
-    d = yaml.safe_load(open(shell_yaml))
     sec_names = [s["elementSet"] for s in d["sections"]]
     layup_per_elem = [sec_names[int(si)] for si in R["rsub"]]
     # reuse the KL bundle ONLY for the by-name plate layup_db + material_db (geometry-free)
-    kl = solve_tw_from_yaml(shell_yaml, frac=0.0 if ref != "center" else 0.5)
+    kl = solve_tw_from_yaml(shell_yaml, frac=frac)
+    # compulsory: emit the per-station ABD yaml at the SAME reference (once, cached) for reuse
+    # by dehom + shell buckling
+    try:
+        import os as _os
+        from emit_abd import emit_station_abd
+        _tag = _os.path.splitext(_os.path.basename(shell_yaml))[0]
+        _ay = _os.path.join(_os.path.dirname(shell_yaml) or ".", "abd", _tag + "_abd.yaml")
+        if not _os.path.exists(_ay):
+            emit_station_abd(shell_yaml, _ay, station=_tag,
+                             ref="mid" if ref == "center" else "oml")
+    except Exception:
+        pass
     return {"Timo": C6, "V0": np.asarray(V0), "V1": np.asarray(V1),
             "corners": R["rx"][:, R["cross"]], "red_cells": np.asarray(R["cells"]),
             "rx3": np.asarray(R["rx"]), "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),
             "ax": int(R["ax"]), "cross": list(R["cross"]), "strip": (nodes, quads, h),
             "layup_per_elem": layup_per_elem, "layup_db": kl["layup_db"],
-            "material_db": kl["material_db"], "frac": 0.0 if ref != "center" else 0.5}
+            "material_db": kl["material_db"], "frac": frac, "ref": ref,
+            "g_source": g_source}
 
 
 def _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme="mitc4_g23"):
@@ -147,9 +191,39 @@ def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, directo
     return out
 
 
+def _flow_nodal_avg(B, st_m, aA, aB):
+    """Nodal (patch) average of the two contour-DERIVATIVE strain rows, 2eps12
+    (row 2) and 2k12 (row 5), along the element chains.
+
+    The RM ring is a linear 2-node element, so any strain row carrying the
+    contour derivative of the warping is element-piecewise -- it oscillates
+    about the smooth field (measured on iea_s10: element-to-element jumps of
+    32% of the mean on row 2 and 182% on row 5, vs ~10% for the macro terms).
+    Standard derivative-field recovery: average the element-midpoint values at
+    shared nodes (only where exactly 2 elements meet -- junction nodes keep
+    one-sided values), then interpolate linearly.  Rows 0,1,3,4 are NOT
+    touched: their region-boundary jumps are physical."""
+    rc = np.asarray(B["red_cells"]); nodes, quads, _h = B["strip"]
+    n_el = rc.shape[0]; n_nd = int(rc.max()) + 1
+    emid = np.zeros((n_el, 2))
+    for e in range(n_el):
+        s6, _ = _rm_shell_strain(B, e, 0.5, st_m, aA, aB)
+        emid[e] = [float(s6[2]), float(s6[5])]
+    deg = np.zeros(n_nd, int)
+    acc = np.zeros((n_nd, 2))
+    for e in range(n_el):
+        for nd in (int(rc[e, 0]), int(rc[e, 1])):
+            deg[nd] += 1
+            acc[nd] += emid[e]
+    nodal = np.full((n_nd, 2), np.nan)
+    ok = deg == 2
+    nodal[ok] = acc[ok] / 2.0
+    return emid, nodal
+
+
 def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
                      frame="global", n_per_layer=2, elem_order=2, rm_shear=False,
-                     s2_scheme="mitc4_g23"):
+                     s2_scheme="mitc4_g23", flow_avg=False):
     """RM two-step dehom: 3-D stress at arbitrary section coords (y2,y3).
 
     Mirrors msg_dehom.stress_at_points but with the RM shell-strain recovery (step 1).  The
@@ -167,6 +241,8 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
     st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
     corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"])
     xd = np.asarray(B["rx3"]); cen = corners.mean(axis=0)
+    if flow_avg:
+        _emid, _nodal = _flow_nodal_avg(B, st_m, aA, aB)
     layups = B["layup_per_elem"]; ldb = B["layup_db"]; mdb = B["material_db"]
     warp = {ln: compute_ABD_matrix(i["thick"], i["angles"], i["mat_names"], mdb,
             n_per_layer=n_per_layer, return_warping=True, elem_order=elem_order)[2]
@@ -188,11 +264,26 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
         z = float((pts[ip, 0] - pr[0]) * n2 + (pts[ip, 1] - pr[1]) * n3)
 
         s6, s2 = _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme=s2_scheme)
-        Gam, Sig, ply = plate_stress_at_depth(warp[layups[e]], s6, z)
+        if flow_avg:
+            s6 = np.array(s6, float)
+            for kk, row in enumerate((2, 5)):
+                v0 = _nodal[c0, kk] if np.isfinite(_nodal[c0, kk]) else _emid[e, kk]
+                v1 = _nodal[c1, kk] if np.isfinite(_nodal[c1, kk]) else _emid[e, kk]
+                s6[row] = (1.0 - xi) * v0 + xi * v1
+        # The RM ring reference is the frac-surface (mid-surface for center-ref, frac=0.5) but the
+        # plate through-thickness SG (plate_stress_at_depth) measures depth from the OML (0..h).  So
+        # convert the ring depth z (signed from the frac-ref) to the OML depth, and shift the shell
+        # membrane strain from the frac-ref to the OML so the z*curvature term stays consistent.
+        # Without this, all z<0 (outer-half) points are clamped to the OML ply -> wrong through-thickness.
+        hth = float(warp[layups[e]]['node_x'][-1])
+        frac = float(B.get('frac', 0.0))
+        z_oml = z + frac * hth
+        s6r = np.array(s6, float); s6r[0:3] = s6r[0:3] - frac * hth * s6r[3:6]
+        Gam, Sig, ply = plate_stress_at_depth(warp[layups[e]], s6r, z_oml)
         if rm_shear:
             Gmat, recover, _ = shr[layups[e]]
             Q = Gmat @ s2                                            # [Q1,Q2] resultants (N/m)
-            s13, s23 = recover(z, Q)                                 # ghat(z)*Q, free-surface
+            s13, s23 = recover(z_oml, Q)                             # ghat(z)*Q, free-surface
             Sig = np.asarray(Sig, float).copy()
             Sig[4] += s13; Sig[3] += s23                            # Voigt [S11,S22,S33,S23,S13,S12]
         if frame == "global":

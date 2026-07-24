@@ -53,8 +53,10 @@ def _norm_materials(mats):
     return out
 
 
-def load_ring(path):
-    """1-D contour shell YAML -> ring arrays (rx, cells, rsub, re3, D_by, G_by, k22, ax, cross)."""
+def load_ring(path, center_ref=True):
+    """1-D contour shell YAML -> ring arrays (rx, cells, rsub, re3, D_by, G_by, k22, ax, cross).
+    center_ref=True references the plate ABD to the laminate MID-surface (default, for a mid-surface
+    contour); center_ref=False references it to the OML (use with an OML contour, fraction=0.0)."""
     d = yaml.safe_load(open(path))
     rx = np.array([_row(r)[:3] for r in d["nodes"]], dtype=float)
     cells = np.array([[int(v) for v in _row(e)] for e in d["elements"]], dtype=int)
@@ -70,7 +72,7 @@ def load_ring(path):
         for lab in grp["labels"]:
             rsub[int(lab) - 1] = si
     ax = 2; cross = [0, 1]
-    D_by, G_by = _material_by_section(sections, materials, center_ref=True)
+    D_by, G_by = _material_by_section(sections, materials, center_ref=center_ref)
     k22 = compute_k22(rx[cells].mean(1), re2, re3, cells)
     return dict(rx=rx, cells=cells, rsub=rsub, re3=re3, D_by=D_by, G_by=G_by, k22=k22,
                 ax=ax, cross=cross, nweb=int((rsub > 0).sum()))
