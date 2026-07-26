@@ -124,12 +124,20 @@ The classical derivative-field cure applies: sample those two rows at the elemen
 the linear element, §4 of {doc}`reissner_mindlin`) and **patch-average at shared nodes**, then interpolate
 linearly. The restriction is what makes it *gradient-consistent* rather than a smoothing:
 
-- averaging is applied **only where exactly two elements meet and both carry the same layup**;
-- at a **layup transition** or a **junction node** the one-sided element values are kept;
+- averaging is applied **only where exactly two elements meet** (nodal valence $2$);
+- at a **junction node** (valence $\geq3$) the element's own midpoint value is kept;
 - rows $0,1,3,4$ are **never** touched — their jumps at a region boundary are physical (different $A,B,D$).
 
-Averaging blindly across a ply-drop or a T-junction would smear the genuine discontinuity in the wall law into a
-spurious contour-gradient spike, which is exactly the artefact this restriction removes.
+Averaging blindly across a T-junction would smear the genuine discontinuity in the wall law into a spurious
+contour-gradient spike, which is exactly the artefact the valence restriction removes.
+
+```{note}
+The implementation (`dehom_rm._flow_nodal_avg`) tests **valence only** — it does not compare the layups of the
+two incident elements, so a ply-drop node with valence $2$ *is* averaged. Only genuine multi-wall junctions are
+protected. Rows $0,1,3,4$ are untouched either way, so the wall-law discontinuity itself is never smeared; the
+approximation is confined to the two derivative rows across a thickness change. Note also that the averaging is
+**off by default** (`stress_at_points(..., flow_avg=False)`); the spanwise driver enables it explicitly.
+```
 
 ## 3. Step 2 — shell strains to pointwise 3-D stress
 
@@ -153,8 +161,11 @@ $$
 2\varepsilon_{12}\!\leftarrow\!2\varepsilon_{12}+z\,2\kappa_{12}.
 $$
 
-Recovery evaluates the very same objects at the requested depth
-(`msg_materials.plate_stress_at_depth`, `msg_rm_plate.msgrm_strain_at_depth`):
+Recovery evaluates the very same objects at the requested depth. The shipped cross-section path calls
+`msg_materials.plate_stress_at_depth`; `msg_rm_plate.msgrm_strain_at_depth` is the gradient-augmented
+counterpart, which additionally consumes the first-order columns $\bar C_1,\bar C_2$ and the in-plane strain
+gradients $\mathcal E_{,1},\mathcal E_{,2}$ (those terms are not active in the blade recovery below, where the
+gradients are not formed):
 
 $$
 \boxed{\;
