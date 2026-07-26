@@ -96,7 +96,7 @@ FFF   = os.path.join(DATA, "dehom51", "beamdyn", "ff51_rmc_reform.dat")
 VBD   = os.path.join(DATA, "dehom51", "out", "dehom_vabs")
 JDAT  = os.path.join(DATA, "dehom51", "out", "cpb_r020_msgrm", "data", "junction_polyline_mid.dat")
 BD    = os.path.join(DATA, "dehom51", "out", "VABS_iea51", "iea51vabs_bd_driver.out")
-print("repo root:", CC)
+print("repo root located:", os.path.isdir(os.path.join(CC, "examples", "data")))
 """)
 
 md(r"""
