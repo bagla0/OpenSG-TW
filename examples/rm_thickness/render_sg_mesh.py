@@ -50,10 +50,6 @@ def figure(names, labels, fname):
             pl.add_mesh(seg, color=groups[key], line_width=7)
         pl.add_point_labels([(x, 0, -0.05 * hmax)], [lab], font_size=24,
                             shape=None, always_visible=True, show_points=False)
-    pl.add_legend([(f"{NICE.get(m, m)}, {ang:g}$^\\circ$", c)
-                   for (m, ang), c in groups.items()],
-                  bcolor='white', border=True, size=(0.30, 0.035 * len(groups) + 0.03),
-                  loc='lower right')
     pl.camera_position = 'xz'
     pl.enable_parallel_projection()
     pl.camera.zoom(1.05)
