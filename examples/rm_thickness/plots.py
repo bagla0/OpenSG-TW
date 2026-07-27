@@ -92,6 +92,45 @@ def fig_convergence():
     print("  convergence.png")
 
 
+def fig_full(tag, S):
+    """sigma11, sigma22, u, w profiles vs the analytical 3-D solution."""
+    thick, ang, mats, npl = CASES[tag]
+    r = M.run(thick, ang, mats, MATDB, S, n_per_layer_out=81, npl_sg=npl)
+    ex = r['exact']
+    # exact displacement amplitudes from the state-space solution
+    from exact_cyl import ExactCyl
+    h = r['h']
+    exs = ExactCyl(thick, ang, mats, MATDB, S * h)
+    zc, sig_e, eps_e, uvw_e = exs.profile(n_per_layer=81)
+    zb = zc / h
+    panels = [('s11', r'$\sigma_{11}/q_0$', sig_e[:, 0], r['fsdt']['s11'],
+               r['msg']['s11']),
+              ('s22', r'$\sigma_{22}/q_0$', sig_e[:, 1], r['fsdt']['s22'],
+               r['msg']['s22']),
+              ('u', r'$u/h$', uvw_e[:, 0] / h, r['fsdt']['u'] / h,
+               r['msg']['u'] / h),
+              ('w', r'$w/h$', uvw_e[:, 2] / h, r['fsdt']['w'] / h,
+               r['msg']['w'] / h)]
+    fig, axes = plt.subplots(2, 2, figsize=(9.0, 7.2))
+    for ax, (key, xl, e_, f_, m_) in zip(axes.ravel(), panels):
+        ax.plot(e_, zb, C_EX, lw=2.2, label='Analytic 3-D')
+        ax.plot(f_, zb, C_FS, lw=1.6, ls='--', label='FSDT')
+        ax.plot(m_, zb, C_MG, lw=1.6, ls='-.', label='OpenSG-RM')
+        for zi in np.cumsum(thick)[:-1] / h - 0.5:
+            ax.axhline(zi, color='0.75', lw=0.6, zorder=0)
+        ax.set_xlabel(xl)
+        ax.set_ylabel(r'$z/h$')
+        ax.set_ylim(-0.5, 0.5)
+        ax.grid(alpha=0.25, lw=0.5)
+    h_, l_ = axes[0, 0].get_legend_handles_labels()
+    fig.legend(h_, l_, loc='center left', bbox_to_anchor=(1.0, 0.5), frameon=False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, f'{tag}_S{S}_full.png'), dpi=180,
+                bbox_inches='tight')
+    plt.close(fig)
+    print(f"  {tag}_S{S}_full.png")
+
+
 def fig_sweep():
     path = os.path.join(RES, 'sweep.npz')
     if not os.path.exists(path):
@@ -99,36 +138,27 @@ def fig_sweep():
         return
     d = np.load(path, allow_pickle=True)
     err = 100 * d['err']
-    fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.6))
+    fig, ax = plt.subplots(figsize=(6.0, 3.8))
 
     series = [('FSDT $\\sigma_{13}$', err[:, 0], C_FS),
-              ('MSG $\\sigma_{13}$', err[:, 1], C_MG),
-              ('MSG $\\sigma_{33}$', err[:, 2], '#2ca02c'),
-              ('MSG $\\sigma_{11}$', err[:, 3], '#9467bd')]
+              ('OpenSG-RM $\\sigma_{13}$', err[:, 1], C_MG),
+              ('OpenSG-RM $\\sigma_{33}$', err[:, 2], '#2ca02c'),
+              ('OpenSG-RM $\\sigma_{11}$', err[:, 3], '#9467bd')]
     for nm, e, c in series:
         xs = np.sort(e)
-        axes[0].plot(xs, np.linspace(0, 100, xs.size), color=c, lw=1.8, label=nm)
-    axes[0].set_xscale('log')
-    axes[0].set_xlabel(r'relative $L_2$ error vs 3-D elasticity  [%]')
-    axes[0].set_ylabel(r'cumulative share of laminates  [%]')
-    axes[0].grid(which='both', alpha=0.25, lw=0.5)
-
-    S = d['S']
-    axes[1].semilogy(S, err[:, 0], '.', ms=3, color=C_FS, alpha=0.5,
-                     label='FSDT $\\sigma_{13}$')
-    axes[1].semilogy(S, err[:, 1], '.', ms=3, color=C_MG, alpha=0.6,
-                     label='MSG $\\sigma_{13}$')
-    axes[1].semilogy(S, err[:, 2], '.', ms=3, color='#2ca02c', alpha=0.6,
-                     label='MSG $\\sigma_{33}$')
-    axes[1].set_xlabel(r'$S = L/h$')
-    axes[1].set_ylabel(r'relative $L_2$ error  [%]')
-    axes[1].grid(which='both', alpha=0.25, lw=0.5)
-
-    h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc='center left', bbox_to_anchor=(1.0, 0.5), frameon=False)
+        ax.plot(xs, np.linspace(0, 100, xs.size), color=c, lw=1.8, label=nm)
+    ax.set_xscale('log')
+    ax.set_xlabel(r'relative $L_2$ error vs 3-D elasticity  [%]')
+    ax.set_ylabel(r'cumulative share of laminates  [%]')
+    ax.grid(which='both', alpha=0.25, lw=0.5)
+    ax.legend(loc='upper left', frameon=False)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, 'sweep.png'), dpi=180, bbox_inches='tight')
     plt.close(fig)
+    # exact extremes for the paper text
+    names = ['FSDT s13', 'MSG s13', 'MSG s33', 'MSG s11']
+    for j, nm in enumerate(names):
+        print(f"  {nm}: min {err[:, j].min():.2f}%  max {err[:, j].max():.2f}%")
     print("  sweep.png")
 
 

@@ -54,16 +54,21 @@ def fsdt_shear(sg, ks=5.0 / 6.0):
 
 
 def fsdt(sg, E6, p, q0=1.0, n_per_layer_out=41, ks=5.0 / 6.0):
-    """FSDT profile.  ``s33`` is None -- the theory cannot produce it."""
+    """FSDT profile.  ``s33`` is None -- the theory cannot produce it.
+    Displacements are the single-director kinematics: u = z*phi (linear), w constant."""
     m = sg['mesh']
     z, e, _ = SG.sample_points(m, n_per_layer_out)
     lay = m['elem_layer'][e]
     Gs, gk = fsdt_shear(sg, ks)
     gam = jnp.linalg.solve(Gs, jnp.array([q0 / p, 0.0]))
     sv = jnp.einsum('nab,b->na', gk[jnp.asarray(lay)], gam)
-    s11 = _clt_inplane(sg, E6, z, lay)[:, 0]
-    return {'z': z, 's11': np.asarray(s11), 's13': np.asarray(sv[:, 0]),
-            's23': np.asarray(sv[:, 1]), 's33': None, 'gamma': np.asarray(gam)}
+    ip = _clt_inplane(sg, E6, z, lay)
+    phihat, what, _ = _plate_kinematics(E6, p, Gs)
+    return {'z': z, 's11': np.asarray(ip[:, 0]), 's22': np.asarray(ip[:, 1]),
+            's13': np.asarray(sv[:, 0]),
+            's23': np.asarray(sv[:, 1]), 's33': None,
+            'u': z * phihat, 'w': np.full_like(z, what),
+            'gamma': np.asarray(gam)}
 
 
 def _clt_inplane(sg, E6, z, lay):
@@ -103,24 +108,47 @@ def clt_equil(sg, E6, p, n_per_layer_out=41, n_gauss=10):
 
 
 # ------------------------------------------------------------------------- MSG
+def _plate_kinematics(E6, p, Gs):
+    """Cylindrical-bending plate kinematic amplitudes from the (statically
+    determinate) strain state: rotation phi(x) = phihat cos(px), deflection
+    w0(x) = what sin(px)."""
+    kap = float(np.asarray(E6)[3])
+    gam = float(np.linalg.solve(np.asarray(Gs), np.array([1.0 / p, 0.0]))[0])
+    phihat = -kap / p
+    what = kap / p ** 2 + gam / p
+    return phihat, what, gam
+
+
 def msg(sg, E6, p, n_per_layer_out=41):
     """MSG-VAM recovery.
 
     In-plane stresses come from the zeroth-order warping at mid-span (where the Navier
     gradient vanishes); the transverse shear comes from the FIRST-ORDER gradient warping
     at the support, driven by dE/dx1 = p*Ehat; sigma33 then follows from through-thickness
-    equilibrium of that recovered sigma13.
+    equilibrium of that recovered sigma13.  Displacements are the plate kinematics plus
+    the warping (u at the support, cos family; w at mid-span, sin family), the warping
+    entering u as its linear-part-removed deviation (the RM director already carries the
+    mean shear rotation).
     """
     E6 = jnp.asarray(E6)
     dE1 = p * E6
-    z, _, Sig_m = SG.recover(sg, E6, None, None, n_per_layer_out)          # mid-span
-    _, _, Sig_s = SG.recover(sg, jnp.zeros(6), dE1, None, n_per_layer_out)  # support
+    z, _, Sig_m, warp_m = SG.recover(sg, E6, None, None, n_per_layer_out,
+                                     return_warp=True)                      # mid-span
+    _, _, Sig_s, warp_s = SG.recover(sg, jnp.zeros(6), dE1, None, n_per_layer_out,
+                                     return_warp=True)                      # support
     s13 = Sig_s[:, 4]
     s23 = Sig_s[:, 3]
     s33 = sigma33_equilibrium(z, s13, p1=p)
+
+    phihat, what, _ = _plate_kinematics(E6, p, sg['G_msg'])
+    w1 = np.asarray(warp_s[:, 0])
+    slope = np.trapezoid(z * w1, z) / np.trapezoid(z * z, z)
+    u = z * phihat + (w1 - slope * z)
+    w = what + np.asarray(warp_m[:, 2])
     return {'z': z, 's11': np.asarray(Sig_m[:, 0]), 's22': np.asarray(Sig_m[:, 1]),
             's12': np.asarray(Sig_m[:, 5]), 's13': np.asarray(s13),
             's23': np.asarray(s23), 's33': np.asarray(s33),
+            'u': u, 'w': w,
             's33_direct': np.asarray(Sig_m[:, 2])}
 
 
