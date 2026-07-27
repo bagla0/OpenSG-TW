@@ -211,12 +211,14 @@ def sample_points(mesh, n_per_layer_out=41, eps=1e-9):
     return z, e, xi
 
 
-def recover(sg, E6, dE1=None, dE2=None, n_per_layer_out=41):
+def recover(sg, E6, dE1=None, dE2=None, n_per_layer_out=41, return_warp=False):
     """3-D strain and stress through the thickness.
 
     ``E6`` are the plate strains and ``dE1`` / ``dE2`` their in-plane gradients -- the
     gradient terms are what supply the transverse shear.  Returns (z, Gam, Sig) in Voigt
-    order [11,22,33,23,13,12].
+    order [11,22,33,23,13,12]; with ``return_warp`` also the warping DISPLACEMENT
+    [w1,w2,w3] at the sample points (the through-thickness fluctuation, <w> = 0), which
+    is what turns the plate kinematics u0 + z*phi into the recovered 3-D displacement.
     """
     m = sg['mesh']
     p = m['p']
@@ -252,4 +254,9 @@ def recover(sg, E6, dE1=None, dE2=None, n_per_layer_out=41):
            + jnp.einsum('nab,nb->na', M1, g1)
            + jnp.einsum('nab,nb->na', M2, g2))
     Sig = jnp.einsum('nab,nb->na', Ck, Gam)
+    if return_warp:
+        # w_loc holds the 3*(p+1) element warping dofs; interpolate each component
+        wpt = jnp.einsum('nj,nja->na', Npt,
+                         w_loc.reshape(w_loc.shape[0], p + 1, 3))
+        return z, Gam, Sig, wpt
     return z, Gam, Sig
