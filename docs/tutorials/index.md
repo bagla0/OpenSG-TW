@@ -44,6 +44,15 @@ compare against VABS `.SM` along the cap-centre and circumferential paths — in
 1%. Runs standalone from `examples/data/dehom_st15/`. See the `dehom_docs/` write-ups and the
 RM 8×8 plate `.dat`.
 :::
+
+:::{grid-item-card} 3c · MSG-RM plate 8×8 from a 1-D SG
+:link: plate_rm_8x8
+:link-type: doc
+The **8×8 ABDG wall law** `[[A,B,0],[B,D,0],[0,0,G]]` for every laminate of a 1-D shell YAML —
+classical ABD from the zeroth-order warping, transverse-shear $G$ from the Yu-2003 Sec.-4
+least-squares RM projection (78 equations, 27 unknowns), with the $U^*$ residual and the
+MSG-vs-Whitney comparison on the st15 walls.
+:::
 ::::
 
 ## RM cross-section — IEA-22 blade (paper reproduction)
@@ -229,6 +238,10 @@ $6\times6$ vs the RM shell ring and shell segment, with wall times. Validated vs
   - `data/1d_yaml/st15_shell.yaml` + `data/dehom_st15/*.coords`
   - `solve_tw_from_yaml` + `stress_at_points`
   - VABS `.K` + `data/dehom_st15/bar_urc-15-t-0.in.SM`
+* - MSG-RM plate 8×8
+  - `data/1d_yaml/st15_shell.yaml`
+  - `msg_rm_plate.rm_plate_msg` + `plate_8x8`
+  - Whitney `transverse_shear_stiffness` + iso 5/6·Gh exact
 * - 3D-SG tapered segment
   - `data/3d_yaml/BAR_URC_numEl_52_segment_{5,12,15}.yaml`
   - `boundary_from_yaml.extract` + `solve_boundary_bundle` + `compute_timo_taper`
