@@ -53,6 +53,7 @@ tutorials/st15_solid_vs_shell
 :hidden:
 :caption: Dehomogenization & RM cross-section
 
+tutorials/plate_rm_8x8
 tutorials/st15_dehomogenization
 tutorials/iea_r020_homo_dehom
 tutorials/iea_spanwise
