@@ -7,7 +7,9 @@ SEPARATE analysis module (does not modify the existing pipeline).  Implements, o
   first order    : gradient-driven warping columns C1bar, C2bar (Yu 2002 Eq. 38: v = Cbar_a E,_a)
   second order   : gradient energy H (12x12 blocks over [E,1; E,2], Yu Eq. 41)
   RM projection  : least-squares minimization of the residual U* over the shear compliance
-                   X = G^{-1} (3) plus the relaxed-constraint constants c_a (36), Yu Eq. 49-55
+                   X = G^{-1} (3) plus the relaxed-constraint constants c_a (24, in-plane
+                   warping shifts only -- Yu Eq. 49-55 count; the w3-shift columns are
+                   identically inert for monoclinic laminates)
                    -> the MSG transverse-shear stiffness  G_msg (2x2)
   recovery       : through-thickness 3-D strain incl. the first-order (equilibrium-consistent)
                    transverse-shear terms, given the plate strains E and their in-plane
@@ -159,12 +161,12 @@ def rm_plate_msg(thick, angles_deg, mat_names, material_db, n_per_layer=4, elem_
     H = np.block([[H11, H12], [H12.T, H22]])
 
     # ---- RM projection (Yu 2002 sec. 4): E = R - D1 g,1 - D2 g,2 ; equilibrium swap;
-    #      LS over X = G^{-1} (sym 2x2) and relaxed constants c1,c2 (3x6 each) ----
+    #      LS over X = G^{-1} (sym 2x2) and relaxed constants c1,c2 (2x6 each) ----
     D1 = np.zeros((6, 2)); D2 = np.zeros((6, 2))
     D1[3, 0] = 1.0; D1[5, 1] = 1.0        # k11 <- 2g13,1 ; k12 <- 2g23,1
     D2[4, 1] = 1.0; D2[5, 0] = 1.0        # k22 <- 2g23,2 ; k12 <- 2g13,2
-    S1 = null.T @ R1                       # (3,6) effect of constant shifts
-    S2 = null.T @ R2
+    S1 = (null.T @ R1)[:2]                 # (2,6) in-plane constant shifts (Yu's 24; the
+    S2 = (null.T @ R2)[:2]                 #  w3 row of null^T R_a is 0 for monoclinic)
 
     AD1 = A6 @ D1; AD2 = A6 @ D2          # (6,2)
     scl = float(np.max(np.abs(H)) + 1e-30)
@@ -175,19 +177,19 @@ def rm_plate_msg(thick, angles_deg, mat_names, material_db, n_per_layer=4, elem_
         Ds = H22 + AD2 @ X @ AD2.T + c2.T @ S2 + S2.T @ c2
         return np.block([[Bs, Cs], [Cs.T, Ds]])
 
-    # linear LS: unknown p = [x11,x12,x22, c1(18), c2(18)] -> minimize ||blocks||_F
-    nun = 3 + 36
-    Amat = np.zeros((144, nun)); b0 = -blocks(np.zeros((2, 2)), np.zeros((3, 6)), np.zeros((3, 6))).ravel()
+    # linear LS: unknown p = [x11,x12,x22, c1(12), c2(12)] -> minimize ||blocks||_F
+    nun = 3 + 24
+    Amat = np.zeros((144, nun)); b0 = -blocks(np.zeros((2, 2)), np.zeros((2, 6)), np.zeros((2, 6))).ravel()
     for j in range(nun):
         pj = np.zeros(nun); pj[j] = 1.0
         X = np.array([[pj[0], pj[1]], [pj[1], pj[2]]])
-        c1 = pj[3:21].reshape(3, 6); c2 = pj[21:39].reshape(3, 6)
+        c1 = pj[3:15].reshape(2, 6); c2 = pj[15:27].reshape(2, 6)
         Amat[:, j] = blocks(X, c1, c2).ravel() + b0               # linear response of column j
     # column scaling for conditioning
     cs = np.linalg.norm(Amat, axis=0); cs[cs == 0] = 1.0
     sol = np.linalg.lstsq(Amat / cs, b0, rcond=None)[0] / cs
     X = np.array([[sol[0], sol[1]], [sol[1], sol[2]]])
-    c1 = sol[3:21].reshape(3, 6); c2 = sol[21:39].reshape(3, 6)
+    c1 = sol[3:15].reshape(2, 6); c2 = sol[15:27].reshape(2, 6)
     res = blocks(X, c1, c2)
     Ustar_rel = float(np.linalg.norm(res) / (np.linalg.norm(H) + 1e-30))
 
