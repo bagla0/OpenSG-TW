@@ -39,31 +39,38 @@ def _lagrange_N(nodes_xi, xi):
     return N
 
 
-def _grad_ops(nodes_xi, xi):
-    """M1, M2 (6 x 3*(p+1)): strain contribution of the IN-PLANE gradient of the warping.
+def _grad_ops(nodes_xi, xi): 
+    """Gamma_l1, Gamma_l2 (6 x 3*(p+1)): strain contribution of the IN-PLANE gradient of the warping.
     w,1: e11 += w1,1 ; 2g13 += w3,1 ; g12 += w2,1
     w,2: e22 += w2,2 ; 2g23 += w3,2 ; g12 += w1,2
     """
     N = _lagrange_N(nodes_xi, xi)
     npn = len(nodes_xi)
-    M1 = np.zeros((6, 3 * npn)); M2 = np.zeros((6, 3 * npn))
+    Gamma_l1 = np.zeros((6, 3 * npn)); Gamma_l2 = np.zeros((6, 3 * npn))
     for n in range(npn):
-        M1[0, 3 * n + 0] = N[n]      # eps11 <- w1,1
-        M1[4, 3 * n + 2] = N[n]      # 2g13  <- w3,1
-        M1[5, 3 * n + 1] = N[n]      # g12   <- w2,1
-        M2[1, 3 * n + 1] = N[n]      # eps22 <- w2,2
-        M2[3, 3 * n + 2] = N[n]      # 2g23  <- w3,2
-        M2[5, 3 * n + 0] = N[n]      # g12   <- w1,2
-    return M1, M2
+        Gamma_l1[0, 3 * n + 0] = N[n]      # eps11 <- w1,1
+        Gamma_l1[4, 3 * n + 2] = N[n]      # 2g13  <- w3,1
+        Gamma_l1[5, 3 * n + 1] = N[n]      # g12   <- w2,1
+        Gamma_l2[1, 3 * n + 1] = N[n]      # eps22 <- w2,2
+        Gamma_l2[3, 3 * n + 2] = N[n]      # 2g23  <- w3,2
+        Gamma_l2[5, 3 * n + 0] = N[n]      # g12   <- w1,2
+    return Gamma_l1, Gamma_l2
 
 
 def rm_plate_msg(thick, angles_deg, mat_names, material_db, n_per_layer=4, elem_order=3,
-                 z_ref=0.0):
+                 z_ref=0.0, fraction=None):
     """Build the MSG-RM plate law.  Returns a dict:
     A6 (6x6 ABD), G_msg (2x2), H (12x12), V0/C1bar/C2bar (ndofs x 6), node_x, elem_layer,
-    C_layers, elem_order, Ustar_rel (residual after projection / before), X (=G^{-1})."""
+    C_layers, elem_order, Ustar_rel (residual after projection / before), X (=G^{-1}).
+
+    Reference plane: ``fraction`` in [0, 1] of the total thickness -- 0 = OML (bottom,
+    first ply) face, 0.5 = center, 1 = IML face; overrides ``z_ref`` when given.
+    Default (fraction=None, z_ref=0) is the OML reference; ``z_ref`` (absolute length,
+    same origin as the ply stack) is kept for backward compatibility."""
     nlay = len(thick)
     layer_bot = np.concatenate([[0.0], np.cumsum(thick)])
+    if fraction is not None:
+        z_ref = float(fraction) * float(layer_bot[-1])
     C_layers = [rotated_stiffness_6x6(material_db[mat_names[k]]['E'],
                                       material_db[mat_names[k]]['G'],
                                       material_db[mat_names[k]]['nu'],

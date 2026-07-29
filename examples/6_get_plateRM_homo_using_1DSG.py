@@ -38,7 +38,7 @@ def main():
         ang = [float(a) for a in lay["angles"]]
         mats = [str(m) for m in lay["mat_names"]]
         h = float(sum(thk))
-        r = rm_plate_msg(thk, ang, mats, mdb, z_ref=0.5 * h)     # center reference
+        r = rm_plate_msg(thk, ang, mats, mdb, fraction=0.5)      # center reference (0=OML, 1=IML)
         Gw = transverse_shear_stiffness(thk, ang, mats, mdb)[0]
         G = r["G_msg"] if r["G_msg"] is not None else Gw
         P8 = plate_8x8(r["A6"], G)

@@ -83,7 +83,7 @@ correct RM model exists for this case).
 code(r"""
 h = 0.01
 mdb_iso = {"iso": {"E": [70e9]*3, "G": [35e9]*3, "nu": [0.0]*3, "rho": 1.0}}
-r = rm_plate_msg([h], [0.0], ["iso"], mdb_iso, z_ref=h/2)
+r = rm_plate_msg([h], [0.0], ["iso"], mdb_iso, fraction=0.5)
 print("G_msg/(G*h) =", np.diag(r["G_msg"]) / (35e9*h), "  target 5/6 =", 5/6)
 print("Ustar_rel   = %.2e" % r["Ustar_rel"])
 """)
@@ -91,8 +91,9 @@ print("Ustar_rel   = %.2e" % r["Ustar_rel"])
 md(r"""
 ## The 8×8 ABDG for one wall laminate
 
-Full matrix for the first laminate (center / mid-surface reference, `z_ref = h/2` — the
-convention of the RM ring homogenization).
+Full matrix for the first laminate at the **center (mid-surface) reference** — the convention
+of the RM ring homogenization.  The reference plane is set by `fraction` (0 = OML face,
+0.5 = center, 1 = IML face; default 0 = OML).
 """)
 
 code(r"""
@@ -102,7 +103,7 @@ mats = [str(m) for m in lay["mat_names"]]
 h = float(sum(thk))
 print(ln, ":", ", ".join("%s(%.1fmm/%g)" % (m, 1e3*t, a) for m, t, a in zip(mats, thk, ang)))
 
-r = rm_plate_msg(thk, ang, mats, mdb, z_ref=0.5*h)
+r = rm_plate_msg(thk, ang, mats, mdb, fraction=0.5)
 P8 = plate_8x8(r["A6"], r["G_msg"])
 print("\nRM 8x8 ABDG  [[A,B,0],[B,D,0],[0,0,G]]:")
 print(P8)
@@ -123,7 +124,7 @@ for ln, lay in layup_db.items():
     thk = [float(t) for t in lay["thick"]]; ang = [float(a) for a in lay["angles"]]
     mats = [str(m) for m in lay["mat_names"]]
     h = float(sum(thk))
-    r = rm_plate_msg(thk, ang, mats, mdb, z_ref=0.5*h)
+    r = rm_plate_msg(thk, ang, mats, mdb, fraction=0.5)
     Gw = transverse_shear_stiffness(thk, ang, mats, mdb)[0]
     G = r["G_msg"]
     print("%-9s %2d %8.4f | %11.4e %11.4e | %11.4e %11.4e | %9.2e" %
