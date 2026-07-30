@@ -14,6 +14,7 @@ Run (Windows, env on PATH):
 """
 import os
 import sys
+import time
 
 import numpy as np
 
@@ -23,7 +24,7 @@ for p in ("", "opensg_jax"):
 np.set_printoptions(precision=4, linewidth=150, suppress=False)
 
 from opensg_jax.fe_jax.msg_mesh import load_yaml
-from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
+from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg_batch
 from opensg_jax.fe_jax.msg_transverse_shear import plate_8x8, transverse_shear_stiffness
 
 SHELL = os.path.join(CC, "examples", "data", "1d_yaml", "st15_shell.yaml")
@@ -33,12 +34,18 @@ def main():
     _, _, mdb, layup_db, elem_to_layup = load_yaml(SHELL)
     n_elem = {ln: sum(1 for v in elem_to_layup.values() if v == ln) for ln in layup_db}
     print("1-D SG: %s  (%d wall laminates)" % (os.path.relpath(SHELL, CC), len(layup_db)))
-    for ln, lay in layup_db.items():
+    # all laminates in ONE vmapped pass (grouped into ply-count buckets)
+    names = list(layup_db)
+    t0 = time.perf_counter()
+    res = rm_plate_msg_batch([layup_db[ln] for ln in names], mdb, fraction=0.5)  # 0=OML, 1=IML
+    print("rm_plate_msg_batch: %d laminates in %.3f s (incl. one-time jit per bucket)"
+          % (len(res), time.perf_counter() - t0))
+    for ln, r in zip(names, res):
+        lay = layup_db[ln]
         thk = [float(t) for t in lay["thick"]]
         ang = [float(a) for a in lay["angles"]]
         mats = [str(m) for m in lay["mat_names"]]
         h = float(sum(thk))
-        r = rm_plate_msg(thk, ang, mats, mdb, fraction=0.5)      # center reference (0=OML, 1=IML)
         Gw = transverse_shear_stiffness(thk, ang, mats, mdb)[0]
         G = r["G_msg"] if r["G_msg"] is not None else Gw
         P8 = plate_8x8(r["A6"], G)

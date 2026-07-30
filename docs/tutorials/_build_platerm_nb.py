@@ -39,7 +39,7 @@ of the CMAME 2002 shell paper), implemented in core OpenSG as
 | step | paper | code |
 |------|-------|------|
 | zeroth-order warping $V_0$ → classical ABD | Eq. (39)–(40) | `V0`, `A6` |
-| first-order gradient warping $V_{11},V_{12}$ | Eq. (42)–(45) | `C1bar`, `C2bar` |
+| first-order gradient warping $V_{11},V_{12}$ | Eq. (42)–(45) | `V11`, `V12` |
 | second-order gradient energy $B,C,D$ | Eq. (46)–(47) | `H` (12×12) |
 | RM projection: least squares of the residual $U^*$ over $X=G^{-1}$ **and Yu's 24 in-plane relaxed constants** (78 equations, 27 unknowns) | Eq. (55)–(60) | `blocks()`, `lstsq` → `G_msg`, `Ustar_rel` |
 

@@ -13,6 +13,7 @@ if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
 from opensg_jax.fe_jax.msg_rm_plate import (_grad_ops, _lagrange_N, msgrm_strain_at_depth,
-                                            rm_plate_msg)
+                                            rm_plate_msg, rm_plate_msg_batch)
 
-__all__ = ["rm_plate_msg", "msgrm_strain_at_depth", "_grad_ops", "_lagrange_N"]
+__all__ = ["rm_plate_msg", "rm_plate_msg_batch", "msgrm_strain_at_depth",
+           "_grad_ops", "_lagrange_N"]
