@@ -31,8 +31,9 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
     (see also {doc}`tutorials/plate_rm_8x8` for the per-wall-laminate blade-station version)
 * - `7_get_plateRM_dehom_using_1DSG.py`
   - MSG-RM homo + dehom
-  - homogenize one wall laminate and recover the 3-D through-thickness strain/stress for
-    a plate-strain vector given on the command line (`--E`, `--dE1`, …)
+  - recover the 3-D through-thickness stress for a plate resultant vector
+    `--FF N11 N22 N12 M11 M22 M12 Q1 Q2` (the beam-dehom pattern: strains via
+    `inv(ABDG)`, gradients from plate equilibrium), with the ∫σ dz resultant check
 ```
 
 Each numbered example is a **distinct feature** — the Timoshenko 6×6 from the RM shell, the KL shell or the
