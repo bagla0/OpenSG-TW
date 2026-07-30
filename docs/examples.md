@@ -28,11 +28,15 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
 * - `6_get_plateRM_homo_using_1DSG.py`
   - MSG-RM plate law
   - {doc}`tutorials/plate_rm_8x8` — the 8×8 ABDG per wall laminate from a 1-D shell YAML
+* - `7_get_plateRM_dehom_using_1DSG.py`
+  - MSG-RM homo + dehom
+  - homogenize one wall laminate and recover the 3-D through-thickness strain/stress for
+    a plate-strain vector given on the command line (`--E`, `--dE1`, …)
 ```
 
 Each numbered example is a **distinct feature** — the Timoshenko 6×6 from the RM shell, the KL shell or the
-2-D solid (1–3), the end-to-end airfoil driver (4), dehomogenization / local stress recovery (5), and the
-plate-level MSG-RM 8×8 wall law (6). The
+2-D solid (1–3), the end-to-end airfoil driver (4), dehomogenization / local stress recovery (5), the
+plate-level MSG-RM 8×8 wall law (6), and its dehomogenization under a prescribed plate strain (7). The
 homogenization examples emit the `e1/e2/e3` orientation PNG, compute the 6×6, and print the per-term
 %-error against the benchmark. The many validation, OML-stress and report scripts live under
 `examples/benchmarks/`.
