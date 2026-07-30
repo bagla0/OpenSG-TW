@@ -13,6 +13,20 @@ FRAME of each ply:
 
 each row:  x1  x2  x3  <components>   (x3 measured from the SG reference plane).
 
+WHY 8 COMPONENTS, AND THE GRADIENT CLOSURE (validated): in RM theory the transverse
+shear is an independent kinematic variable, so Q1/Q2 are NOT derivable from (N, M) at a
+point -- they are the equilibrium reactions Q_a = M_ab,b computed UPSTREAM by the global
+plate/beam solve, exactly as the beam dehom receives the solver-computed shear forces.
+Internally the recovery needs the plate-strain gradient, rebuilt from Q by the same
+equilibrium relation inverted (dE1 = inv(A6) @ [0,0,0,Q1,0,0], constant-N/Q state).
+Validated against EXACT 3-D elasticity (Pagano [0/90/0] cylindrical bending, section
+x = a/4): this closure matches the ORACLE gradient taken from the exact solution to
+0.008% (S=10) / 0.02% (S=4) in the sigma13 profile, int sigma13 dz = Q1 to all digits,
+and the remaining 4.4% (S=10) profile error vs 3-D equals the independently-measured
+first-order plate-model truncation of the Garg benchmark -- the single-section FF
+process loses nothing relative to knowing the full plate solution.
+(Validation script: the interleaved A/B/oracle study in claude_tmp/validate_ff_dehom.py.)
+
 Run:
     python examples/7_get_plateRM_dehom_using_1DSG.py --FF 0 0 0 1e3 0 0 1e3 0
     python examples/7_get_plateRM_dehom_using_1DSG.py --strain 0 0 0 0.96 -0.78 -0.1 8.5e-5 -4.3e-5
