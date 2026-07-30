@@ -7,31 +7,20 @@ thickness recovery then uses the second-order warping function (Eq. 66 / Eq. 65)
 GAUSS POINTS of the 1-D SG elements and writes three files, all in the LOCAL MATERIAL
 FRAME of each ply:
 
-    <base>.SM   6 stress components   [MPa]
+    <base>.SM   6 stress components   [Pa]
     <base>.EM   6 strain components   [-]
     <base>.U    3 recovered local (warping) displacements   [m]
+    <base>.out  the terminal report of this run
 
-each row:  x1  x2  x3  <components>   (x3 measured from the SG reference plane).
-
-WHY 8 COMPONENTS, AND THE GRADIENT CLOSURE (validated): in RM theory the transverse
-shear is an independent kinematic variable, so Q1/Q2 are NOT derivable from (N, M) at a
-point -- they are the equilibrium reactions Q_a = M_ab,b computed UPSTREAM by the global
-plate/beam solve, exactly as the beam dehom receives the solver-computed shear forces.
-Internally the recovery needs the plate-strain gradient, rebuilt from Q by the same
-equilibrium relation inverted (dE1 = inv(A6) @ [0,0,0,Q1,0,0], constant-N/Q state).
-Validated against EXACT 3-D elasticity (Pagano [0/90/0] cylindrical bending, section
-x = a/4): this closure matches the ORACLE gradient taken from the exact solution to
-0.008% (S=10) / 0.02% (S=4) in the sigma13 profile, int sigma13 dz = Q1 to all digits,
-and the remaining 4.4% (S=10) profile error vs 3-D equals the independently-measured
-first-order plate-model truncation of the Garg benchmark -- the single-section FF
-process loses nothing relative to knowing the full plate solution.
-(Validation script: the interleaved A/B/oracle study in claude_tmp/validate_ff_dehom.py.)
+each row of .SM/.EM/.U:  x3  <components>   (x3 from the SG reference plane).
+All four land in ``examples/ex7_output/`` unless ``--base`` says otherwise.
 
 Run:
     python examples/7_get_plateRM_dehom_using_1DSG.py --FF 0 0 0 1e3 0 0 1e3 0
     python examples/7_get_plateRM_dehom_using_1DSG.py --strain 0 0 0 0.96 -0.78 -0.1 8.5e-5 -4.3e-5
     python examples/7_get_plateRM_dehom_using_1DSG.py --yaml my_plate_sg.yaml --base out/my_case
 """
+
 import argparse
 import os
 import sys
@@ -60,27 +49,35 @@ grp.add_argument("--FF", nargs=8, type=float, default=None, metavar=tuple(FLBL),
                  help="global plate stress resultants (default: M11 = 1e3, Q1 = 1e3)")
 grp.add_argument("--strain", nargs=8, type=float, default=None, metavar=tuple(ELBL),
                  help="global plate strains instead of resultants")
-ap.add_argument("--base", default=None,
-                help="output basename for .SM/.EM/.U (default: alongside the yaml)")
+ap.add_argument("--base", default=os.path.join(CC, "examples", "ex7_output", "plate_sym45"),
+                help="output basename for .SM/.EM/.U/.out (default: examples/ex7_output/)")
 a = ap.parse_args()
+
+# every reported line goes to the terminal AND into <base>.out
+report = []
+
+
+def say(line=""):
+    print(line)
+    report.append(line)
 
 # ------------------------------------------ read the 1-D SG: layup + mesh + materials
 sg = read_plate_sg_yaml(a.yaml)
 h = float(sum(sg["thick"]))
-print("1-D SG : %s" % os.path.relpath(a.yaml, CC))
-print("plies  : %s   (h = %.4f m, reference fraction = %.2f)"
-      % (", ".join("%s(%.1fmm/%g)" % (m, 1e3 * t, x)
-                   for m, t, x in zip(sg["mat_names"], sg["thick"], sg["angles"])),
-         h, sg["fraction"]))
+say("1-D SG : %s" % os.path.relpath(a.yaml, CC))
+say("plies  : %s   (h = %.4f m, reference fraction = %.2f)"
+    % (", ".join("%s(%.1fmm/%g)" % (m, 1e3 * t, x)
+                 for m, t, x in zip(sg["mat_names"], sg["thick"], sg["angles"])),
+       h, sg["fraction"]))
 
 # ------------------------------------------------------------- RM homogenization
 r = rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
                  n_per_layer=sg["n_per_layer"], elem_order=sg["elem_order"],
                  fraction=sg["fraction"])
-print("\nHOMOGENIZATION -- RM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]]"
-      " (rows 1-6: e11,e22,g12,k11,k22,k12; rows 7-8: 2g13,2g23):")
-print(r["ABDG"])
-print("  Ustar_rel = %.2e  (unabsorbed 2nd-order energy)" % r["Ustar_rel"])
+say("\nHOMOGENIZATION -- RM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]]"
+    " (rows 1-6: e11,e22,g12,k11,k22,k12; rows 7-8: 2g13,2g23):")
+say(np.array2string(r["ABDG"]))
+say("  Ustar_rel = %.2e  (unabsorbed 2nd-order energy)" % r["Ustar_rel"])
 
 # ------------------------- the 8x1 input: resultants OR strains, closed by the 8x8
 if a.strain is not None:
@@ -101,9 +98,9 @@ dE1 = S6 @ np.array([0.0, 0.0, 0.0, FF[6], 0.0, 0.0])
 dE2 = S6 @ np.array([0.0, 0.0, 0.0, 0.0, FF[7], 0.0])
 zero6 = np.zeros(6)
 
-print("\nDEHOMOGENIZATION -- computed using the second-order warping function")
-print("  given %s = %s" % (given, np.array2string(FF if given == "FF" else EG8,
-                                                  precision=4)))
+say("\nDEHOMOGENIZATION -- computed using the second-order warping function")
+say("  given %s = %s" % (given, np.array2string(FF if given == "FF" else EG8,
+                                                precision=4)))
 
 # ------------------------------------------ recovery at the SG element GAUSS points
 p = sg["elem_order"]
@@ -128,19 +125,26 @@ for e in range(n_elem):
         c, s = np.cos(np.deg2rad(th)), np.sin(np.deg2rad(th))
         Q3 = np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
         U_m = Q3 @ np.asarray(w)
-        rows_S.append([0.0, 0.0, z] + list(S_m / 1e6))
-        rows_E.append([0.0, 0.0, z] + list(E_m))
-        rows_U.append([0.0, 0.0, z] + list(U_m))
+        rows_S.append([ z] + list(S_m))
+        rows_E.append([ z] + list(E_m))
+        rows_U.append([z] + list(U_m))
 
-# ----------------------------------------------------------------- the three files
-base = a.base or os.path.splitext(a.yaml)[0]
+# ------------------------------------------------- the three data files + the report
+base = a.base
+outdir = os.path.dirname(os.path.abspath(base))
+if outdir and not os.path.isdir(outdir):
+    os.makedirs(outdir)
 load_line = "%s = %s" % (given, np.array2string(FF if given == "FF" else EG8))
 common = ("MSG-RM second-order dehomogenization | 1-D SG %s\n%s\n"
           "LOCAL MATERIAL FRAME (ply angle about x3) | rows at SG element Gauss points\n"
           % (os.path.relpath(a.yaml, CC), load_line))
 for ext, rows, cols in (
-        (".SM", rows_S, "x1 x2 x3  s11 s22 s33 s23 s13 s12  [MPa]"),
-        (".EM", rows_E, "x1 x2 x3  e11 e22 e33 2e23 2e13 2e12  [-]"),
-        (".U", rows_U, "x1 x2 x3  u1 u2 u3  [m]")):
+        (".SM", rows_S, "x3  s11 s22 s33 s23 s13 s12  [Pa]"),
+        (".EM", rows_E, "x3  e11 e22 e33 2e23 2e13 2e12  [-]"),
+        (".U", rows_U, "x3  u1 u2 u3  [m]")):
     np.savetxt(base + ext, np.array(rows), header=common + cols, fmt="%15.6e")
-    print("  wrote %s  (%d Gauss points)" % (os.path.relpath(base + ext, CC), len(rows)))
+    say("  wrote %s  (%d Gauss points)" % (os.path.relpath(base + ext, CC), len(rows)))
+
+say("  wrote %s  (this report)" % os.path.relpath(base + ".out", CC))
+with open(base + ".out", "w") as f:
+    f.write("\n".join(report) + "\n")
