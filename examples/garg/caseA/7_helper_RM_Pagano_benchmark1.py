@@ -13,4 +13,4 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from pagano_bench import run_benchmark
 
-run_benchmark("caseA", (4, 10), tag="1")
+run_benchmark("caseA", (4, 10, 100), tag="1")   # S=100 = the paper's Fig. 3 case

@@ -79,19 +79,23 @@ def run_case(case, S, tag):
     w_msg = q0 / (p ** 4 * D11) + q0 / (p ** 2 * G11)
 
     # dehom: E6 from FF through the 8x8; gradient closure from Q (equilibrium)
+    # OUT-OF-PLANE stresses only (the comparison this benchmark is about): the
+    # in-plane sigma11 is a plate-level quantity every theory shares and is omitted.
     S6 = np.linalg.inv(np.asarray(r["A6"]))
-    E6_mid = S6 @ FF_mid[:6]
     E6_end = S6 @ FF_end[:6]
     dE1_end = S6 @ np.array([0, 0, 0, FF_end[6], 0, 0.0])
     z6 = np.zeros(6)
-    s11_m = np.empty_like(zc); s13_m = np.empty_like(zc)
+    s13_m = np.empty_like(zc)
     for i, z in enumerate(zc):
-        s11_m[i] = msgrm_strain_at_depth(r, z, E6_mid, z6, z6)[1][0]
         s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
     s33_m = np.concatenate([[0.0], np.cumsum(0.5 * p * (s13_m[1:] + s13_m[:-1])
                                              * np.diff(zc))])
 
-    # Garg's FSDT baseline: constitutive shear, k = 5/6
+    # Garg's FSDT baseline, replicated ANALYTICALLY (their sec. 2.1 statement: FSDT
+    # "gives a constant value of transverse shear stress across the layer" and "is not
+    # able to predict" the transverse normal stress).  No Abaqus data and no
+    # equilibrium integration is involved in this curve -- it is the CONSTITUTIVE
+    # layerwise-constant s13(z) = C55(z) Q1 / (k sum(t C55)) with k = 5/6.
     C55 = np.array([float(rotated_stiffness_6x6(MATERIAL_DB[m]["E"], MATERIAL_DB[m]["G"],
                                                 MATERIAL_DB[m]["nu"], x)[4, 4])
                     for m, x in zip(mats, ang)])
@@ -103,7 +107,7 @@ def run_case(case, S, tag):
     def relerr(m, e):
         return 100 * np.linalg.norm(m - e) / np.linalg.norm(e)
 
-    e11 = relerr(s11_m, sig[:, 0]); e13 = relerr(s13_m, sig[:, 4])
+    e13 = relerr(s13_m, sig[:, 4])
     e33 = relerr(s33_m, sig[:, 2]); e13f = relerr(s13_f, sig[:, 4])
 
     # ------------------------------------------------------------------- .dat
@@ -121,14 +125,15 @@ def run_case(case, S, tag):
             "  FF_end (x=0)   = [%s]" % ", ".join("%.6g" % v for v in FF_end),
             "  u2d = [0, 0, %.6e] (plate w; exact %.6e)" % (w_msg, w_ex),
             "",
-            "rel L2 errors vs exact:  s11 %7.3f%%   s13 %7.3f%%  (FSDT %7.2f%%)   s33 %7.3f%%"
-            % (e11, e13, e13f, e33),
+            "OUT-OF-PLANE stresses only.  FSDT s13 = the paper's baseline, replicated",
+            "analytically (constitutive layerwise-constant, k = 5/6; FSDT has NO s33).",
+            "rel L2 errors vs exact:  s13 %7.3f%%  (FSDT %7.2f%%)   s33 %7.3f%%"
+            % (e13, e13f, e33),
             "s33 top-face closure: %.4f q0" % (s33_m[-1] / q0),
             "",
-            "columns: z[m]  s11_msg  s11_exact  s13_msg  s13_exact  s13_fsdt  s33_msg  s33_exact  [Pa]"]
+            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s33_msg  s33_exact  [Pa]"]
     np.savetxt(os.path.join(outdir, "pagano_S%g.dat" % S),
-               np.column_stack([zc, s11_m, sig[:, 0], s13_m, sig[:, 4], s13_f,
-                                s33_m, sig[:, 2]]),
+               np.column_stack([zc, s13_m, sig[:, 4], s13_f, s33_m, sig[:, 2]]),
                header="\n".join(hdr), fmt="%15.6e")
 
     # ------------------------------------------------------------------- plot
@@ -136,7 +141,8 @@ def run_case(case, S, tag):
     ax1.plot(sig[:, 4], zc / h, "-", color="k", lw=2.0, label="exact 3-D (Pagano)")
     ax1.plot(s13_m, zc / h, ":s", color="#ff7f0e", ms=4, mfc="none", mew=1.2, lw=1.6,
              markevery=4, label="MSG-RM")
-    ax1.plot(s13_f, zc / h, "--", color="#1f77b4", lw=1.4, label="FSDT (k=5/6, constit.)")
+    ax1.plot(s13_f, zc / h, "--", color="#1f77b4", lw=1.4,
+             label="FSDT constitutive (analytic, k=5/6)")
     ax1.set_xlabel(r"$\sigma_{13}$ [Pa]  at  $x=0$", fontsize=11)
     ax1.set_ylabel("$z/h$", fontsize=11)
     ax2.plot(sig[:, 2], zc / h, "-", color="k", lw=2.0)
@@ -150,7 +156,7 @@ def run_case(case, S, tag):
     fig.savefig(os.path.join(outdir, "pagano_S%g.png" % S), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    return dict(case=case, S=S, e11=e11, e13=e13, e13f=e13f, e33=e33,
+    return dict(case=case, S=S, e13=e13, e13f=e13f, e33=e33,
                 ABDG=np.asarray(r["ABDG"]))
 
 
@@ -160,8 +166,8 @@ def run_benchmark(case, S_list, tag):
             "k12,2g13,2g23)" % case]
     for S in S_list:
         m = run_case(case, S, tag)
-        print("  S = %-4g  s11 %7.3f%%   s13 %7.3f%% (FSDT %7.2f%%)   s33 %7.3f%%"
-              % (S, m["e11"], m["e13"], m["e13f"], m["e33"]))
+        print("  S = %-4g  s13 %7.3f%% (FSDT %7.2f%%)   s33 %7.3f%%"
+              % (S, m["e13"], m["e13f"], m["e33"]))
         out8.append("")
         out8.append("S = a/h = %g  (h = %g m):" % (S, a / S))
         out8 += ["  " + " ".join("%14.6e" % v for v in row) for row in m["ABDG"]]
