@@ -1,11 +1,12 @@
 *HEADING
-Cylindrical-bending strip, MSG-RM 8x8 general shell section
-** case caseB: plies as4(25mm/0), as4(25mm/90), as4(25mm/90), as4(25mm/0)
-** S = a/h = 10,  h = 0.1 m
-** PREDICTED mid-span |w|: MSG closed form 1.053979e-05 m ; exact 3-D 1.050743e-05 m
+Garg cylindrical-bending strip, MSG-RM 8x8 general shell section
+** case caseA: plies pagano(33.33mm/0), pagano(33.33mm/90), pagano(33.33mm/0)
+** S = a/h = 10,  a = 1 m,  h = 0.1 m,  q0 = 10000 Pa
+** load q(x) = q0*sin(pi*x/a), piecewise-constant per element column
+** PREDICTED mid-span |w|: MSG closed form 9.438171e-05 m ; exact 3-D 9.316429e-05 m
 **   (check the .dat U3 at node NMID against these after the job)
-** span a = 1 m, q0 = 10000 Pa, 100 S4 elements; load q0*sin(pi*x/a) per element
-** D11 = 1.336483e+07 ; G11 = 3.544615e+08 ; G22 = 4.040264e+08
+** D11 = 2.014295e+06 ; G11 = 2.333725e+07 ; G22 = 2.528884e+07
+**
 *NODE
 1, 0.00000000, 0.00000000, 0.0
 2, 0.00000000, 0.01000000, 0.0
@@ -325,11 +326,11 @@ Cylindrical-bending strip, MSG-RM 8x8 general shell section
 **
 ** ---- the MSG-RM section: [[A,B],[B,D]] 21 constants + the 2x2 shear G ----
 *SHELL GENERAL SECTION, ELSET=EALL
-9.607865e+09, 2.896924e+08, 9.607865e+09, 2.109689e-08, 5.038632e-07, 7.170000e+08, 1.889085e-08, 3.238448e-09
-5.197243e-26, 1.336483e+07, 2.162557e-09, -8.257981e-10, 1.157881e-26, 2.414104e+05, 2.648273e+06, 7.087112e-27
-1.885288e-27, -1.526890e-09, 4.395184e-12, 1.049715e-10, 5.975000e+05
+1.704261e+09, 2.506266e+07, 9.022556e+08, 5.064329e-10, 4.860221e-08, 5.000000e+07, -2.829214e-09, 1.068141e-10
+-1.048559e-27, 2.014295e+06, -9.601260e-12, -3.893267e-09, -2.018529e-25, 2.088555e+04, 1.578019e+05, -2.041282e-27
+-2.024588e-25, -4.590144e-10, 4.689193e-14, 4.500205e-12, 4.166667e+04
 *TRANSVERSE SHEAR STIFFNESS
-3.544615e+08, 4.040264e+08, -4.588962e-05
+2.333725e+07, 2.528884e+07, -1.060187e-06
 **
 ** ---- cylindrical bending + simple supports ----
 *BOUNDARY
@@ -342,6 +343,7 @@ NX0, 1, 1
 **
 *STEP, NAME=SINELOAD
 *STATIC
+** pressure on the shell face, element-centre value of q0*sin(pi*x/a)
 *DLOAD
 1, P, 1.570732e+02
 2, P, 4.710645e+02

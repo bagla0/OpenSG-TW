@@ -1,12 +1,11 @@
 *HEADING
-Garg cylindrical-bending strip, MSG-RM 8x8 general shell section
+Cylindrical-bending strip, MSG-RM 8x8 general shell section
 ** case caseA: plies pagano(33.33mm/0), pagano(33.33mm/90), pagano(33.33mm/0)
-** S = a/h = 10,  a = 1 m,  h = 0.1 m,  q0 = 10000 Pa
-** load q(x) = q0*sin(pi*x/a), piecewise-constant per element column
+** S = a/h = 10,  h = 0.1 m
 ** PREDICTED mid-span |w|: MSG closed form 9.438171e-05 m ; exact 3-D 9.316429e-05 m
 **   (check the .dat U3 at node NMID against these after the job)
+** span a = 1 m, q0 = 10000 Pa, 100 S4 elements; load q0*sin(pi*x/a) per element
 ** D11 = 2.014295e+06 ; G11 = 2.333725e+07 ; G22 = 2.528884e+07
-**
 *NODE
 1, 0.00000000, 0.00000000, 0.0
 2, 0.00000000, 0.01000000, 0.0
@@ -343,7 +342,6 @@ NX0, 1, 1
 **
 *STEP, NAME=SINELOAD
 *STATIC
-** pressure on the shell face, element-centre value of q0*sin(pi*x/a)
 *DLOAD
 1, P, 1.570732e+02
 2, P, 4.710645e+02
