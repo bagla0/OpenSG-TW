@@ -19,7 +19,7 @@ Construction (equation numbers = Yu, Hodges & Volovoi, Computers & Structures 81
                    18 unit load cases (6 plate strains + 2x6 strain gradients) reuse it
   zeroth order   : V0 warping, Eq. (39)  -> A6 (classical ABD, Eq. (40); must reproduce
                    compute_ABD_matrix exactly).  The multiplier vanishes identically here
-                   (kernel^T D_he = 0); returned as ``lam0_check`` (~1e-15)
+                   (kernel^T D_he = 0; asserted in the test suite, not recomputed per call)
   first order    : gradient-driven warping columns V11, V12 (paper Eq. 45),
                    Eq. (45), driven by Dbar_a of Eqs. (43)-(44); here the multiplier is
                    genuinely nonzero and its content is the S_a of the RM projection
@@ -57,9 +57,11 @@ DIMENSION SUFFIXES on the internal arrays (the returned dict keeps the paper sym
 e.g. D_he_ns is <Gamma_h^T C Gamma_eps> (n x s), V11_ns a first-order warping column
 block, c1_is the (2 x 6) relaxed constants, L1_ns = kernel_nk @ c1_ks its ndofs x 6 field.
 
-Validation:  python -m opensg_jax.fe_jax.msg_rm_plate
-homogeneous isotropic -> G_msg = 5/6 G h (nu=0);  orthotropic laminates -> G_msg ~=
-Whitney/complementary-energy transverse_shear_stiffness; A6 == compute_ABD_matrix.
+Validation lives in ``tests/test_msg_rm_plate.py`` (pytest, or run it directly), NOT in
+this module: the analytic anchors (isotropic nu=0 -> 5/6 G h, A6 == compute_ABD_matrix),
+the Eq.-(31)/(34)/(42) gauge and Euler-Lagrange residuals against an INDEPENDENT NumPy
+re-assembly, the reference-plane transform, the batch API, and jax.grad vs finite
+differences.
 """
 import numpy as np
 import jax
@@ -67,8 +69,7 @@ import jax.numpy as jnp
 
 from jax.scipy.linalg import lu_factor, lu_solve
 
-from .msg_materials import rotated_stiffness_6x6, _plate_B, compute_ABD_matrix
-from .msg_transverse_shear import transverse_shear_stiffness
+from .msg_materials import rotated_stiffness_6x6, _plate_B
 
 
 def _lagrange_N(nodes_xi, xi):
@@ -254,44 +255,11 @@ def _bucket(nlay, n_per_layer, p):
         # and that gauge propagates into D_abar (D_hla @ kernel != 0) and hence into G.
         V0_ns = solve_constrained(D_he_ns)
         A6_ss = D_ee_ss + V0_ns.T @ D_he_ns
-        lam0_rel = (jnp.max(jnp.abs(jkernel_nk.T @ D_he_ns))
-                    / (jnp.max(jnp.abs(D_he_ns)) + 1e-300))    # theory: 0 (roundoff ~n*eps)
 
-        # first-order drivers, Eqs. (43)-(44):  D_a = (D_hla - D_hla^T) V0_hat - D_lae
-        #   named D1bar/D2bar because Eq. (51) reuses the symbols D_1, D_2 for the Boolean
-        #   strain selectors (the paper overloads them; see D1/D2 in the RM projection below)
-        #   D_lah = D_hla^T exactly (same quadrature, symmetric C), so no separate assembly
+
         D1bar_ns = (D_hl1_nn - D_hl1_nn.T) @ V0_ns - D_l1e_ns
         D2bar_ns = (D_hl2_nn - D_hl2_nn.T) @ V0_ns - D_l2e_ns
 
-        # first-order warping columns V11, V12 (paper Eq. 45).
-        #
-        # The paper gives the Euler-Lagrange equation of the ZEROTH-order functional
-        # (Eq. 33) as Eq. (34), but never writes the one for the FIRST-order functional
-        # Eq. (42),  2*Pi*_1 = V1^T E V1 + 2 V1^T Dbar_1 eps,1 + 2 V1^T Dbar_2 eps,2
-        # + 2 V1^T L.  Varying V1 subject to Eq. (31) with multiplier Lambda_1 gives
-        #
-        #     E V1 + Dbar_1 eps,1 + Dbar_2 eps,2 + L = H psi Lambda_1          (E-L of 42)
-        #
-        # and premultiplying by psi^T, using E psi = 0 (psi spans null(E)) and
-        # psi^T H psi = I (Eq. 31), the multiplier follows as the analog of Eq. (35):
-        #
-        #     Lambda_1 = psi^T (Dbar_1 eps,1 + Dbar_2 eps,2 + L)
-        #
-        # Substituting Eq. (45), V1 = V11 eps,1 + V12 eps,2 + V1L, and collecting the
-        # coefficients of the ARBITRARY, independent 6-vectors eps,1 and eps,2 factors
-        # eps,a out and splits the single vector equation into MATRIX equations
-        #
-        #     E V1a + Dbar_a = H psi (psi^T Dbar_a),  a = 1,2   [V1a, Dbar_a are (ndofs x 6)]
-        #
-        # -- i.e. 12 linear systems: 6 unit plate-strain-gradient load cases (one per
-        # component of eps,a) for each in-plane direction a.  All 12 share the operator
-        # of Eq. (34), so they are ONE LU factorization vmapped over the 12 columns.
-        # The Eq. (39) gauge is enforced by the KKT constraint row, not applied after.
-        # (V1L omitted: this module carries no applied loads, L = 0.)
-        # Unlike the zeroth order, psi^T Dbar_a != 0 here (Gamma_l of a constant is nonzero),
-        # so this multiplier genuinely acts -- and its content, kernel^T Dbar_a, is exactly
-        # the S_a driving the 24 relaxed constants below.
         V1_n2s = solve_constrained(jnp.concatenate([D1bar_ns, D2bar_ns], axis=1))  # 12 at once
         V11_ns = V1_n2s[:, :6]; V12_ns = V1_n2s[:, 6:]
 
@@ -299,23 +267,10 @@ def _bucket(nlay, n_per_layer, p):
         H11_ss = V0_ns.T @ D_l1l1_nn @ V0_ns + D1bar_ns.T @ V11_ns
         H12_ss = V0_ns.T @ D_l1l2_nn @ V0_ns + 0.5 * (D1bar_ns.T @ V12_ns + V11_ns.T @ D2bar_ns)
         H22_ss = V0_ns.T @ D_l2l2_nn @ V0_ns + D2bar_ns.T @ V12_ns
-        # B and D are ANALYTICALLY symmetric: under the Eq. (31) constraint the E-L equation
-        # gives V11^T Dbar_1 = -V11^T E V11, and E = E^T.  So this only removes roundoff
-        # (measured 5e-18..5e-12 relative) -- but it matters, because every one of the 27 LS
-        # unknowns enters the DIAGONAL blocks symmetrically (X via AD X AD^T with X = X^T,
-        # the constants via c^T S + S^T c).  An antisymmetric part is therefore unreachable
-        # by the fit and would sit in the residual as an irreducible Ustar_rel floor.
-        # C (= H12) is genuinely NOT symmetric (asymmetry of order 1) and must NOT be
-        # symmetrized; its transpose placement in H below is what handles it.
+
         H11_ss = 0.5 * (H11_ss + H11_ss.T); H22_ss = 0.5 * (H22_ss + H22_ss.T)
         H_tt = jnp.block([[H11_ss, H12_ss], [H12_ss.T, H22_ss]])
 
-        # ---- RM projection (Yu 2003 sec. 4): E = R - D1 g,1 - D2 g,2 ; equilibrium swap
-        #      Eq. (54); LS over X = G^{-1} (sym 2x2) and relaxed constants c1,c2 (2x6 each) ----
-        # S_a = kernel^T Dbar_a collapses the (n,s) relaxation field L_a = kernel_nk @ c_a_ks
-        # into an (i,s) = (2,6) matrix: L_a^T Dbar_b = c_a^T (kernel^T Dbar_b) = c_a^T S_b,
-        # so the ndofs-sized L_a is never formed.  Rows kept: the 2 IN-PLANE warping
-        # components (Yu's 24 constants); the w3 row of kernel^T Dbar_a is 0 for monoclinic.
         S1_is = (jkernel_nk.T @ D1bar_ns)[:2]
         S2_is = (jkernel_nk.T @ D2bar_ns)[:2]
         AD1_sg = A6_ss @ jD1_sg; AD2_sg = A6_ss @ jD2_sg
@@ -351,18 +306,6 @@ def _bucket(nlay, n_per_layer, p):
         cs_m = jnp.linalg.norm(Amat_qm, axis=0)
         cs_m = jnp.where(cs_m == 0, 1.0, cs_m)
 
-        # --- truncated-SVD MINIMUM-NORM solution ------------------------------------------
-        # Ascher & Greif, "A First Course in Numerical Methods" (SIAM 2011), Sec. 8.2 p.235:
-        #     Amat = U Sigma V^T,   x = V Sigma^dagger U^T b0,
-        #     Sigma^dagger_ii = 1/sigma_i  if sigma_i != 0,  else 0
-        # with "!= 0" realised as sigma_i > _LS_RCOND * sigma_max.
-        #
-        # Why this route and not Ch.6's: Amat is 144x27 but RANK-DEFICIENT (rank 26 -- one
-        # direction, antisymmetric mixing of the c's, changes nothing), so Ch.6's full-column-
-        # rank assumption fails.  Measured on a [45/0/-30/90] laminate: this route is exact to
-        # 6e-16, normal equations + Cholesky 2e-14, and QR back-substitution only 7e-5 (it
-        # divides by a ~1e-13 diagonal of R).  The dropped direction has zero X-component, so
-        # G is unique regardless; min-norm merely pins the arbitrary relaxation constants.
         U_qm, sig_m, Vt_mm = jnp.linalg.svd(Amat_qm / cs_m, full_matrices=False)
         sig_ok = sig_m > _LS_RCOND * sig_m[0]
         # guard the reciprocal so the discarded branch never holds inf (would poison jax.grad)
@@ -392,17 +335,6 @@ def _bucket(nlay, n_per_layer, p):
         # below the model's resolution, so A6 and G are untouched; V2 exists purely to
         # recover the through-thickness fields at their leading order.
         #
-        # LOAD CHAIN (theory, deliberately not implemented): with surface tractions the
-        # paper adds L = S+^T tau - S-^T beta - <S^T phi> (Eq. 29) and the ladder gains
-        # load columns V1L (Eq. 45) and V2L, plus the load-stiffness terms F and P of
-        # Eq. (47) ("thermal-like" forcing of the 2-D solver, Eq. 61).  Numerically each
-        # is ONE more RHS against the same lu_piv.  They are omitted here because
-        # (i) A6 and G are load-independent (L never enters B/C/D, hence not U*), and
-        # (ii) in the blade pipeline loads enter through the beam/plate solution (FF),
-        # so the recovery below carries the SELF-EQUILIBRATED part of sigma33; the
-        # surface-pressure-carrying part (sigma33 ramp from -q to 0 through the wall)
-        # would need V2L and scales with the local panel pressure q -- negligible next
-        # to the interlaminar signals recovered here.
         # c_a_is (2,6) padded with the zero w3 row -> c_a_ks (3,6); L_a_ns = kernel_nk @ c_a_ks
         c1_ks = jnp.zeros((3, 6)).at[:2].set(c1_is)
         c2_ks = jnp.zeros((3, 6)).at[:2].set(c2_is)
@@ -417,7 +349,7 @@ def _bucket(nlay, n_per_layer, p):
 
         # returned in the PAPER symbols (the public dict keys carry no dimension suffixes)
         return (A6_ss, G_gg, X_gg, H_tt, Ustar_rel, V0_ns, V11_ns, V12_ns, c1_is, c2_is,
-                ev_min, lam0_rel, V11bar_ns, V12bar_ns, V21_ns, V22_ns, V23_ns)
+                ev_min, V11bar_ns, V12bar_ns, V21_ns, V22_ns, V23_ns)
 
     bk = dict(nlay=nlay, n_per_layer=n_per_layer, p=p, n_elem=n_elem, ndofs=ndofs,
               elem_layer=elem_layer,
@@ -425,7 +357,6 @@ def _bucket(nlay, n_per_layer, p):
               jit_batch=jax.jit(jax.vmap(single, in_axes=(0, 0, None))))
     _BUCKETS[key] = bk
     return bk
-
 
 def _node_grid(thick, n_per_layer, p, z_ref):
     """node_x exactly as the recovery expects (same origin as the reference plane)."""
@@ -446,11 +377,11 @@ def _node_grid(thick, n_per_layer, p, z_ref):
 
 
 def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer):
-    (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min, lam0_rel,
+    (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min,
      V11b, V12b, V21, V22, V23) = [np.asarray(o) for o in out]
     thick = [float(t) for t in thick]
     return {"A6": A6, "G_msg": (G if float(ev_min) > 0 else None), "X": X, "H": H,
-            "Ustar_rel": float(Ustar_rel), "lam0_check": float(lam0_rel),
+            "Ustar_rel": float(Ustar_rel),
             "V0": V0, "V11": V11, "V12": V12,
             "V11bar": V11b, "V12bar": V12b, "V21": V21, "V22": V22, "V23": V23,
             "node_x": _node_grid(thick, n_per_layer, p, float(fraction) * sum(thick)),
@@ -585,50 +516,3 @@ def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None,
     return N @ w_nodes
 
 
-if __name__ == "__main__":
-    # ---- validation 1: homogeneous isotropic -> G = 5/6 G h ----
-    mdb = {"iso": {"E": [70e9] * 3, "G": [70e9 / 2.6] * 3, "nu": [0.3] * 3, "rho": 1.0}}
-    h = 0.01
-    r = rm_plate_msg([h], [0.0], ["iso"], mdb, n_per_layer=4, fraction=0.5)
-    Gh = 70e9 / 2.6 * h
-    print("iso: G_msg/(Gh) diag =", None if r["G_msg"] is None else np.diag(r["G_msg"]) / Gh,
-          " target 5/6 = %.6f   Ustar_rel %.3e" % (5.0 / 6.0, r["Ustar_rel"]))
-    Gw = transverse_shear_stiffness([h], [0.0], ["iso"], mdb)[0]
-    print("     Whitney diag/(Gh) =", np.diag(Gw) / Gh)
-    print("     zeroth-order multiplier |kernel^T D_he|/|D_he| = %.2e  (theory: 0, RHS _|_ kernel)"
-          % r["lam0_check"])
-    mdb0 = {"iso0": {"E": [70e9] * 3, "G": [35e9] * 3, "nu": [0.0] * 3, "rho": 1.0}}
-    r0 = rm_plate_msg([h], [0.0], ["iso0"], mdb0, n_per_layer=4, fraction=0.5)
-    print("     nu=0 : G_msg/(Gh) =", None if r0["G_msg"] is None else np.diag(r0["G_msg"]) / (35e9 * h),
-          " Ustar %.2e" % r0["Ustar_rel"])
-    rf = rm_plate_msg([h], [0.0], ["iso"], mdb, n_per_layer=12, elem_order=3, fraction=0.5)
-    print("     fine : G_msg/(Gh) =", None if rf["G_msg"] is None else np.diag(rf["G_msg"]) / Gh)
-    A_ref = compute_ABD_matrix([h], [0.0], ["iso"], mdb, n_per_layer=4, z_ref=h / 2)[0]
-    print("     |A6 - compute_ABD(z_ref=h/2)| =", np.max(np.abs(r["A6"] - np.asarray(A_ref)[:6, :6])))
-
-    # ---- validation 2: [0/90/0] Pagano-style graphite/epoxy ----
-    mdb2 = {"gr": {"E": [172.4e9, 6.89e9, 6.89e9], "G": [3.45e9, 1.38e9, 3.45e9],
-                   "nu": [0.25, 0.25, 0.25], "rho": 1.0}}
-    thk = [0.005, 0.005, 0.005]; ang = [0.0, 90.0, 0.0]; mats = ["gr"] * 3
-    r2 = rm_plate_msg(thk, ang, mats, mdb2, n_per_layer=4, fraction=0.5)
-    Gw2 = transverse_shear_stiffness(thk, ang, mats, mdb2)[0]
-    print("[0/90/0]: G_msg =", None if r2["G_msg"] is None else np.array2string(r2["G_msg"], precision=4))
-    print("          Whitney=", np.array2string(Gw2, precision=4), "  Ustar_rel %.3e" % r2["Ustar_rel"])
-
-    # ---- validation 3: web sandwich biax/foam/biax (s10 materials) ----
-    mdb3 = {"biax": {"E": [11.5e9, 11.5e9, 1.3e10], "G": [11.8e9, 3.5e9, 3.5e9],
-                     "nu": [0.5, 0.09, 0.09], "rho": 1.0},
-            "foam": {"E": [1.42e8] * 3, "G": [6.0e7] * 3, "nu": [0.2] * 3, "rho": 1.0}}
-    thk = [0.002, 0.042, 0.002]; ang = [0.0] * 3; mats = ["biax", "foam", "biax"]
-    r3 = rm_plate_msg(thk, ang, mats, mdb3, n_per_layer=4, fraction=0.5)
-    Gw3 = transverse_shear_stiffness(thk, ang, mats, mdb3)[0]
-    print("web sandwich: G_msg =", None if r3["G_msg"] is None else np.array2string(r3["G_msg"], precision=4))
-    print("              Whitney=", np.array2string(Gw3, precision=4), "  Ustar_rel %.3e" % r3["Ustar_rel"])
-
-    # ---- validation 4: batch API == single-call API ----
-    lay_batch = [{"mat_names": mats, "thick": thk, "angles": ang},
-                 {"mat_names": ["gr"] * 3, "thick": [0.005] * 3, "angles": [0.0, 90.0, 0.0]}]
-    rb = rm_plate_msg_batch(lay_batch, {**mdb2, **mdb3}, fraction=0.5)
-    print("batch == single:",
-          np.max(np.abs(rb[0]["G_msg"] - r3["G_msg"])) / np.max(np.abs(r3["G_msg"])) < 1e-8 and
-          np.max(np.abs(rb[1]["G_msg"] - r2["G_msg"])) / np.max(np.abs(r2["G_msg"])) < 1e-8)
