@@ -80,7 +80,7 @@ def wall_8x8(shell_yaml, which=0, frac=0.5):
     ang = [float(p[2]) for p in lay]
     mat = [str(p[0]) for p in lay]
     r = rm_plate_msg(thk, ang, mat, mdb, n_per_layer=4, elem_order=3,
-                     z_ref=frac * sum(thk))
+                     fraction=frac)
     P = np.zeros((8, 8))
     P[:6, :6] = r["A6"]                              # A, B, D  (zeroth-order plate SG)
     P[6:, 6:] = r["G_msg"]                           # the VAM transverse-shear block

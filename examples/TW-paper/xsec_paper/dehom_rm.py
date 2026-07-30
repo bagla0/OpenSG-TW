@@ -93,7 +93,7 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
             _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
             _h = sum(p[1] for p in _pl)
             _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl], [p[0] for p in _pl],
-                               _mdb, z_ref=frac * _h)
+                               _mdb, fraction=frac)
             if _rr["G_msg"] is not None:
                 G_by[si] = np.asarray(_rr["G_msg"])
     C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,

@@ -60,7 +60,7 @@ def emit_station_abd(shell_yaml, out_yaml, station=None, r=None, ref="mid", g_so
         ABD8 = np.asarray(ABD8, float).copy()
         if g_source == "msg":
             from msg_rm_plate import rm_plate_msg
-            rr = rm_plate_msg(thk, ang, mats, mdb, z_ref=frac * h)
+            rr = rm_plate_msg(thk, ang, mats, mdb, fraction=frac)
             if rr["G_msg"] is not None:
                 ABD8[6:, 6:] = rr["G_msg"]
         layups.append({
