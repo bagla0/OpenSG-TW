@@ -42,6 +42,21 @@ Voigt strain order [11,22,33,23,13,12]; plate strain order E = [e11,e22,g12,k11,
 transverse shear gamma = [2g13, 2g23].  x = through-thickness coordinate measured from the
 reference plane set by ``fraction`` (0 = bottom/OML face = default, 0.5 = center, 1 = IML).
 
+DIMENSION SUFFIXES on the internal arrays (the returned dict keeps the paper symbols):
+    n  ndofs, the through-thickness warping dofs (3 per node)
+    l  3*(p+1), the dofs of ONE element (elemental blocks before scatter)
+    k  3, the kernel/psi dimension (the constant warping modes)
+    v  6, 3-D Voigt strain components   [11,22,33,23,13,12]
+    s  6, PLATE strain components       [e11,e22,g12,k11,k22,k12]  (also the number of
+       unit load cases per gradient direction: eps,a has 6 components)
+    i  2, the IN-PLANE warping components (w1,w2) that carry Yu's relaxed constants
+    g  2, the transverse shears          [2g13, 2g23]
+    t  12, the stacked gradient vector [eps,1 ; eps,2] -> the residual operator is (t,t)
+    q  144, the raveled entries of that (t,t) operator
+    m  27, the least-squares unknowns [X(3), c1(12), c2(12)]
+e.g. D_he_ns is <Gamma_h^T C Gamma_eps> (n x s), V11_ns a first-order warping column
+block, c1_is the (2 x 6) relaxed constants, L1_ns = kernel_nk @ c1_ks its ndofs x 6 field.
+
 Validation:  python -m opensg_jax.fe_jax.msg_rm_plate
 homogeneous isotropic -> G_msg = 5/6 G h (nu=0);  orthotropic laminates -> G_msg ~=
 Whitney/complementary-energy transverse_shear_stiffness; A6 == compute_ABD_matrix.
@@ -119,16 +134,16 @@ def _bucket(nlay, n_per_layer, p):
     # kernel of D_hh = the 3 constant (rigid-translation) through-thickness modes; the
     # paper's psi (Eq. 31, psi^T H psi = I with H = <S^T S>) is kernel/sqrt(h), built
     # in-trace because h depends on the laminate.
-    kernel = np.zeros((ndofs, 3))
-    kernel[0::3, 0] = 1.0; kernel[1::3, 1] = 1.0; kernel[2::3, 2] = 1.0
+    kernel_nk = np.zeros((ndofs, 3))
+    kernel_nk[0::3, 0] = 1.0; kernel_nk[1::3, 1] = 1.0; kernel_nk[2::3, 2] = 1.0
     nodes_of_e = np.stack([np.arange(p * e, p * e + p + 1) for e in range(n_elem)])
     S_int_ref = np.array([sum(w_g[q] * _lagrange_N(nodes_xi, xi_g[q])[a] for q in range(len(xi_g)))
                           for a in range(p + 1)])   # int N_a dxi over [-1,1] (for H = <S^T S>)
 
     # D_1, D_2 (Eq. 51): Boolean selectors of eps = R - D_a gamma,_a, code strain order
-    D1 = np.zeros((6, 2)); D2 = np.zeros((6, 2))
-    D1[3, 0] = 1.0; D1[5, 1] = 1.0        # k11 <- 2g13,1 ; k12 <- 2g23,1
-    D2[4, 1] = 1.0; D2[5, 0] = 1.0        # k22 <- 2g23,2 ; k12 <- 2g13,2
+    D1_sg = np.zeros((6, 2)); D2_sg = np.zeros((6, 2))
+    D1_sg[3, 0] = 1.0; D1_sg[5, 1] = 1.0     # k11 <- 2g13,1 ; k12 <- 2g23,1
+    D2_sg[4, 1] = 1.0; D2_sg[5, 0] = 1.0     # k22 <- 2g23,2 ; k12 <- 2g13,2
 
     # unit directions of the 27 LS unknowns [x11,x12,x22, c1(12), c2(12)] (Eq. 58: 3 + 24)
     units = []
@@ -140,9 +155,9 @@ def _bucket(nlay, n_per_layer, p):
     jGh = jnp.asarray(Gh_ref); jGl1 = jnp.asarray(Gl1_ref); jGl2 = jnp.asarray(Gl2_ref)
     jE0 = jnp.asarray(_E0); jE1 = jnp.asarray(_E1)
     jdofs = jnp.asarray(dofs_e); jlayer = jnp.asarray(elem_layer); jsub = jnp.asarray(sub_of_elem)
-    jkernel = jnp.asarray(kernel)
+    jkernel_nk = jnp.asarray(kernel_nk)
     jnodes_e = jnp.asarray(nodes_of_e); jS_int = jnp.asarray(S_int_ref)
-    jD1 = jnp.asarray(D1); jD2 = jnp.asarray(D2)
+    jD1_sg = jnp.asarray(D1_sg); jD2_sg = jnp.asarray(D2_sg)
     junits = [tuple(jnp.asarray(u) for u in unit) for unit in units]
     jw_g = jnp.asarray(w_g); jxi_g = jnp.asarray(xi_g)
 
@@ -165,20 +180,20 @@ def _bucket(nlay, n_per_layer, p):
             D_l1e_ls = jnp.zeros_like(D_he_ls); D_l2e_ls = jnp.zeros_like(D_he_ls)
             for q in range(len(xi_g)):                          # unrolled Gauss loop
                 dw = 0.5 * he_e * jw_g[q]
-                Gamma_h = (2.0 / he_e) * jGh[q]                 # [Gamma_h S]: d/dx3 strains
-                Gamma_l1 = jGl1[q]; Gamma_l2 = jGl2[q]          # [Gamma_l1 S], [Gamma_l2 S]
+                Gamma_h_vl = (2.0 / he_e) * jGh[q]              # [Gamma_h S]: d/dx3 strains
+                Gamma_l1_vl = jGl1[q]; Gamma_l2_vl = jGl2[q]    # [Gamma_l1 S], [Gamma_l2 S]
                 x_q = xl_e + he_e * 0.5 * (1.0 + jxi_g[q])
-                Gamma_eps = jE0 + x_q * jE1                     # Gamma_eps: e + x3*k rows
-                D_hh_ll += Gamma_h.T @ C_e @ Gamma_h * dw
-                D_he_ls += Gamma_h.T @ C_e @ Gamma_eps * dw
-                D_ee_ss += Gamma_eps.T @ C_e @ Gamma_eps * dw
-                D_hl1_ll += Gamma_h.T @ C_e @ Gamma_l1 * dw
-                D_hl2_ll += Gamma_h.T @ C_e @ Gamma_l2 * dw
-                D_l1l1_ll += Gamma_l1.T @ C_e @ Gamma_l1 * dw
-                D_l1l2_ll += Gamma_l1.T @ C_e @ Gamma_l2 * dw
-                D_l2l2_ll += Gamma_l2.T @ C_e @ Gamma_l2 * dw
-                D_l1e_ls += Gamma_l1.T @ C_e @ Gamma_eps * dw
-                D_l2e_ls += Gamma_l2.T @ C_e @ Gamma_eps * dw
+                Gamma_eps_vs = jE0 + x_q * jE1                  # Gamma_eps: e + x3*k rows
+                D_hh_ll += Gamma_h_vl.T @ C_e @ Gamma_h_vl * dw
+                D_he_ls += Gamma_h_vl.T @ C_e @ Gamma_eps_vs * dw
+                D_ee_ss += Gamma_eps_vs.T @ C_e @ Gamma_eps_vs * dw
+                D_hl1_ll += Gamma_h_vl.T @ C_e @ Gamma_l1_vl * dw
+                D_hl2_ll += Gamma_h_vl.T @ C_e @ Gamma_l2_vl * dw
+                D_l1l1_ll += Gamma_l1_vl.T @ C_e @ Gamma_l1_vl * dw
+                D_l1l2_ll += Gamma_l1_vl.T @ C_e @ Gamma_l2_vl * dw
+                D_l2l2_ll += Gamma_l2_vl.T @ C_e @ Gamma_l2_vl * dw
+                D_l1e_ls += Gamma_l1_vl.T @ C_e @ Gamma_eps_vs * dw
+                D_l2e_ls += Gamma_l2_vl.T @ C_e @ Gamma_eps_vs * dw
             return (D_hh_ll, D_he_ls, D_ee_ss, D_hl1_ll, D_hl2_ll,
                     D_l1l1_ll, D_l1l2_ll, D_l2l2_ll, D_l1e_ls, D_l2e_ls)
 
@@ -194,7 +209,7 @@ def _bucket(nlay, n_per_layer, p):
         def scat_ns(Be):                                        # scatter-assemble (ndofs,6)
             return jnp.zeros((ndofs, 6)).at[jdofs].add(Be)
 
-        # assembled SG matrices, paper Eq. 30 names (suffix = dims: n = warping dofs, s = 6 plate strains)
+        # assembled SG matrices, paper Eq. 30 names (dimension suffixes: see module docstring)
         D_hh_nn = scat_nn(D_hh_b)                               # E     = <Gamma_h^T C Gamma_h>
         D_he_ns = scat_ns(D_he_b)                               # D_he  = <Gamma_h^T C Gamma_eps>
         D_ee_ss = jnp.sum(D_ee_b, axis=0)                       # D_ee  = <Gamma_eps^T C Gamma_eps>
@@ -206,9 +221,9 @@ def _bucket(nlay, n_per_layer, p):
         # H = <S^T S> enters only through H @ psi: the through-thickness integration
         # functional (per-node weights int N_a dx3, one copy per warping component).
         w_node = jnp.zeros(n_node).at[jnodes_e].add(0.5 * he[:, None] * jS_int)
-        w_dof = jnp.repeat(w_node, 3)                          # <.> weights on the dofs
-        psi = jkernel / jnp.sqrt(h)                            # Eq. (31): psi^T H psi = I3
-        Hpsi = w_dof[:, None] * psi                            # H @ psi  (ndofs, 3)
+        w_dof_n = jnp.repeat(w_node, 3)                        # <.> weights on the dofs
+        psi_nk = jkernel_nk / jnp.sqrt(h)                      # Eq. (31): psi^T H psi = I3
+        Hpsi_nk = w_dof_n[:, None] * psi_nk                    # H @ psi  (n, k)
         # Eq. (34) solved DIRECTLY as the Lagrange-multiplier saddle-point system:
         #   [[D_hh, H psi], [psi^T H, 0]] [V; Lam] = [-rhs; 0]
         # the multiplier row reproduces Eq. (35) automatically (Lam = -psi^T rhs: zero at
@@ -216,8 +231,8 @@ def _bucket(nlay, n_per_layer, p):
         # order), and the constraint row enforces <w_i> = 0 exactly, so Eq. (39) is
         # built into the solve.  scl balances the two blocks for conditioning only.
         scl = jnp.max(jnp.abs(jnp.diag(D_hh_nn)))
-        KKT = jnp.block([[D_hh_nn, scl * Hpsi],
-                         [scl * Hpsi.T, jnp.zeros((3, 3))]])
+        KKT = jnp.block([[D_hh_nn, scl * Hpsi_nk],
+                         [scl * Hpsi_nk.T, jnp.zeros((3, 3))]])
         # ONE factorization shared by all 18 unit load cases (the zeroth- and first-order
         # problems differ only in the forcing).  All three formulations give bit-identical
         # results; timings under the outer laminate vmap (min of paired interleaved trials,
@@ -237,17 +252,17 @@ def _bucket(nlay, n_per_layer, p):
         # correction to the forcing is needed at zeroth order (kept as a check below).
         # The CONSTRAINT row is still load-bearing: it selects the unique V0 with <w>=0,
         # and that gauge propagates into D_abar (D_hla @ kernel != 0) and hence into G.
-        V0 = solve_constrained(D_he_ns)
-        A6 = D_ee_ss + V0.T @ D_he_ns
-        lam0_rel = (jnp.max(jnp.abs(jkernel.T @ D_he_ns))
+        V0_ns = solve_constrained(D_he_ns)
+        A6_ss = D_ee_ss + V0_ns.T @ D_he_ns
+        lam0_rel = (jnp.max(jnp.abs(jkernel_nk.T @ D_he_ns))
                     / (jnp.max(jnp.abs(D_he_ns)) + 1e-300))    # theory: 0 (roundoff ~n*eps)
 
         # first-order drivers, Eqs. (43)-(44):  D_a = (D_hla - D_hla^T) V0_hat - D_lae
         #   named D1bar/D2bar because Eq. (51) reuses the symbols D_1, D_2 for the Boolean
         #   strain selectors (the paper overloads them; see D1/D2 in the RM projection below)
         #   D_lah = D_hla^T exactly (same quadrature, symmetric C), so no separate assembly
-        D1bar = (D_hl1_nn - D_hl1_nn.T) @ V0 - D_l1e_ns
-        D2bar = (D_hl2_nn - D_hl2_nn.T) @ V0 - D_l2e_ns
+        D1bar_ns = (D_hl1_nn - D_hl1_nn.T) @ V0_ns - D_l1e_ns
+        D2bar_ns = (D_hl2_nn - D_hl2_nn.T) @ V0_ns - D_l2e_ns
 
         # first-order warping columns V11, V12 (paper Eq. 45).
         #
@@ -277,13 +292,13 @@ def _bucket(nlay, n_per_layer, p):
         # Unlike the zeroth order, psi^T Dbar_a != 0 here (Gamma_l of a constant is nonzero),
         # so this multiplier genuinely acts -- and its content, kernel^T Dbar_a, is exactly
         # the S_a driving the 24 relaxed constants below.
-        V1 = solve_constrained(jnp.concatenate([D1bar, D2bar], axis=1))    # all 12 at once
-        V11 = V1[:, :6]; V12 = V1[:, 6:]
+        V1_n2s = solve_constrained(jnp.concatenate([D1bar_ns, D2bar_ns], axis=1))  # 12 at once
+        V11_ns = V1_n2s[:, :6]; V12_ns = V1_n2s[:, 6:]
 
         # gradient energy blocks B, C, D of Eq. (47) -> H = [[B,C],[C^T,D]] over [E,1; E,2]
-        H11 = V0.T @ D_l1l1_nn @ V0 + D1bar.T @ V11
-        H12 = V0.T @ D_l1l2_nn @ V0 + 0.5 * (D1bar.T @ V12 + V11.T @ D2bar)
-        H22 = V0.T @ D_l2l2_nn @ V0 + D2bar.T @ V12
+        H11_ss = V0_ns.T @ D_l1l1_nn @ V0_ns + D1bar_ns.T @ V11_ns
+        H12_ss = V0_ns.T @ D_l1l2_nn @ V0_ns + 0.5 * (D1bar_ns.T @ V12_ns + V11_ns.T @ D2bar_ns)
+        H22_ss = V0_ns.T @ D_l2l2_nn @ V0_ns + D2bar_ns.T @ V12_ns
         # B and D are ANALYTICALLY symmetric: under the Eq. (31) constraint the E-L equation
         # gives V11^T Dbar_1 = -V11^T E V11, and E = E^T.  So this only removes roundoff
         # (measured 5e-18..5e-12 relative) -- but it matters, because every one of the 27 LS
@@ -292,16 +307,20 @@ def _bucket(nlay, n_per_layer, p):
         # by the fit and would sit in the residual as an irreducible Ustar_rel floor.
         # C (= H12) is genuinely NOT symmetric (asymmetry of order 1) and must NOT be
         # symmetrized; its transpose placement in H below is what handles it.
-        H11 = 0.5 * (H11 + H11.T); H22 = 0.5 * (H22 + H22.T)
-        H = jnp.block([[H11, H12], [H12.T, H22]])
+        H11_ss = 0.5 * (H11_ss + H11_ss.T); H22_ss = 0.5 * (H22_ss + H22_ss.T)
+        H_tt = jnp.block([[H11_ss, H12_ss], [H12_ss.T, H22_ss]])
 
         # ---- RM projection (Yu 2003 sec. 4): E = R - D1 g,1 - D2 g,2 ; equilibrium swap
         #      Eq. (54); LS over X = G^{-1} (sym 2x2) and relaxed constants c1,c2 (2x6 each) ----
-        S1 = (jkernel.T @ D1bar)[:2]           # (2,6) in-plane constant shifts (Yu's 24; the
-        S2 = (jkernel.T @ D2bar)[:2]           #  w3 row of kernel^T D_abar = 0, monoclinic)
-        AD1 = A6 @ jD1; AD2 = A6 @ jD2
+        # S_a = kernel^T Dbar_a collapses the (n,s) relaxation field L_a = kernel_nk @ c_a_ks
+        # into an (i,s) = (2,6) matrix: L_a^T Dbar_b = c_a^T (kernel^T Dbar_b) = c_a^T S_b,
+        # so the ndofs-sized L_a is never formed.  Rows kept: the 2 IN-PLANE warping
+        # components (Yu's 24 constants); the w3 row of kernel^T Dbar_a is 0 for monoclinic.
+        S1_is = (jkernel_nk.T @ D1bar_ns)[:2]
+        S2_is = (jkernel_nk.T @ D2bar_ns)[:2]
+        AD1_sg = A6_ss @ jD1_sg; AD2_sg = A6_ss @ jD2_sg
 
-        def blocks(X, c1, c2):
+        def blocks(X_gg, c1_is, c2_is):
             """[[Bhat,Chat],[Chat^T,Dhat]] of Eqs. (57)+(60); its 78 entries must -> 0.
 
             Per block: H.. = B/C/D of Eq. (47), AD_a X AD_b^T = A D_a G^-1 D_b^T A of
@@ -317,20 +336,20 @@ def _bucket(nlay, n_per_layer, p):
             and Ustar_rel inflated up to 10x.  The OFF-diagonal Chat is deliberately NOT
             symmetrized -- it matches Eq. (60) literally, because it sits in the bilinear
             2 R,1^T Chat R,2 between two different vectors, where the asymmetry is real."""
-            Bs = H11 + AD1 @ X @ AD1.T + c1.T @ S1 + S1.T @ c1
-            Cs = H12 + AD1 @ X @ AD2.T + c1.T @ S2 + S1.T @ c2
-            Ds = H22 + AD2 @ X @ AD2.T + c2.T @ S2 + S2.T @ c2
-            return jnp.block([[Bs, Cs], [Cs.T, Ds]])
+            Bs_ss = H11_ss + AD1_sg @ X_gg @ AD1_sg.T + c1_is.T @ S1_is + S1_is.T @ c1_is
+            Cs_ss = H12_ss + AD1_sg @ X_gg @ AD2_sg.T + c1_is.T @ S2_is + S1_is.T @ c2_is
+            Ds_ss = H22_ss + AD2_sg @ X_gg @ AD2_sg.T + c2_is.T @ S2_is + S2_is.T @ c2_is
+            return jnp.block([[Bs_ss, Cs_ss], [Cs_ss.T, Ds_ss]])
 
         # linear LS ("78 equations, 27 unknowns", text after Eq. 57): columns by unit probing
-        M0 = blocks(jnp.zeros((2, 2)), jnp.zeros((2, 6)), jnp.zeros((2, 6)))   # == H exactly
-        b0 = -M0.ravel()
-        Amat = jnp.stack([blocks(*unit).ravel() + b0 for unit in junits], axis=1)
+        M0_tt = blocks(jnp.zeros((2, 2)), jnp.zeros((2, 6)), jnp.zeros((2, 6)))  # == H exactly
+        b0_q = -M0_tt.ravel()
+        Amat_qm = jnp.stack([blocks(*unit).ravel() + b0_q for unit in junits], axis=1)
         # Column equilibration: the X-columns scale like A^2 (~1e13) and the c-columns like
         # S (~1e9), a ~1e4 spread that pushes cond(Amat) to ~5e19.  Scaling each column to
         # unit norm brings it to ~8e15.  Only the redundant constants move; X is invariant.
-        cs = jnp.linalg.norm(Amat, axis=0)
-        cs = jnp.where(cs == 0, 1.0, cs)
+        cs_m = jnp.linalg.norm(Amat_qm, axis=0)
+        cs_m = jnp.where(cs_m == 0, 1.0, cs_m)
 
         # --- truncated-SVD MINIMUM-NORM solution ------------------------------------------
         # Ascher & Greif, "A First Course in Numerical Methods" (SIAM 2011), Sec. 8.2 p.235:
@@ -344,17 +363,17 @@ def _bucket(nlay, n_per_layer, p):
         # 6e-16, normal equations + Cholesky 2e-14, and QR back-substitution only 7e-5 (it
         # divides by a ~1e-13 diagonal of R).  The dropped direction has zero X-component, so
         # G is unique regardless; min-norm merely pins the arbitrary relaxation constants.
-        U_ls, sig, Vt_ls = jnp.linalg.svd(Amat / cs, full_matrices=False)
-        sig_ok = sig > _LS_RCOND * sig[0]
+        U_qm, sig_m, Vt_mm = jnp.linalg.svd(Amat_qm / cs_m, full_matrices=False)
+        sig_ok = sig_m > _LS_RCOND * sig_m[0]
         # guard the reciprocal so the discarded branch never holds inf (would poison jax.grad)
-        sig_inv = jnp.where(sig_ok, 1.0 / jnp.where(sig_ok, sig, 1.0), 0.0)   # Sigma^dagger
-        sol = (Vt_ls.T @ (sig_inv * (U_ls.T @ b0))) / cs
-        X = jnp.array([[sol[0], sol[1]], [sol[1], sol[2]]])
-        c1 = sol[3:15].reshape(2, 6); c2 = sol[15:27].reshape(2, 6)
-        res = blocks(X, c1, c2)
-        Ustar_rel = jnp.linalg.norm(res) / (jnp.linalg.norm(H) + 1e-30)
-        ev_min = jnp.linalg.eigvalsh(X).min()                  # SPD gate evaluated by caller
-        G = jnp.linalg.inv(X)                                  # Eq. (61) transverse-shear G
+        sig_inv = jnp.where(sig_ok, 1.0 / jnp.where(sig_ok, sig_m, 1.0), 0.0)  # Sigma^dagger
+        sol_m = (Vt_mm.T @ (sig_inv * (U_qm.T @ b0_q))) / cs_m
+        X_gg = jnp.array([[sol_m[0], sol_m[1]], [sol_m[1], sol_m[2]]])
+        c1_is = sol_m[3:15].reshape(2, 6); c2_is = sol_m[15:27].reshape(2, 6)
+        res_tt = blocks(X_gg, c1_is, c2_is)
+        Ustar_rel = jnp.linalg.norm(res_tt) / (jnp.linalg.norm(H_tt) + 1e-30)
+        ev_min = jnp.linalg.eigvalsh(X_gg).min()               # SPD gate evaluated by caller
+        G_gg = jnp.linalg.inv(X_gg)                            # Eq. (61) transverse-shear G
 
         # ---- second-order warping V2 (Eq. 64), for the Eq. (65)-(66) recovery only ----
         # Putting V = V0 eps + V1bar,a eps,a + V2 back into the energy and collecting the
@@ -384,19 +403,21 @@ def _bucket(nlay, n_per_layer, p):
         # surface-pressure-carrying part (sigma33 ramp from -q to 0 through the wall)
         # would need V2L and scales with the local panel pressure q -- negligible next
         # to the interlaminar signals recovered here.
-        c1f = jnp.zeros((3, 6)).at[:2].set(c1)
-        c2f = jnp.zeros((3, 6)).at[:2].set(c2)
-        V11b = V11 + jkernel @ c1f                             # V1bar columns (Eq. 58)
-        V12b = V12 + jkernel @ c2f
-        D21bar = (D_hl1_nn - D_hl1_nn.T) @ V11b - D_l1l1_nn @ V0
-        D22bar = ((D_hl1_nn - D_hl1_nn.T) @ V12b + (D_hl2_nn - D_hl2_nn.T) @ V11b
-                  - (D_l1l2_nn + D_l1l2_nn.T) @ V0)
-        D23bar = (D_hl2_nn - D_hl2_nn.T) @ V12b - D_l2l2_nn @ V0
-        V2 = solve_constrained(jnp.concatenate([D21bar, D22bar, D23bar], axis=1))
-        V21 = V2[:, :6]; V22 = V2[:, 6:12]; V23 = V2[:, 12:]  # Eq. (64) column blocks
+        # c_a_is (2,6) padded with the zero w3 row -> c_a_ks (3,6); L_a_ns = kernel_nk @ c_a_ks
+        c1_ks = jnp.zeros((3, 6)).at[:2].set(c1_is)
+        c2_ks = jnp.zeros((3, 6)).at[:2].set(c2_is)
+        V11bar_ns = V11_ns + jkernel_nk @ c1_ks                # V1bar columns (Eq. 58)
+        V12bar_ns = V12_ns + jkernel_nk @ c2_ks
+        D21bar_ns = (D_hl1_nn - D_hl1_nn.T) @ V11bar_ns - D_l1l1_nn @ V0_ns
+        D22bar_ns = ((D_hl1_nn - D_hl1_nn.T) @ V12bar_ns + (D_hl2_nn - D_hl2_nn.T) @ V11bar_ns
+                     - (D_l1l2_nn + D_l1l2_nn.T) @ V0_ns)
+        D23bar_ns = (D_hl2_nn - D_hl2_nn.T) @ V12bar_ns - D_l2l2_nn @ V0_ns
+        V2_n3s = solve_constrained(jnp.concatenate([D21bar_ns, D22bar_ns, D23bar_ns], axis=1))
+        V21_ns = V2_n3s[:, :6]; V22_ns = V2_n3s[:, 6:12]; V23_ns = V2_n3s[:, 12:]  # Eq. (64)
 
-        return (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min, lam0_rel,
-                V11b, V12b, V21, V22, V23)
+        # returned in the PAPER symbols (the public dict keys carry no dimension suffixes)
+        return (A6_ss, G_gg, X_gg, H_tt, Ustar_rel, V0_ns, V11_ns, V12_ns, c1_is, c2_is,
+                ev_min, lam0_rel, V11bar_ns, V12bar_ns, V21_ns, V22_ns, V23_ns)
 
     bk = dict(nlay=nlay, n_per_layer=n_per_layer, p=p, n_elem=n_elem, ndofs=ndofs,
               elem_layer=elem_layer,
