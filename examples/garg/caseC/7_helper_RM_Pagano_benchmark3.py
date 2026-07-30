@@ -1,0 +1,17 @@
+"""Benchmark 3 -- caseC sandwich [0/core/0] (faces 0.1h, core 0.8h), S = a/h in {4, 10}.
+
+MSG-RM (mid-surface 8x8, FF integrated from the exact solution, example-7 recovery)
+vs the exact 3-D elasticity and Garg's FSDT (k = 5/6) baseline, at the standard
+stations x = 0 (sigma13) and x = a/2 (sigma11, sigma33).  The sandwich is the case
+where the FSDT baseline collapses.  Writes pagano_S<S>.dat and pagano_S<S>.png into
+this folder.
+
+Run:  python examples/garg/caseC/7_helper_RM_Pagano_benchmark3.py
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from pagano_bench import run_benchmark
+
+run_benchmark("caseC", (4, 10), tag="3")
