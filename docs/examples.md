@@ -27,7 +27,8 @@ The `examples/` folder holds **numbered, runnable scripts** (the command-line co
   - recover the pointwise 3-D stress/strain across the wall from a beam load
 * - `6_get_plateRM_homo_using_1DSG.py`
   - MSG-RM plate law
-  - {doc}`tutorials/plate_rm_8x8` — the 8×8 ABDG per wall laminate from a 1-D shell YAML
+  - layup → through-thickness 1-D SG mesh YAML (`segment_plate`) → the 8×8 ABDG
+    (see also {doc}`tutorials/plate_rm_8x8` for the per-wall-laminate blade-station version)
 * - `7_get_plateRM_dehom_using_1DSG.py`
   - MSG-RM homo + dehom
   - homogenize one wall laminate and recover the 3-D through-thickness strain/stress for

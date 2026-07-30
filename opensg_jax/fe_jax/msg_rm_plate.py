@@ -57,11 +57,7 @@ DIMENSION SUFFIXES on the internal arrays (the returned dict keeps the paper sym
 e.g. D_he_ns is <Gamma_h^T C Gamma_eps> (n x s), V11_ns a first-order warping column
 block, c1_is the (2 x 6) relaxed constants, L1_ns = kernel_nk @ c1_ks its ndofs x 6 field.
 
-Validation lives in ``tests/test_msg_rm_plate.py`` (pytest, or run it directly), NOT in
-this module: the analytic anchors (isotropic nu=0 -> 5/6 G h, A6 == compute_ABD_matrix),
-the Eq.-(31)/(34)/(42) gauge and Euler-Lagrange residuals against an INDEPENDENT NumPy
-re-assembly, the reference-plane transform, the batch API, and jax.grad vs finite
-differences.
+Validation lives in ``tests/test_msg_rm_plate.py`` (pytest, or run it directly)
 """
 import numpy as np
 import jax
@@ -380,7 +376,15 @@ def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer
     (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min,
      V11b, V12b, V21, V22, V23) = [np.asarray(o) for o in out]
     thick = [float(t) for t in thick]
-    return {"A6": A6, "G_msg": (G if float(ev_min) > 0 else None), "X": X, "H": H,
+    spd = float(ev_min) > 0
+    # the full RM plate law, Eqs. (40) + (61):  ABDG = [[A6, 0], [0, G]]
+    # (rows/cols: e11, e22, g12, k11, k22, k12, 2g13, 2g23; None if X is not SPD)
+    ABDG = None
+    if spd:
+        ABDG = np.zeros((8, 8))
+        ABDG[:6, :6] = A6
+        ABDG[6:, 6:] = G
+    return {"A6": A6, "G_msg": (G if spd else None), "ABDG": ABDG, "X": X, "H": H,
             "Ustar_rel": float(Ustar_rel),
             "V0": V0, "V11": V11, "V12": V12,
             "V11bar": V11b, "V12bar": V12b, "V21": V21, "V22": V22, "V23": V23,
@@ -392,7 +396,8 @@ def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer
 def rm_plate_msg(thick, angles_deg, mat_names, material_db, n_per_layer=1, elem_order=4,
                  fraction=0.0):
     """Build the MSG-RM plate law for ONE laminate.  Returns a dict:
-    A6 (6x6 ABD), G_msg (2x2, None if the fitted compliance is not SPD), X (=G^{-1}),
+    A6 (6x6 ABD), G_msg (2x2, None if the fitted compliance is not SPD), ABDG (the full
+    8x8 plate law [[A6,0],[0,G]], rows e11,e22,g12,k11,k22,k12,2g13,2g23), X (=G^{-1}),
     H (12x12), Ustar_rel (residual after projection / before), V0/V11/V12 (ndofs x 6),
     node_x, elem_layer, C_layers, elem_order, angles, c1, c2.
 

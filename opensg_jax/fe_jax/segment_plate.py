@@ -1,11 +1,11 @@
-"""segment_plate.py -- the THROUGH-THICKNESS 1-D structure gene of a plate/shell wall.
+"""segment_plate.py -- MESH-GENERATION HELPER for the through-thickness 1-D plate SG.
 
 A laminate layup is all the geometry the MSG-RM plate law needs: the structure gene is a
 1-D mesh through the wall thickness, one (or ``n_per_layer``) higher-order element per ply.
-This module turns a layup dictionary into that mesh, writes it as an OpenSG 1-D SG YAML,
-reads it back, and homogenizes straight from the file:
+This module ONLY generates and reads that mesh -- it does no homogenization; feed the
+result to ``msg_rm_plate.rm_plate_msg``:
 
-    layup dict --plate_sg_yaml--> 1-D SG YAML --rm_plate_from_yaml--> 8x8 ABDG
+    layup dict --plate_sg_yaml--> 1-D SG YAML --read_plate_sg_yaml--> rm_plate_msg(...)
 
 Distinguish this from the 1-D SHELL SG YAML (e.g. ``examples/data/1d_yaml/st15_shell.yaml``):
 that one is the CONTOUR of a cross-section -- line elements running around the airfoil, each
@@ -36,8 +36,7 @@ import os
 import numpy as np
 import yaml
 
-from .msg_rm_plate import _node_grid, rm_plate_msg
-from .msg_transverse_shear import plate_8x8
+from .msg_rm_plate import _node_grid
 
 
 def plate_sg_mesh(thick, n_per_layer=1, elem_order=4, fraction=0.5):
@@ -168,19 +167,3 @@ def read_plate_sg_yaml(path, atol=1e-9):
     return {"thick": thick, "angles": angles, "mat_names": mat_names,
             "material_db": material_db, "n_per_layer": counts[0],
             "elem_order": len(elements[0]) - 1, "fraction": frac, "node_x": node_x}
-
-
-def rm_plate_from_yaml(path):
-    """Homogenize straight from a plate 1-D SG YAML.
-
-    Returns the ``rm_plate_msg`` result dict with the assembled 8x8 plate law added as
-    ``ABDG`` (rows/cols e11,e22,g12,k11,k22,k12,2g13,2g23).
-    """
-    sg = read_plate_sg_yaml(path)
-    r = rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
-                     n_per_layer=sg["n_per_layer"], elem_order=sg["elem_order"],
-                     fraction=sg["fraction"])
-    if r["G_msg"] is None:
-        raise ValueError("%s: the fitted shear compliance is not SPD" % path)
-    r["ABDG"] = np.asarray(plate_8x8(np.asarray(r["A6"]), np.asarray(r["G_msg"])))
-    return r

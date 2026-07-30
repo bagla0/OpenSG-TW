@@ -34,7 +34,6 @@ np.set_printoptions(precision=4, linewidth=150)
 
 from opensg_jax.fe_jax.msg_mesh import load_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
-from opensg_jax.fe_jax.msg_transverse_shear import plate_8x8
 
 LBL = ["e11", "e22", "g12", "k11", "k22", "k12"]
 SLBL = ["s11", "s22", "s33", "s23", "s13", "s12"]
@@ -91,9 +90,9 @@ second = any(np.any(grads[k]) for k in ("dE11", "dE12", "dE22"))
 
 # ------------------------------------------------------------------- HOMOGENIZATION
 r = rm_plate_msg(thk, ang, mats, mdb, fraction=a.fraction)
-if r["G_msg"] is None:
+if r["ABDG"] is None:
     sys.exit("%s: fitted compliance not SPD (degenerate material?)" % name)
-P8 = plate_8x8(np.asarray(r["A6"]), np.asarray(r["G_msg"]))
+P8 = r["ABDG"]
 
 print("1-D SG      : %s" % os.path.relpath(a.yaml, CC))
 print("laminate    : %s  (%d plies, h = %.4f m, reference fraction = %.2f)"

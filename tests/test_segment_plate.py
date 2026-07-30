@@ -1,5 +1,5 @@
-"""Validation for the through-thickness plate SG generator
-(``opensg_jax.fe_jax.segment_plate``): layup dict -> 1-D SG YAML -> 8x8 ABDG.
+"""Validation for the through-thickness plate SG MESH generator
+(``opensg_jax.fe_jax.segment_plate``): layup dict -> 1-D SG YAML -> rm_plate_msg -> 8x8.
 
 The headline case is a SYMMETRIC laminate, because symmetry is a property the round trip
 cannot fake: a layup that is mirror-symmetric about its mid-surface has NO membrane-bending
@@ -25,9 +25,16 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 from opensg_jax.fe_jax.msg_rm_plate import _node_grid, rm_plate_msg
-from opensg_jax.fe_jax.msg_transverse_shear import plate_8x8
 from opensg_jax.fe_jax.segment_plate import (plate_sg_dict, plate_sg_mesh, plate_sg_yaml,
-                                             read_plate_sg_yaml, rm_plate_from_yaml)
+                                             read_plate_sg_yaml)
+
+
+def homo_from_yaml(path):
+    """The intended pipeline: read the mesh file, homogenize with the RM core."""
+    sg = read_plate_sg_yaml(path)
+    return rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
+                        n_per_layer=sg["n_per_layer"], elem_order=sg["elem_order"],
+                        fraction=sg["fraction"])
 
 MDB = {"gr": {"E": [172.4e9, 6.89e9, 6.89e9], "G": [3.45e9, 1.38e9, 3.45e9],
               "nu": [0.25] * 3, "rho": 1600.0},
@@ -100,7 +107,7 @@ def test_symmetric_laminate_has_zero_B():
     for lay, tag in ((SYM, "[45/-45]s"), (SYM3, "[glass0/gr90/glass0]")):
         path = tmp_yaml("sym.yaml")
         plate_sg_yaml(path, lay, MDB, fraction=0.5)
-        r = rm_plate_from_yaml(path)
+        r = homo_from_yaml(path)
         A, B, D = r["ABDG"][:3, :3], r["ABDG"][:3, 3:6], r["ABDG"][3:6, 3:6]
         rel = np.max(np.abs(B)) / np.sqrt(np.max(np.abs(A)) * np.max(np.abs(D)))
         assert rel < 1e-12, "%s: B/sqrt(A D) = %.2e, expected 0" % (tag, rel)
@@ -110,21 +117,21 @@ def test_asymmetric_laminate_has_nonzero_B():
     """The converse, so the test above is not vacuous: [0/90] IS coupled."""
     path = tmp_yaml("asym.yaml")
     plate_sg_yaml(path, ASYM, MDB, fraction=0.5)
-    r = rm_plate_from_yaml(path)
+    r = homo_from_yaml(path)
     A, B, D = r["ABDG"][:3, :3], r["ABDG"][:3, 3:6], r["ABDG"][3:6, 3:6]
     rel = np.max(np.abs(B)) / np.sqrt(np.max(np.abs(A)) * np.max(np.abs(D)))
     assert rel > 1e-2, "[0/90] should be strongly coupled, got B/sqrt(A D) = %.2e" % rel
 
 
 def test_yaml_driven_equals_direct_call():
-    """rm_plate_from_yaml must reproduce rm_plate_msg on the same layup, bit for bit."""
+    """The mesh-file route must reproduce the direct rm_plate_msg call, bit for bit
+    (this is what forbids re-deriving thicknesses from node differences in the reader)."""
     for lay in (SYM, SYM3, ASYM):
         path = tmp_yaml("case.yaml")
         plate_sg_yaml(path, lay, MDB, fraction=0.5)
-        rf = rm_plate_from_yaml(path)
+        rf = homo_from_yaml(path)
         rd = rm_plate_msg(lay["thick"], lay["angles"], lay["mat_names"], MDB, fraction=0.5)
-        ref = np.asarray(plate_8x8(np.asarray(rd["A6"]), np.asarray(rd["G_msg"])))
-        assert np.max(np.abs(rf["ABDG"] - ref)) == 0.0
+        assert np.max(np.abs(rf["ABDG"] - rd["ABDG"])) == 0.0
 
 
 def test_corrupt_file_is_caught():
