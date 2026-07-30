@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(CC, "examples", "TW-paper", "rm_thickness"))
 from exact_cyl import ExactCyl                                        # noqa: E402
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth  # noqa: E402
 from opensg_jax.fe_jax.msg_materials import rotated_stiffness_6x6     # noqa: E402
+from opensg_jax.fe_jax.msg_transverse_shear import transverse_shear_stiffness   # noqa: E402
 from garg_layups import MATERIAL_DB, LAYUPS, H                        # noqa: E402
 
 q0 = 1.0e4
@@ -91,18 +92,31 @@ def run_case(case, S, tag):
     s33_m = np.concatenate([[0.0], np.cumsum(0.5 * p * (s13_m[1:] + s13_m[:-1])
                                              * np.diff(zc))])
 
-    # Garg's FSDT baseline, replicated ANALYTICALLY (their sec. 2.1 statement: FSDT
-    # "gives a constant value of transverse shear stress across the layer" and "is not
-    # able to predict" the transverse normal stress).  No Abaqus data and no
-    # equilibrium integration is involved in this curve -- it is the CONSTITUTIVE
-    # layerwise-constant s13(z) = C55(z) Q1 / (k sum(t C55)) with k = 5/6.
+    # FSDT baseline, replicated ANALYTICALLY (Garg sec. 2.1: FSDT "gives a constant
+    # value of transverse shear stress across the layer" and "is not able to predict"
+    # the transverse normal stress).  No Abaqus data and no equilibrium integration is
+    # involved in this curve -- it is the CONSTITUTIVE layerwise-constant
+    #     s13(z) = C55(z) * Q1 / G_shear ,
+    # with the shear stiffness now taken from WHITNEY (JAM 40 (1973) 302-304): his
+    # Eq. (1) defines Qx = k1^2 A55 (psi_x + w,x); k1^2 comes from equating the FSDT
+    # shear energy to the complementary energy of the STATIC cylindrical-bending
+    # equilibrium distribution (his Eq. (6) g(z), zero traction at the faces).  The
+    # core transverse_shear_stiffness implements exactly that construction, and it is
+    # also the approach Abaqus uses for composite-shell transverse shear (verified:
+    # the five Abaqus FSDT jobs returned Whitney/MSG-level deflections, not 5/6).
     C55 = np.array([float(rotated_stiffness_6x6(MATERIAL_DB[m]["E"], MATERIAL_DB[m]["G"],
                                                 MATERIAL_DB[m]["nu"], x)[4, 4])
                     for m, x in zip(mats, ang)])
     bot = np.concatenate([[0.0], np.cumsum(thk)]) - 0.5 * h
     ply_of = np.clip(np.searchsorted(bot[1:-1], zc, side="left"), 0, len(thk) - 1)
-    G_fsdt = 5.0 / 6.0 * float(np.sum(np.array(thk) * C55))
-    s13_f = C55[ply_of] * FF_end[6] / G_fsdt
+    A55 = float(np.sum(np.array(thk) * C55))
+    G_w = np.asarray(transverse_shear_stiffness(thk, ang, mats, MATERIAL_DB)[0])
+    s13_f = C55[ply_of] * FF_end[6] / float(G_w[0, 0])
+    # the resultant-level "Abaqus contribution": the S4 model (as run) stores only the
+    # section forces, so the only shape-free out-of-plane statement it makes is the
+    # thickness AVERAGE  s13_avg = Q1 / h  (its internal TSS is Whitney-style energy
+    # equivalence, i.e. the same G_w above -- amplitude, not a through-thickness shape)
+    s13_avg = FF_end[6] / h
 
     def relerr(m, e):
         return 100 * np.linalg.norm(m - e) / np.linalg.norm(e)
@@ -125,15 +139,30 @@ def run_case(case, S, tag):
             "  FF_end (x=0)   = [%s]" % ", ".join("%.6g" % v for v in FF_end),
             "  u2d = [0, 0, %.6e] (plate w; exact %.6e)" % (w_msg, w_ex),
             "",
-            "OUT-OF-PLANE stresses only.  FSDT s13 = the paper's baseline, replicated",
-            "analytically (constitutive layerwise-constant, k = 5/6; FSDT has NO s33).",
-            "rel L2 errors vs exact:  s13 %7.3f%%  (FSDT %7.2f%%)   s33 %7.3f%%"
+            "transverse-shear stiffness, the two constructions side by side:",
+            "  G_whitney (Whitney JAM 40 (1973) 302-304, complementary energy of the",
+            "  static equilibrium distribution -- the classic/Abaqus-style TSS):",
+            "    [[%13.6e, %13.6e], [%13.6e, %13.6e]]"
+            % (G_w[0, 0], G_w[0, 1], G_w[1, 0], G_w[1, 1]),
+            "  G_msg (MSG-RM least-squares projection, Yu 2003 Eq. 61):",
+            "    [[%13.6e, %13.6e], [%13.6e, %13.6e]]"
+            % (r["G_msg"][0, 0], r["G_msg"][0, 1], r["G_msg"][1, 0], r["G_msg"][1, 1]),
+            "  effective k1^2 = G11/A55:  Whitney %.6f   MSG %.6f   (uniform-k ref 5/6"
+            " = 0.8333)" % (G_w[0, 0] / A55, r["G_msg"][0, 0] / A55),
+            "",
+            "OUT-OF-PLANE stresses only.  FSDT s13 = constitutive layerwise-constant",
+            "C55(z) Q1 / G_whitney11 (Whitney-1973 k; FSDT has NO s33).  s13_abq_avg =",
+            "Q1/h, the shape-free average from the S4 resultants (the model as run",
+            "stores section forces only).  Exact stress solution: Pagano cylindrical",
+            "bending (J. Compos. Mater. 3 (1969) 398-411; Garg Eqs. (18)-(24)).",
+            "rel L2 errors vs exact:  s13 %7.3f%%  (FSDT-Whitney %7.2f%%)   s33 %7.3f%%"
             % (e13, e13f, e33),
             "s33 top-face closure: %.4f q0" % (s33_m[-1] / q0),
             "",
-            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s33_msg  s33_exact  [Pa]"]
+            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s13_abq_avg  s33_msg  s33_exact  [Pa]"]
     np.savetxt(os.path.join(outdir, "pagano_S%g.dat" % S),
-               np.column_stack([zc, s13_m, sig[:, 4], s13_f, s33_m, sig[:, 2]]),
+               np.column_stack([zc, s13_m, sig[:, 4], s13_f,
+                                np.full_like(zc, s13_avg), s33_m, sig[:, 2]]),
                header="\n".join(hdr), fmt="%15.6e")
 
     # ------------------------------------------------------------------- plot
@@ -142,7 +171,9 @@ def run_case(case, S, tag):
     ax1.plot(s13_m, zc / h, ":s", color="#ff7f0e", ms=4, mfc="none", mew=1.2, lw=1.6,
              markevery=4, label="MSG-RM")
     ax1.plot(s13_f, zc / h, "--", color="#1f77b4", lw=1.4,
-             label="FSDT constitutive (analytic, k=5/6)")
+             label="FSDT constitutive (Whitney-1973 k)")
+    ax1.axvline(s13_avg, color="0.5", lw=1.1, ls="-.",
+                label="Abaqus S4 resultant avg $Q_1/h$")
     ax1.set_xlabel(r"$\sigma_{13}$ [Pa]  at  $x=0$", fontsize=11)
     ax1.set_ylabel("$z/h$", fontsize=11)
     ax2.plot(sig[:, 2], zc / h, "-", color="k", lw=2.0)
