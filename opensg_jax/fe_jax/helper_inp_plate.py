@@ -1,24 +1,33 @@
-"""helper_inp_plate.py -- Abaqus .inp GENERATOR for a plate strip carrying the MSG-RM
-8x8 section (the plate-solver side of the homo -> plate solve -> FF -> dehom loop).
+"""helper_inp_plate.py -- Abaqus .inp GENERATORS for the cylindrical-bending plate
+strip: the MSG-RM 8x8 section, and the community-standard FSDT composite section.
 
-Writes a complete, submit-ready input file for the cylindrical-bending strip:
+Both write the same, complete, submit-ready model (mesh, sinusoidal load, cylindrical-
+bending BCs, FF-extraction output requests) and differ ONLY in the shell section:
 
-  mesh       0 <= x <= a, one square S4 element wide, ``nel`` elements along the span,
-             reference surface = the surface the 8x8 was homogenized at
-  section    *SHELL GENERAL SECTION with the 21 constants of [[A,B],[B,D]] (Abaqus
-             lower-triangle order) + *TRANSVERSE SHEAR STIFFNESS with the MSG 2x2 G
-  load       q(x) = q0 sin(pi x / a) on the face, piecewise-constant per element
-             (element-centre value; quadrature error ~ (pi/nel)^2 / 24)
-  BCs        cylindrical bending (u2 = ur1 = ur3 = 0 everywhere) + simple supports
-             (u3 = 0 on both end edges, u1 = 0 at x = 0)
-  output     field SF/SM/U to the .odb; .dat prints of U at the mid-span node (NMID)
-             and SF/SM in the mid-span (EMID) and end (EEND) elements -- the two
-             FF-extraction stations (M max at a/2, Q max at 0)
+  write_plate_strip_inp        *SHELL GENERAL SECTION carrying the MSG-RM 8x8
+                               ([[A,B],[B,D]] 21 constants, Abaqus triangular order)
+                               + *TRANSVERSE SHEAR STIFFNESS with the MSG 2x2 G.
+                               FSDT KINEMATICS (S4 is a first-order shear-deformable
+                               element) with MSG SECTION PHYSICS.
+  write_plate_strip_inp_fsdt   the GENERAL-COMMUNITY FSDT route: *SHELL SECTION,
+                               COMPOSITE with the ply stack and *ELASTIC, TYPE=LAMINA
+                               materials.  Abaqus builds A/B/D by classical lamination
+                               and its OWN transverse-shear stiffness estimate from
+                               the layup -- exactly what a practitioner gets by
+                               defining plies in any commercial FE shell model.
 
-VALIDATED against a real Abaqus 2024 run (Garg caseA, S = 10): mid-span U3 came back
-94.3695e-6 m vs the closed-form q0/(p^4 D11) + q0/(p^2 G11) = 94.3817e-6 (0.013%, FE
-discretisation); IP resultants M11 = 1012.92 vs q0/p^2 = 1013.21, Q1 = 3182.44 vs
-q0/p = 3183.10.
+mesh       0 <= x <= a, one square S4 element wide, ``nel`` elements along the span,
+           reference surface = the laminate mid-surface
+load       q(x) = q0 sin(pi x / a), piecewise-constant per element (centre value)
+BCs        cylindrical bending: u2 = ur1 = ur3 = 0 on ALL nodes; u3 = 0 on both end
+           edges, u1 = 0 at x = 0
+output     field SF/SM/U to the .odb; .dat prints of U at the mid-span node (NMID)
+           and SF/SM in the mid-span (EMID) and end (EEND) elements -- the two
+           FF-extraction stations (M max at a/2, Q max at 0)
+
+VALIDATED (MSG route) against a real Abaqus 2024 run (Garg caseA, S = 10): mid-span
+U3 94.3695e-6 m vs the closed form q0/(p^4 D11) + q0/(p^2 G11) = 94.3817e-6 (0.013%);
+IP resultants M11 = 1012.92 vs q0/p^2 = 1013.21, Q1 = 3182.44 vs q0/p = 3183.10.
 
 GOTCHA (cost a failed submit): Abaqus rejects an input PATH containing whitespace
 ("Command line option 'input' value must not contain whitespace") -- e.g. anything
@@ -42,39 +51,18 @@ def _fmt_data_lines(vals):
     return out
 
 
-def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=()):
-    """Write the cylindrical-bending strip .inp for an 8x8 plate law.
-
-    Parameters
-    ----------
-    path         output .inp path
-    ABDG         (8, 8) plate law [[A,B,0],[B,D,0],[0,0,G]] (e.g. rm_plate_msg's r["ABDG"])
-    a            span [m]
-    q0           load amplitude [Pa]
-    nel          elements along the span
-    header_lines extra ``**`` comment lines for the file header (e.g. the case, the
-                 closed-form deflection predictions)
-
-    Returns the path written.
-    """
-    ABDG = np.asarray(ABDG, float)
-    if ABDG.shape != (8, 8):
-        raise ValueError("ABDG must be 8x8, got %s" % (ABDG.shape,))
-    AB = ABDG[:6, :6]
-    G2 = ABDG[6:, 6:]
+def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, nel):
+    """The common strip model; the caller supplies the material + section blocks."""
     p = np.pi / a
     b = a / nel                                   # one square element across the width
-    # 21 constants, Abaqus *SHELL GENERAL SECTION order: lower triangle by columns
-    tri = [AB[i, j] for j in range(6) for i in range(j + 1)]
-
     L = []
     A = L.append
     A("*HEADING")
-    A("Cylindrical-bending strip, MSG-RM 8x8 general shell section")
+    A(title)
     for ln in header_lines:
         A("** " + ln)
-    A("** span a = %g m, q0 = %g Pa, %d S4 elements; load q0*sin(pi*x/a) per element" % (a, q0, nel))
-    A("** D11 = %.6e ; G11 = %.6e ; G22 = %.6e" % (AB[3, 3], G2[0, 0], G2[1, 1]))
+    A("** span a = %g m, q0 = %g Pa, %d S4 elements; load q0*sin(pi*x/a) per element"
+      % (a, q0, nel))
     A("*NODE")
     nid = lambda i, j: i * 2 + j + 1
     for i in range(nel + 1):
@@ -97,11 +85,8 @@ def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=())
     A("*NSET, NSET=NALL, GENERATE")
     A("1, %d, 1" % nid(nel, 1))
     A("**")
-    A("** ---- the MSG-RM section: [[A,B],[B,D]] 21 constants + the 2x2 shear G ----")
-    A("*SHELL GENERAL SECTION, ELSET=EALL")
-    L.extend(_fmt_data_lines(tri))
-    A("*TRANSVERSE SHEAR STIFFNESS")
-    A("%.6e, %.6e, %.6e" % (G2[0, 0], G2[1, 1], G2[0, 1]))
+    L.extend(material_lines)
+    L.extend(section_lines)
     A("**")
     A("** ---- cylindrical bending + simple supports ----")
     A("*BOUNDARY")
@@ -130,7 +115,55 @@ def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=())
     A("*EL PRINT, ELSET=EEND")
     A("SF, SM")
     A("*END STEP")
-
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
     return path
+
+
+def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=()):
+    """The MSG-RM route: the 8x8 plate law installed as a general shell section.
+
+    ABDG is (8, 8) = [[A,B,0],[B,D,0],[0,0,G]] (e.g. rm_plate_msg's r["ABDG"]).
+    """
+    ABDG = np.asarray(ABDG, float)
+    if ABDG.shape != (8, 8):
+        raise ValueError("ABDG must be 8x8, got %s" % (ABDG.shape,))
+    AB = ABDG[:6, :6]
+    G2 = ABDG[6:, 6:]
+    # 21 constants, Abaqus *SHELL GENERAL SECTION order: lower triangle by columns
+    tri = [AB[i, j] for j in range(6) for i in range(j + 1)]
+    section = ["** ---- the MSG-RM section: [[A,B],[B,D]] 21 constants + the 2x2 shear G ----",
+               "*SHELL GENERAL SECTION, ELSET=EALL"]
+    section += _fmt_data_lines(tri)
+    section += ["*TRANSVERSE SHEAR STIFFNESS",
+                "%.6e, %.6e, %.6e" % (G2[0, 0], G2[1, 1], G2[0, 1])]
+    hdr = list(header_lines) + [
+        "D11 = %.6e ; G11 = %.6e ; G22 = %.6e" % (AB[3, 3], G2[0, 0], G2[1, 1])]
+    return _strip_inp(path, "Cylindrical-bending strip, MSG-RM 8x8 general shell section",
+                      hdr, [], section, a, q0, nel)
+
+
+def write_plate_strip_inp_fsdt(path, thick, angles_deg, mat_names, material_db,
+                               a=1.0, q0=1.0e4, nel=100, header_lines=()):
+    """The COMMUNITY-FSDT route: ply-by-ply composite section, Abaqus does the rest.
+
+    Materials go in as *ELASTIC, TYPE=LAMINA (E1, E2, nu12, G12, G13, G23) and the
+    stack as *SHELL SECTION, COMPOSITE (one line per ply: thickness, integration
+    points, material, angle).  Abaqus assembles A/B/D by classical lamination theory
+    and computes its OWN transverse-shear stiffness estimate from the layup -- the
+    standard practitioner's FSDT shell model, with no MSG content anywhere.
+    """
+    used = list(dict.fromkeys(mat_names))
+    mat_lines = ["** ---- ply materials (lamina) ----"]
+    for m in used:
+        E = material_db[m]["E"]; G = material_db[m]["G"]; nu = material_db[m]["nu"]
+        mat_lines += ["*MATERIAL, NAME=%s" % m.upper(),
+                      "*ELASTIC, TYPE=LAMINA",
+                      "%.6e, %.6e, %.6g, %.6e, %.6e, %.6e"
+                      % (E[0], E[1], nu[0], G[0], G[1], G[2])]
+    section = ["** ---- community FSDT: the ply stack; Abaqus builds ABD + shear ----",
+               "*SHELL SECTION, ELSET=EALL, COMPOSITE"]
+    for t, ang, m in zip(thick, angles_deg, mat_names):
+        section.append("%.8e, 3, %s, %g" % (t, m.upper(), ang))
+    return _strip_inp(path, "Cylindrical-bending strip, community FSDT composite section",
+                      list(header_lines), mat_lines, section, a, q0, nel)

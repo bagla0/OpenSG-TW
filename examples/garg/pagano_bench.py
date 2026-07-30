@@ -150,12 +150,20 @@ def run_case(case, S, tag):
     fig.savefig(os.path.join(outdir, "pagano_S%g.png" % S), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    return dict(case=case, S=S, e11=e11, e13=e13, e13f=e13f, e33=e33)
+    return dict(case=case, S=S, e11=e11, e13=e13, e13f=e13f, e33=e33,
+                ABDG=np.asarray(r["ABDG"]))
 
 
 def run_benchmark(case, S_list, tag):
     print("%s (benchmark %s): stations x=a/2 and x=0, mid-surface reference" % (case, tag))
+    out8 = ["RM 8x8 ABDG for %s (mid-surface reference; rows e11,e22,g12,k11,k22,"
+            "k12,2g13,2g23)" % case]
     for S in S_list:
         m = run_case(case, S, tag)
         print("  S = %-4g  s11 %7.3f%%   s13 %7.3f%% (FSDT %7.2f%%)   s33 %7.3f%%"
               % (S, m["e11"], m["e13"], m["e13f"], m["e33"]))
+        out8.append("")
+        out8.append("S = a/h = %g  (h = %g m):" % (S, a / S))
+        out8 += ["  " + " ".join("%14.6e" % v for v in row) for row in m["ABDG"]]
+    with open(os.path.join(HERE, case, "rm_8x8.out"), "w") as f:
+        f.write("\n".join(out8) + "\n")
