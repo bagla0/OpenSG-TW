@@ -19,8 +19,14 @@ Mesh convention (identical to what ``msg_rm_plate`` builds internally, asserted 
   * ``n_per_layer = 1`` by default -> one element per ply
   * nodes are equispaced inside each element, elements share their end nodes, so
     n_node = elem_order * n_elem + 1
-  * x3 is measured from the REFERENCE PLANE set by ``fraction`` (0 = bottom/OML face,
-    0.5 = mid-surface, 1 = top/IML), so the nodes run from -fraction*h to (1-fraction)*h
+  * THE REFERENCE PLANE IS A PROPERTY OF THE MESH, not of the homogenization call.
+    ``fraction`` is given ONCE here, at generation (0 = bottom/OML face, 0.5 =
+    mid-surface, 1 = top/IML), and from then on it IS the node coordinates: x3 is
+    measured from that plane, so the nodes run from -fraction*h to (1-fraction)*h and
+    x3 = 0 is the reference.  A reader can therefore recover the reference from the
+    coordinates alone; ``read_plate_sg_yaml`` does exactly that (it prefers the stored
+    ``reference_fraction`` for bit-exactness but verifies it against node_x[0], so a
+    file whose header and mesh disagree is rejected rather than silently trusted).
 
 YAML layout::
 
@@ -208,7 +214,7 @@ def plot_plate_sg(path, png_path=None):
 
     ax.set_xlim(-0.02, 0.02)
     ax.set_xticks([])
-    ax.set_ylabel("$x_3$  [m]", fontsize=11)
+
     ax.spines[["top", "right", "bottom"]].set_visible(False)
     handles, labels = ax.get_legend_handles_labels()
     order = list(range(1, len(labels))) + [0]         # subdomains first, nodes last
