@@ -167,3 +167,91 @@ def read_plate_sg_yaml(path, atol=1e-9):
     return {"thick": thick, "angles": angles, "mat_names": mat_names,
             "material_db": material_db, "n_per_layer": counts[0],
             "elem_order": len(elements[0]) - 1, "fraction": frac, "node_x": node_x}
+
+
+def plot_plate_sg(path, png_path=None):
+    """Render the ACTUAL mesh in a plate 1-D SG YAML (nodes and connectivity read from
+    the file, never a sketch).  Left: the through-thickness discretisation, plies as
+    material-coloured bands with every node marked.  Right: the ply material frames,
+    e1 (fibre) red, e2 blue, e3 black -- e3 is out of plane, drawn as a circled dot.
+
+    Returns the PNG path (default: the YAML path with a .png suffix).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    with open(path, "r") as f:
+        doc = yaml.safe_load(f)
+    sg = read_plate_sg_yaml(path)
+    node_x = sg["node_x"]
+    elements = [[int(v) - 1 for v in el] for el in doc["elements"]]
+    png_path = png_path or (os.path.splitext(path)[0] + ".png")
+
+    h = float(sum(sg["thick"]))
+    bot = np.concatenate([[0.0], np.cumsum(sg["thick"])]) - sg["fraction"] * h
+    mats = list(dict.fromkeys(sg["mat_names"]))
+    cmap = plt.get_cmap("tab10")
+    colr = {m: cmap(i % 10) for i, m in enumerate(mats)}
+
+    fig, (axm, axo) = plt.subplots(1, 2, figsize=(9.5, 6.0),
+                                   gridspec_kw={"width_ratios": [1.25, 1.0]})
+
+    # ---------------- left: the mesh itself -------------------------------------
+    for k in range(len(sg["thick"])):
+        axm.add_patch(Rectangle((0.0, bot[k]), 1.0, bot[k + 1] - bot[k],
+                                facecolor=colr[sg["mat_names"][k]], alpha=0.30,
+                                edgecolor="none"))
+        axm.axhline(bot[k + 1], color="0.45", lw=0.9)          # ply interface
+        axm.text(0.04, 0.5 * (bot[k] + bot[k + 1]),
+                 "ply %d: %s\n%.1f mm / %g$^\\circ$"
+                 % (k + 1, sg["mat_names"][k], 1e3 * sg["thick"][k], sg["angles"][k]),
+                 va="center", ha="left", fontsize=9)
+    axm.axhline(bot[0], color="0.45", lw=0.9)
+    for e, el in enumerate(elements):                      # element spans + end nodes
+        axm.plot([0.5, 0.5], [node_x[el[0]], node_x[el[-1]]], "-", color="0.35", lw=1.4)
+        for nd in (el[0], el[-1]):
+            axm.plot(0.5, node_x[nd], "o", ms=7, mfc="w", mec="k", mew=1.4, zorder=3)
+    interior = sorted(set(range(len(node_x))) - {el[0] for el in elements}
+                      - {el[-1] for el in elements})
+    axm.plot([0.5] * len(interior), node_x[interior], "o", ms=4.5, color="k", zorder=3,
+             label="interior nodes")
+    axm.plot([], [], "o", ms=7, mfc="w", mec="k", mew=1.4, label="element end nodes")
+    axm.axhline(0.0, ls="--", lw=1.1, color="crimson")
+    axm.text(0.02, 0.0, "reference plane (fraction = %.2f)" % sg["fraction"],
+             color="crimson", fontsize=8.5, va="bottom")
+    axm.set_xlim(0.0, 1.0); axm.set_ylim(bot[0] - 0.06 * h, bot[-1] + 0.06 * h)
+    axm.set_xticks([]); axm.set_ylabel("$x_3$  [m]", fontsize=11)
+    axm.legend(fontsize=8.5, loc="lower left", frameon=False)
+    axm.set_frame_on(False)
+
+    # ---------------- right: the ply material frames ----------------------------
+    # arrows sized to the THINNEST ply so every frame stays inside its own band
+    L = 0.35 * min(sg["thick"])
+    for k in range(len(sg["thick"])):
+        yc = 0.5 * (bot[k] + bot[k + 1])
+        th = np.deg2rad(sg["angles"][k])
+        axo.add_patch(Rectangle((-0.45 * h, bot[k]), 0.9 * h, bot[k + 1] - bot[k],
+                                facecolor=colr[sg["mat_names"][k]], alpha=0.18,
+                                edgecolor="none"))
+        axo.annotate("", xy=(L * np.cos(th), yc + L * np.sin(th)), xytext=(0, yc),
+                     arrowprops=dict(arrowstyle="->", color="crimson", lw=1.8))
+        axo.annotate("", xy=(-L * np.sin(th), yc + L * np.cos(th)), xytext=(0, yc),
+                     arrowprops=dict(arrowstyle="->", color="tab:blue", lw=1.6))
+        axo.plot(0, yc, "o", ms=9, mfc="w", mec="k", mew=1.5, zorder=3)
+        axo.plot(0, yc, ".", ms=3, color="k", zorder=4)
+        axo.axhline(bot[k + 1], color="0.45", lw=0.9)
+    axo.axhline(bot[0], color="0.45", lw=0.9)
+    axo.plot([], [], "-", color="crimson", lw=1.8, label="$e_1$ (fibre)")
+    axo.plot([], [], "-", color="tab:blue", lw=1.6, label="$e_2$")
+    axo.plot([], [], "o", ms=9, mfc="w", mec="k", mew=1.5, label="$e_3$ (out of plane)")
+    axo.set_xlim(-0.45 * h, 0.45 * h); axo.set_ylim(bot[0] - 0.06 * h, bot[-1] + 0.06 * h)
+    axo.set_xticks([]); axo.set_yticks([])
+    axo.legend(fontsize=8.5, loc="lower left", frameon=False)
+    axo.set_frame_on(False)
+
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return png_path

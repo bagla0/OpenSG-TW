@@ -1,4 +1,4 @@
-1-D SG : examples/data/1d_yaml/plate_sym45_sg.yaml
+1-D SG : examples/data/plate_sg/plate_sym45_sg.yaml
 plies  : gr(2.0mm/45), gr(3.0mm/-45), gr(3.0mm/-45), gr(2.0mm/45)   (h = 0.0100 m, reference fraction = 0.50)
 
 HOMOGENIZATION -- RM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]] (rows 1-6: e11,e22,g12,k11,k22,k12; rows 7-8: 2g13,2g23):

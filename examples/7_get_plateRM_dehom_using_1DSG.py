@@ -39,7 +39,7 @@ from opensg_jax.fe_jax.msg_materials import rotation_6x6
 
 FLBL = ["N11", "N22", "N12", "M11", "M22", "M12", "Q1", "Q2"]
 ELBL = ["e11", "e22", "g12", "k11", "k22", "k12", "2g13", "2g23"]
-DEFAULT_YAML = os.path.join(CC, "examples", "data", "1d_yaml", "plate_sym45_sg.yaml")
+DEFAULT_YAML = os.path.join(CC, "examples", "data", "plate_sg", "plate_sym45_sg.yaml")
 
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)

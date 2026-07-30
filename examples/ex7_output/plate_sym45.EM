@@ -1,4 +1,4 @@
-# MSG-RM second-order dehomogenization | 1-D SG examples/data/1d_yaml/plate_sym45_sg.yaml
+# MSG-RM second-order dehomogenization | 1-D SG examples/data/plate_sg/plate_sym45_sg.yaml
 # FF = [   0.    0.    0. 1000.    0.    0. 1000.    0.]
 # LOCAL MATERIAL FRAME (ply angle about x3) | rows at SG element Gauss points
 # x3  e11 e22 e33 2e23 2e13 2e12  [-]

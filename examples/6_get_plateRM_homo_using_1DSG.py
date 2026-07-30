@@ -6,8 +6,11 @@ the file, and homogenizes it with the core RM code (Yu, Hodges & Volovoi, Comput
 Structures 81, 2003, Sec. 4), which returns the full 8x8 RM plate law
 ABDG = [[A,B,0],[B,D,0],[0,0,G]] directly.
 
-The mesh YAML is generated from a layup dictionary by the ``segment_plate`` helper
-(``plate_sg_yaml(path, layup, material_db)``) -- already done for the shipped file.
+The mesh YAML is generated from a LAYUP DICTIONARY by the ``segment_plate`` helper
+(``plate_sg_yaml(path, layup, material_db)``, and ``plot_plate_sg`` for the companion
+mesh PNG) -- already done for the shipped file.  A plate SG is always built from a layup:
+it is the wall discretised through its thickness, never a cross-section contour, so no
+airfoil or other geometry is involved anywhere in this example.
 
 Run:
     python examples/6_get_plateRM_homo_using_1DSG.py
@@ -25,7 +28,7 @@ np.set_printoptions(precision=4, linewidth=150)
 from opensg_jax.fe_jax.segment_plate import read_plate_sg_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
 
-YAML = os.path.join(CC, "examples", "data", "1d_yaml", "plate_sym45_sg.yaml")
+YAML = os.path.join(CC, "examples", "data", "plate_sg", "plate_sym45_sg.yaml")
 
 # ------------------------------------------ read the 1-D SG: layup + mesh + materials
 sg = read_plate_sg_yaml(YAML)
@@ -43,4 +46,3 @@ r = rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
 print("\nRM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]]"
       " (rows 1-6: e11,e22,g12,k11,k22,k12; rows 7-8: 2g13,2g23):")
 print(r["ABDG"])
-print("\nUstar_rel = %.3e  (unabsorbed second-order energy)" % r["Ustar_rel"])
