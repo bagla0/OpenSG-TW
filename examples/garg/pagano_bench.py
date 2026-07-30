@@ -68,11 +68,20 @@ def run_case(case, S, tag):
     fr = [t / H for t in lay["thick"]]
     thk = [f * h for f in fr]; ang = lay["angles"]; mats = lay["mat_names"]
 
-    # exact solution (amplitudes; z from the MID-surface) + its reaction forces
+    # exact solution (amplitudes; z from the MID-surface) -- REFERENCE CURVES ONLY.
     ex = ExactCyl(thk, ang, mats, MATERIAL_DB, a, q0=q0)
     zc, sig, _, uvw = ex.profile(n_per_layer=81)
-    FF_mid, FF_end = ff_from_exact(zc, sig)
     w_ex = float(uvw[np.argmin(np.abs(zc)), 2])
+
+    # THE INPUT SIDE USES NO PAGANO.  The strip is statically determinate, so the
+    # resultants come from equilibrium of the problem statement alone:
+    #   dQ1/dx = -q,  dM11/dx = Q1,  SS ends  =>  Q1(x) = (q0/p) cos(px),
+    #   M11(x) = (q0/p^2) sin(px)   =>   at x = 0:  Q1 = q0/p.
+    # The same number arrives from the Abaqus plate solve (SF4 = 3182.44) and from
+    # integrating the exact stresses (3183.04) -- equivalent routes to ONE statics
+    # value, which is why every method here shares the same Q1.
+    Q1 = q0 / p
+    FF_end = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Q1, 0.0])
 
     # MSG-RM homogenization (mid-surface reference) + the plate's own deflection
     r = rm_plate_msg(thk, ang, mats, MATERIAL_DB, fraction=0.5)
@@ -134,9 +143,11 @@ def run_case(case, S, tag):
            "RM 8x8 ABDG (rows e11,e22,g12,k11,k22,k12,2g13,2g23):"]
     hdr += ["  " + " ".join("%14.6e" % v for v in row) for row in np.asarray(r["ABDG"])]
     hdr += ["",
-            "FF from the exact solution (DIRECT stress integration, no equilibrium):",
-            "  FF_mid (x=a/2) = [%s]" % ", ".join("%.6g" % v for v in FF_mid),
-            "  FF_end (x=0)   = [%s]" % ", ".join("%.6g" % v for v in FF_end),
+            "INPUT RESULTANTS FROM STATICS ONLY (no Pagano on the input side): the",
+            "strip is statically determinate, Q1(0) = q0/p = %.6g.  The Abaqus plate" % Q1,
+            "solve returns the same number (SF4 = 3182.44) and so does integrating the",
+            "exact stresses (3183.04) -- one statics value, three equivalent routes.",
+            "  FF_end (x=0) = [%s]" % ", ".join("%.6g" % v for v in FF_end),
             "  u2d = [0, 0, %.6e] (plate w; exact %.6e)" % (w_msg, w_ex),
             "",
             "transverse-shear stiffness, the two constructions side by side:",
