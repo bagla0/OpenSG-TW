@@ -1,25 +1,23 @@
-"""Example 7 - MSG-RM plate HOMOGENIZATION + DEHOMOGENIZATION from a 1-D shell YAML,
-driven by a plate-strain vector given on the command line.
+"""Example 7 - MSG-RM plate homogenization + DEHOMOGENIZATION from a 1-D SG mesh YAML,
+with the load given as a plate-strain vector on the command line.
 
-Homogenization : core rm_plate_msg on the chosen wall laminate -> the 8x8 RM plate law
-                 ABDG = [[A,B,0],[B,D,0],[0,0,G]]  (Yu 2003 Eqs. 40 and 61).
-Dehomogenization: core msgrm_strain_at_depth -> the 3-D strain and stress through the
-                 wall for the applied plate strain, Eq. (63) with the in-plane gradients
-                 or Eq. (66) when the second gradients are also supplied.
+Reads the same through-thickness 1-D SG as example 6, collects the layup information,
+homogenizes with the core RM code (the 8x8 ABDG), then recovers the 3-D strain and
+stress through the wall for the applied plate strain: Eq. (63) with the in-plane
+gradients, or Eq. (66) when the second gradients are also supplied.
 
-The load is a UNIT PLATE STRAIN by default (unit kappa_11), passed as a 6-vector:
+The load is a UNIT PLATE STRAIN by default (unit kappa_11), passed as 6-vectors:
 
-    E    = [e11, e22, g12, k11, k22, k12]      the plate strains themselves
-    E,1  = dE/dx1  (same 6 components)         switches on the transverse shear s13/s23
-    E,2  = dE/dx2  (same 6 components)
-    E,11 / E,12 / E,22                         switch on the V2 sigma33 contribution
+    --E    = [e11, e22, g12, k11, k22, k12]    the plate strains themselves
+    --dE1  = dE/dx1  (same 6 components)       switches on the transverse shear s13/s23
+    --dE2  = dE/dx2
+    --dE11 / --dE12 / --dE22                   switch on the V2 sigma33 contribution
 
-Run (defaults: st15 YAML, first laminate, unit k11):
+Run:
     python examples/7_get_plateRM_dehom_using_1DSG.py
-    python examples/7_get_plateRM_dehom_using_1DSG.py --section layup_2 --E 1e-3 0 0 0 0 0
-    python examples/7_get_plateRM_dehom_using_1DSG.py --E 0 0 0 1 0 0 --dE1 0 0 0 0.5 0 0
-    python examples/7_get_plateRM_dehom_using_1DSG.py --list          # show the laminates
-    python examples/7_get_plateRM_dehom_using_1DSG.py --yaml my.yaml --out results.dat
+    python examples/7_get_plateRM_dehom_using_1DSG.py --E 1e-3 0 0 0 0 0
+    python examples/7_get_plateRM_dehom_using_1DSG.py --E 0 0 0 1 0 0 --dE1 0 0 0 20 0 0
+    python examples/7_get_plateRM_dehom_using_1DSG.py --yaml my_plate_sg.yaml --out r.dat
 """
 import argparse
 import os
@@ -32,21 +30,15 @@ for p in ("", "opensg_jax"):
     sys.path.insert(0, os.path.join(CC, p))
 np.set_printoptions(precision=4, linewidth=150)
 
-from opensg_jax.fe_jax.msg_mesh import load_yaml
+from opensg_jax.fe_jax.segment_plate import read_plate_sg_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
 
-LBL = ["e11", "e22", "g12", "k11", "k22", "k12"]
 SLBL = ["s11", "s22", "s33", "s23", "s13", "s12"]
-DEFAULT_YAML = os.path.join(CC, "examples", "data", "1d_yaml", "st15_shell.yaml")
+DEFAULT_YAML = os.path.join(CC, "examples", "data", "1d_yaml", "plate_sym45_sg.yaml")
 
-# --------------------------------------------------------------------- the arguments
 ap = argparse.ArgumentParser(description=__doc__,
                              formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument("--yaml", default=DEFAULT_YAML, help="1-D shell SG YAML")
-ap.add_argument("--section", default=None, help="elementSet name (default: the first)")
-ap.add_argument("--list", action="store_true", help="list the laminates and exit")
-ap.add_argument("--fraction", type=float, default=0.5,
-                help="reference plane: 0 = OML, 0.5 = center (default), 1 = IML")
+ap.add_argument("--yaml", default=DEFAULT_YAML, help="through-thickness plate 1-D SG YAML")
 ap.add_argument("--E", nargs=6, type=float, default=[0, 0, 0, 1, 0, 0],
                 metavar=("e11", "e22", "g12", "k11", "k22", "k12"),
                 help="plate strain vector (default: unit k11)")
@@ -59,51 +51,28 @@ ap.add_argument("--npts", type=int, default=9, help="sample points per ply")
 ap.add_argument("--out", default=None, help="also write the profile to this .dat")
 a = ap.parse_args()
 
-# ------------------------------------------------------------- read the 1-D SG YAML
-_, _, mdb, layup_db, elem_to_layup = load_yaml(a.yaml)
-names = list(layup_db)
-if a.list:
-    print("laminates in %s:" % os.path.relpath(a.yaml, CC))
-    for nm in names:
-        lay = layup_db[nm]
-        n_el = sum(1 for v in elem_to_layup.values() if v == nm)
-        print("  %-12s %d plies, h = %.4f m, %d elements : %s"
-              % (nm, len(lay["thick"]), sum(float(t) for t in lay["thick"]), n_el,
-                 ", ".join("%s(%.2fmm/%g)" % (m, 1e3 * float(t), float(x))
-                           for m, t, x in zip(lay["mat_names"], lay["thick"],
-                                              lay["angles"]))))
-    sys.exit(0)
-
-name = a.section or names[0]
-if name not in layup_db:
-    sys.exit("no laminate %r; available: %s" % (name, ", ".join(names)))
-lay = layup_db[name]
-thk = [float(t) for t in lay["thick"]]
-ang = [float(x) for x in lay["angles"]]
-mats = [str(m) for m in lay["mat_names"]]
-h = float(sum(thk))
-
 E6 = np.array(a.E, float)
 grads = {k: (np.zeros(6) if getattr(a, k) is None else np.array(getattr(a, k), float))
          for k in ("dE1", "dE2", "dE11", "dE12", "dE22")}
 second = any(np.any(grads[k]) for k in ("dE11", "dE12", "dE22"))
 
-# ------------------------------------------------------------------- HOMOGENIZATION
-r = rm_plate_msg(thk, ang, mats, mdb, fraction=a.fraction)
-if r["ABDG"] is None:
-    sys.exit("%s: fitted compliance not SPD (degenerate material?)" % name)
-P8 = r["ABDG"]
+# ------------------------------------------ read the 1-D SG: layup + mesh + materials
+sg = read_plate_sg_yaml(a.yaml)
+h = float(sum(sg["thick"]))
+print("1-D SG : %s" % os.path.relpath(a.yaml, CC))
+print("plies  : %s   (h = %.4f m, reference fraction = %.2f)"
+      % (", ".join("%s(%.1fmm/%g)" % (m, 1e3 * t, x)
+                   for m, t, x in zip(sg["mat_names"], sg["thick"], sg["angles"])),
+         h, sg["fraction"]))
 
-print("1-D SG      : %s" % os.path.relpath(a.yaml, CC))
-print("laminate    : %s  (%d plies, h = %.4f m, reference fraction = %.2f)"
-      % (name, len(thk), h, a.fraction))
-print("plies       : %s" % ", ".join("%s(%.2fmm/%g)" % (m, 1e3 * t, x)
-                                     for m, t, x in zip(mats, thk, ang)))
-print("\nHOMOGENIZATION -- RM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]]")
-print("  rows/cols 1-6: %s ; 7-8: 2g13, 2g23" % ", ".join(LBL))
-print(P8)
-print("  G_msg diag = [%.4e %.4e]   Ustar_rel = %.2e  (unabsorbed 2nd-order energy)"
-      % (r["G_msg"][0, 0], r["G_msg"][1, 1], r["Ustar_rel"]))
+# ------------------------------------------------------------- RM homogenization
+r = rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
+                 n_per_layer=sg["n_per_layer"], elem_order=sg["elem_order"],
+                 fraction=sg["fraction"])
+print("\nHOMOGENIZATION -- RM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]]"
+      " (rows 1-6: e11,e22,g12,k11,k22,k12; rows 7-8: 2g13,2g23):")
+print(r["ABDG"])
+print("  Ustar_rel = %.2e  (unabsorbed 2nd-order energy)" % r["Ustar_rel"])
 
 # ----------------------------------------------------------------- DEHOMOGENIZATION
 print("\nDEHOMOGENIZATION -- applied plate strain")
@@ -113,16 +82,16 @@ for k in ("dE1", "dE2", "dE11", "dE12", "dE22"):
         print("  %-5s = %s" % (k, np.array2string(grads[k], precision=4)))
 print("  order : %s (Eq. %s)" % (("SECOND, V2 active", "66") if second
                                  else ("first", "63")))
-N = np.asarray(P8[:6, :6]) @ E6
-print("  plate resultants A6 @ E = %s" % np.array2string(N, precision=4))
+print("  plate resultants ABDG[:6,:6] @ E = %s"
+      % np.array2string(r["ABDG"][:6, :6] @ E6, precision=4))
 
-# sample points: --npts per ply, mid-referenced by the same fraction as the homo
-bot = np.concatenate([[0.0], np.cumsum(thk)]) - a.fraction * h
+# sample points: --npts per ply, measured from the same reference plane as the homo
+bot = np.concatenate([[0.0], np.cumsum(sg["thick"])]) - sg["fraction"] * h
 zs, plies = [], []
-for k in range(len(thk)):
+for k in range(len(sg["thick"])):
     za, zb = bot[k], bot[k + 1]
-    zz = np.linspace(za + 1e-9 * (zb - za), zb - 1e-9 * (zb - za), a.npts)
-    zs.append(zz); plies.append(np.full(a.npts, k))
+    zs.append(np.linspace(za + 1e-9 * (zb - za), zb - 1e-9 * (zb - za), a.npts))
+    plies.append(np.full(a.npts, k))
 zs = np.concatenate(zs); plies = np.concatenate(plies)
 
 rows = []
@@ -137,31 +106,27 @@ print("\n  through-thickness profile (stress in MPa, strain dimensionless)")
 print("   %6s %3s | %s | %s" % ("z/h", "ply",
                                 " ".join("%10s" % ("eps_" + s[1:]) for s in SLBL),
                                 " ".join("%10s" % s for s in SLBL)))
-for i in range(0, len(rows), max(1, a.npts // 3)):
+for i in list(range(0, len(rows), max(1, a.npts // 3))) + [len(rows) - 1]:
     print("   %+6.3f %3d | %s | %s"
           % (rows[i, 0], plies[i],
              " ".join("%10.3e" % v for v in rows[i, 1:7]),
              " ".join("%10.3f" % v for v in rows[i, 7:])))
-print("   %+6.3f %3d | %s | %s"
-      % (rows[-1, 0], plies[-1],
-         " ".join("%10.3e" % v for v in rows[-1, 1:7]),
-         " ".join("%10.3f" % v for v in rows[-1, 7:])))
 
 imax = int(np.argmax(np.abs(rows[:, 7])))
 print("\n  peak |s11| = %.3f MPa at z/h = %+.3f (ply %d);  faces s13 = %.3e, %.3e MPa"
       % (abs(rows[imax, 7]), rows[imax, 0], plies[imax], rows[0, 11], rows[-1, 11]))
 
 if a.out:
-    hdr = ("MSG-RM homo+dehom | yaml %s | laminate %s | fraction %.2f\n"
+    hdr = ("MSG-RM homo+dehom | yaml %s\n"
            "E    = %s\ndE1  = %s\ndE2  = %s\ndE11 = %s\ndE12 = %s\ndE22 = %s\n"
            "8x8 ABDG (rows e11,e22,g12,k11,k22,k12,2g13,2g23):\n%s\n"
            "Ustar_rel = %.6e\n\nprofile columns:\n"
            "z/h  %s  %s [MPa]"
-           % (os.path.relpath(a.yaml, CC), name, a.fraction,
+           % (os.path.relpath(a.yaml, CC),
               np.array2string(E6), np.array2string(grads["dE1"]),
               np.array2string(grads["dE2"]), np.array2string(grads["dE11"]),
               np.array2string(grads["dE12"]), np.array2string(grads["dE22"]),
-              "\n".join("  " + " ".join("%14.6e" % v for v in row) for row in P8),
+              "\n".join("  " + " ".join("%14.6e" % v for v in row) for row in r["ABDG"]),
               r["Ustar_rel"],
               " ".join("eps_" + s[1:] for s in SLBL), " ".join(SLBL)))
     np.savetxt(a.out, rows, header=hdr, fmt="%14.6e")
