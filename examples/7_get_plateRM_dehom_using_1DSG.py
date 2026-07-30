@@ -9,14 +9,18 @@ FRAME of each ply:
 
     <base>.SM   6 stress components   [Pa]
     <base>.EM   6 strain components   [-]
-    <base>.U    3 recovered local (warping) displacements   [m]
+    <base>.U    3 recovered displacements  = u2d + warping   [m]   (Eq. 65)
     <base>.out  the terminal report of this run
 
 each row of .SM/.EM/.U:  x3  <components>   (x3 from the SG reference plane).
 All four land in ``examples/ex7_output/`` unless ``--base`` says otherwise.
 
+The homogenization report also prints inv(ABDG), the plate COMPLIANCE, so the strains
+for any resultant (or the resultants for any strain) can be read off directly.
+
 Run:
     python examples/7_get_plateRM_dehom_using_1DSG.py --FF 0 0 0 1e3 0 0 1e3 0
+    python examples/7_get_plateRM_dehom_using_1DSG.py --FF 0 0 0 1e3 0 0 1e3 0 --u2d 0 0 1e-3
     python examples/7_get_plateRM_dehom_using_1DSG.py --strain 0 0 0 0.96 -0.78 -0.1 8.5e-5 -4.3e-5
     python examples/7_get_plateRM_dehom_using_1DSG.py --yaml my_plate_sg.yaml --base out/my_case
 """
@@ -49,9 +53,14 @@ grp.add_argument("--FF", nargs=8, type=float, default=None, metavar=tuple(FLBL),
                  help="global plate stress resultants (default: M11 = 1e3, Q1 = 1e3)")
 grp.add_argument("--strain", nargs=8, type=float, default=None, metavar=tuple(ELBL),
                  help="global plate strains instead of resultants")
+ap.add_argument("--u2d", nargs=3, type=float, default=[0.0, 0.0, 0.0],
+                metavar=("u1", "u2", "u3"),
+                help="global plate displacement at the point; the .U file holds "
+                     "u2d + warping (default: 0 0 0, i.e. warping only)")
 ap.add_argument("--base", default=os.path.join(CC, "examples", "ex7_output", "plate_sym45"),
                 help="output basename for .SM/.EM/.U/.out (default: examples/ex7_output/)")
 a = ap.parse_args()
+u2d = np.array(a.u2d, float)
 
 # every reported line goes to the terminal AND into <base>.out
 report = []
@@ -64,11 +73,6 @@ def say(line=""):
 # ------------------------------------------ read the 1-D SG: layup + mesh + materials
 sg = read_plate_sg_yaml(a.yaml)
 h = float(sum(sg["thick"]))
-say("1-D SG : %s" % os.path.relpath(a.yaml, CC))
-say("plies  : %s   (h = %.4f m, reference fraction = %.2f)"
-    % (", ".join("%s(%.1fmm/%g)" % (m, 1e3 * t, x)
-                 for m, t, x in zip(sg["mat_names"], sg["thick"], sg["angles"])),
-       h, sg["fraction"]))
 
 # ------------------------------------------------------------- RM homogenization
 r = rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
@@ -77,7 +81,9 @@ r = rm_plate_msg(sg["thick"], sg["angles"], sg["mat_names"], sg["material_db"],
 say("\nHOMOGENIZATION -- RM 8x8 ABDG [[A,B,0],[B,D,0],[0,0,G]]"
     " (rows 1-6: e11,e22,g12,k11,k22,k12; rows 7-8: 2g13,2g23):")
 say(np.array2string(r["ABDG"]))
-say("  Ustar_rel = %.2e  (unabsorbed 2nd-order energy)" % r["Ustar_rel"])
+say("\nPLATE COMPLIANCE -- inv(ABDG)"
+    " (rows 1-6: N11,N22,N12,M11,M22,M12; rows 7-8: Q1,Q2):")
+say(np.array2string(np.linalg.inv(r["ABDG"])))
 
 # ------------------------- the 8x1 input: resultants OR strains, closed by the 8x8
 if a.strain is not None:
@@ -101,6 +107,8 @@ zero6 = np.zeros(6)
 say("\nDEHOMOGENIZATION -- computed using the second-order warping function")
 say("  given %s = %s" % (given, np.array2string(FF if given == "FF" else EG8,
                                                 precision=4)))
+say("  u2d    = %s   (global plate displacement added to the warping)"
+    % np.array2string(u2d, precision=4))
 
 # ------------------------------------------ recovery at the SG element GAUSS points
 p = sg["elem_order"]
@@ -124,7 +132,9 @@ for e in range(n_elem):
         E_m = R.T @ np.asarray(Gam)                   # eps_mat = R^T eps_glob (conjugate)
         c, s = np.cos(np.deg2rad(th)), np.sin(np.deg2rad(th))
         Q3 = np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
-        U_m = Q3 @ np.asarray(w)
+        # Eq. (65): the 3-D displacement is the global PLATE displacement plus the SG
+        # warping; u2d is the plate solution's contribution, supplied by the caller
+        U_m = Q3 @ (u2d + np.asarray(w))
         rows_S.append([ z] + list(S_m))
         rows_E.append([ z] + list(E_m))
         rows_U.append([z] + list(U_m))
