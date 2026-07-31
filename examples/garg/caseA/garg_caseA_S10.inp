@@ -4,8 +4,8 @@ Cylindrical-bending strip, MSG-RM 8x8 general shell section
 ** S = a/h = 10,  h = 0.1 m
 ** PREDICTED mid-span |w|: MSG closed form 9.438171e-05 m ; exact 3-D 9.316429e-05 m
 **   (check the .dat U3 at node NMID against these after the job)
-** span a = 1 m, q0 = 10000 Pa, 100 S4 elements; load q0*sin(pi*x/a) per element
 ** D11 = 2.014295e+06 ; G11 = 2.333725e+07 ; G22 = 2.528884e+07
+** span a = 1 m, q0 = 10000 Pa, 100 S4 elements; load q0*sin(pi*x/a) per element
 *NODE
 1, 0.00000000, 0.00000000, 0.0
 2, 0.00000000, 0.01000000, 0.0
