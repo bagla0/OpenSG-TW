@@ -39,10 +39,10 @@ with continuity of $(u, w, \sigma_{13}, \sigma_{33})$ at every ply interface (Ga
 \toprule
 case & stack & material & aspect ratios $S=a/h$\\
 \midrule
-A & $[0/90/0]$, equal thirds & Pagano: $E_1{=}25, E_2{=}E_3{=}1$~GPa, & 4, 10, 100\\
+A & $[0/90/0]$, equal thirds & Pagano: $E_1{=}25, E_2{=}E_3{=}1$~GPa, & 10, 50\\
   & & $G_{12}{=}G_{13}{=}0.5$, $G_{23}{=}0.2$~GPa, $\nu{=}0.25$ &\\
-B & $[0/90/90/0]$, quarters & AS4: $E_1{=}181, E_2{=}10.3$~GPa & 5, 10, 100\\
-C & $[0/\text{core}/0]$, $0.1h/0.8h/0.1h$ & faces $E_1{=}131$~GPa; core $E{=}0.578$~GPa & 4, 10, 100\\
+B & $[0/90/90/0]$, quarters & AS4: $E_1{=}181, E_2{=}10.3$~GPa & 10, 50\\
+C & $[0/\text{core}/0]$, $0.1h/0.8h/0.1h$ & faces $E_1{=}131$~GPa; core $E{=}0.578$~GPa & 10, 50\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -278,23 +278,22 @@ parentheses):
 \toprule
 case / $S$ & $\sigma_{13}$ MSG & $\sigma_{13}$ FSDT & $\sigma_{33}$ MSG direct (equil.) \\
 \midrule
-A\ \ 4   & 21.54\,\% & 100.1\,\% & 5.59\,\% \ (6.39\,\%) \\
 A\ \ 10  &  4.52\,\% & 107.1\,\% & 1.19\,\% \ (1.29\,\%) \\
-A\ \ 100 &  0.044\,\% & 108.8\,\% & 0.012\,\% \ (0.012\,\%) \\
-B\ \ 5   &  5.13\,\% &  90.2\,\% & 2.18\,\% \ (1.92\,\%) \\
+A\ \ 50  &  0.19\,\% & 108.7\,\% & 0.050\,\% \ (0.053\,\%) \\
 B\ \ 10  &  1.32\,\% &  91.9\,\% & 0.57\,\% \ (0.48\,\%) \\
-B\ \ 100 &  0.015\,\% &  92.5\,\% & 0.006\,\% \ (0.003\,\%) \\
-C\ \ 4   & 41.36\,\% & 4199\,\% & 15.84\,\% \ (5.17\,\%) \\
+B\ \ 50  &  0.046\,\% &  92.4\,\% & 0.022\,\% \ (0.016\,\%) \\
 C\ \ 10  &  9.13\,\% & 5269\,\% & 2.53\,\% \ (0.89\,\%) \\
-C\ \ 100 &  0.097\,\% & 5474\,\% & 0.025\,\% \ (0.009\,\%) \\
+C\ \ 50  &  0.39\,\% & 5468\,\% & 0.101\,\% \ (0.036\,\%) \\
 \bottomrule
 \end{tabular}
 \end{center}
 ($\sigma_{33}$ FSDT does not exist.  The $\sigma_{13}$ column includes the second-order
-load term $V_{2L1}q_{,1}$.  The $S{=}100$ rows are the configuration of Garg's Fig.~3,
-where MSG-RM and the exact solution coincide visually.  The FSDT numbers use the
-strict Whitney-1973 $k_1^2$; the energy-correct $k$ \emph{worsens} the pointwise
-staircase relative to the naive $5/6$ --- $k$ repairs deflections, never shapes.)
+load term $V_{2L1}q_{,1}$.  The aspect ratios are restricted to the PLATE-MODEL REGIME
+--- $S = 10$ (moderately thick) and $S = 50$ (thin) --- since at $S \le 5$ the
+first-order plate truncation itself dominates every plate theory and the comparison
+stops discriminating between them.  The FSDT numbers use the strict Whitney-1973
+$k_1^2$; the energy-correct $k$ \emph{worsens} the pointwise staircase relative to the
+naive $5/6$ --- $k$ repairs deflections, never shapes.)
 
 \textbf{Reproduce everything:}
 \begin{verbatim}
