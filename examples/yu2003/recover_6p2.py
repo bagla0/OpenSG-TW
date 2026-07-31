@@ -31,10 +31,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CC = os.path.dirname(os.path.dirname(HERE))
+# repo root = the first ancestor holding opensg_jax/; the garg pipeline is the
+# SIBLING folder (both hold in examples/ and in the RM_OpenSG_pagano copy)
+CC = HERE
+while not os.path.isdir(os.path.join(CC, "opensg_jax")):
+    _up = os.path.dirname(CC)
+    if _up == CC:
+        raise RuntimeError("opensg_jax repo root not found above " + __file__)
+    CC = _up
 sys.path.insert(0, CC)
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(CC, "examples", "garg"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "garg"))
 
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth  # noqa: E402
 from pagano_exact import ExactCyl                                     # noqa: E402
@@ -96,7 +103,7 @@ def read_elprint_tables(dat_path):
             continue
         toks = ln.split()
         if elset and not labels and toks and any(
-                re.fullmatch(r"(S|SF|SM|TSHR|E)\d+", t) for t in toks):
+                re.fullmatch(r"(S|SF|SM|TSHR|E|SE|COOR)\d+", t) for t in toks):
             labels = [t for t in toks if re.fullmatch(r"[A-Z]+\d+", t)]
             key = (elset, tuple(labels))
             tables.setdefault(key, [])

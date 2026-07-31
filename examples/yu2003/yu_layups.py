@@ -53,7 +53,14 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CC = os.path.dirname(os.path.dirname(HERE))
+# repo root = the first ancestor holding opensg_jax/ (location-robust: also
+# runs from the examples/RM_OpenSG_pagano copy)
+CC = HERE
+while not os.path.isdir(os.path.join(CC, "opensg_jax")):
+    _up = os.path.dirname(CC)
+    if _up == CC:
+        raise RuntimeError("opensg_jax repo root not found above " + __file__)
+    CC = _up
 sys.path.insert(0, CC)
 
 from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, plot_plate_sg

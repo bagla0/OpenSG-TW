@@ -36,8 +36,15 @@ import sys
 import numpy as np
 from scipy.linalg import expm
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))))
+# repo root = the first ancestor holding opensg_jax/ (location-robust: this
+# module also runs from the examples/RM_OpenSG_pagano copy)
+_CC = os.path.dirname(os.path.abspath(__file__))
+while not os.path.isdir(os.path.join(_CC, "opensg_jax")):
+    _up = os.path.dirname(_CC)
+    if _up == _CC:
+        raise RuntimeError("opensg_jax repo root not found above " + __file__)
+    _CC = _up
+sys.path.insert(0, _CC)
 from opensg_jax.fe_jax.msg_materials import rotated_stiffness_6x6     # noqa: E402
 
 

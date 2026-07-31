@@ -1,40 +1,42 @@
-# RM-OpenSG Pagano validation collection
+# RM-OpenSG Pagano validation — results archive
 
-The curated Pagano cylindrical-bending validation set of the OpenSG-RM plate
-chain (`opensg_jax/fe_jax/msg_rm_plate.py`): four laminate archetypes whose
-through-thickness stress recovery is benchmarked against the exact 3-D
-elasticity solution (state-space Pagano solver, `examples/garg/pagano_exact.py`)
-and, for the Yu cases, an Abaqus 3-D solid model.
+The curated Pagano cylindrical-bending validation RESULTS of the OpenSG-RM
+plate chain (`opensg_jax/fe_jax/msg_rm_plate.py`): four laminate archetypes
+benchmarked against the exact 3-D elasticity solution and (Yu cases) an Abaqus
+3-D solid model.
 
-This folder is SELF-CONTAINED — the MAIN home of the Pagano validation work:
+**This folder holds DATA ONLY.** All runnable code lives in the original
+pipeline folders and regenerates everything here:
 
-- `garg/` and `yu2003/` are complete copies of the original pipeline folders
-  (exact solver `garg/pagano_exact.py`, statics/FSDT chain, benchmark
-  orchestrators, Abaqus deck generators, all case subfolders and drivers) —
-  everything RUNS from here, e.g.
-  `python examples/RM_OpenSG_pagano/garg/caseA/7_helper_RM_Pagano_benchmark1.py`
-- `garg_caseA/`, `garg_caseC/`, `yu2003_case1/`, `yu2003_case2/` are the
-  CURATED four-case highlight set (data snapshots picked for the paper story;
-  the driver scripts inside them are provenance copies that run from the
-  pipeline folders above).
+```bash
+python examples/garg/caseA/7_helper_RM_Pagano_benchmark1.py      # garg_caseA
+python examples/garg/caseC/7_helper_RM_Pagano_benchmark3.py      # garg_caseC
+python examples/yu2003/case1/7_helper_RM_Pagano_yu2003_case1.py  # yu2003_case1
+python examples/yu2003/case2/7_helper_RM_Pagano_yu2003_case2.py  # yu2003_case2
+python examples/yu2003/recover_6p2.py     # the Abaqus-driven 6.2 comparison
+```
+
+Method chain (strict separation — no Pagano content in the model inputs):
+exact 3-D reference = `examples/garg/pagano_exact.py` (state-space solver);
+MSG-RM = statics / harmonic-solve FF → 8×8 inversion → Yu-2003 Eq.-63 recovery
+→ σ₃₃ by thickness equilibrium; FSDT baseline = Whitney-1973 Eq.-(7) k₁²
+staircase (`examples/garg/statics_fsdt.py`).
 
 ## The four cases and why these
 
 | folder | layup (bottom→top) | problem | unique demonstration |
 |---|---|---|---|
 | `garg_caseA` | [0/90/0], Pagano 25:1 graphite/epoxy, equal thirds | top-loaded strip, S = a/h ∈ {4, 10, 50} | THE canonical Pagano-1969 benchmark; thickness convergence of the recovery |
-| `garg_caseC` | [0/core/0] sandwich (faces 0.1h, soft core 0.8h) | same, S ∈ {4, 10, 50} | the FSDT-collapse case: constitutive-staircase errors 4200–5470 % while MSG-RM stays clean |
-| `yu2003_case1` | [15/−15] antisymmetric angle ply | Yu-2003 sec. 6.1: L/h = 4, split face load ±p₀/2, psi units | B₁₆ extension–twist coupling; nonzero σ₂₃ recovered (impossible for cross-ply sets) |
-| `yu2003_case2` | [30/−30/−30/30] symmetric angle ply | same | D₁₆ bending–twist coupling: the strongest σ₂₃ (~0.52 p₀) with M₁₂/Q₂ supplied by the 8×8 |
+| `garg_caseC` | [0/core/0] sandwich (faces 0.1h, soft core 0.8h) | same, S ∈ {4, 10, 50} | the FSDT-collapse case: staircase errors 4200–5470 % while MSG-RM stays clean |
+| `yu2003_case1` | [15/−15] antisymmetric angle ply | Yu-2003 sec. 6.1: L/h = 4, split face load ±p₀/2, psi units | B₁₆ extension–twist coupling; nonzero σ₂₃ recovered |
+| `yu2003_case2` | [30/−30/−30/30] symmetric angle ply | same | D₁₆ bending–twist coupling: the strongest σ₂₃ (~0.52 p₀), M₁₂/Q₂ from the 8×8 |
 
-Not included by choice: garg caseB [0/90/90/0] repeats caseA's cross-ply
-physics with milder contrast; yu2003 case3 [0.5/90.5/90.5/0.5] is a
-near-duplicate of caseA (Yu perturbed the angles only for Sutyrin's code) with
-a σ₂₃ too small to plot meaningfully.
+Left out by choice: garg caseB (repeats caseA's cross-ply physics, milder
+contrast) and yu2003 case3 (near-duplicate of caseA; σ₂₃ too small to plot).
 
 ## Headline numbers (rel. L2 vs exact 3-D)
 
-garg cases (σ₁₃ at x = 0 / σ₃₃ at x = a/2; FSDT = Whitney-1973 k₁² staircase):
+garg cases (σ₁₃ at x = 0 / σ₃₃ at x = a/2):
 
 | case | S = 4 | S = 10 | S = 50 | FSDT σ₁₃ |
 |---|---|---|---|---|
@@ -43,45 +45,48 @@ garg cases (σ₁₃ at x = 0 / σ₃₃ at x = a/2; FSDT = Whitney-1973 k₁² 
 | caseC σ₁₃ | 41.55 % | 9.17 % | 0.39 % | 4199–5468 % |
 | caseC σ₃₃ | 4.76 % | 0.82 % | 0.03 % | — |
 
-yu2003 cases at L/h = 4 (deliberately thick; first-order Eq.-63 recovery, σ₃₃
-by thickness equilibrium from the loaded bottom face):
+yu2003 cases at L/h = 4 (first-order recovery, deliberately thick):
 
 | case | σ₁₃ | σ₂₃ | σ₃₃ | Abaqus-FF chain vs 3-D solid |
 |---|---|---|---|---|
 | case1 | 3.55 % | 5.54 % | 1.64 % | 3.57 / 5.38 / 1.88 % |
 | case2 | 9.64 % | 15.99 % | 4.59 % | 9.67 / 15.92 / 4.65 % |
 
-The `yu_case*_6p2.*` files are the sec.-6.2 analog: Abaqus in the DYMORE role
-(RM-shell section forces → FF → OpenSG-RM recovery), benchmarked against the
-width-tied C3D8I solid strip (solid-vs-exact credentials σ₁₃ 3.7 / 1.1 %,
-σ₃₃ ≤ 0.7 %).
+## File inventory
 
-## What each case folder holds
+### garg_caseA/  (and garg_caseC/ with C in place of A)
 
-- `*_sg.yaml` + `*_sg.png` — the through-thickness 1-D SG mesh and its figure
-- `pagano_S*.dat` / `yu_case*.dat` — full benchmark tables: the RM 8×8 ABDG,
-  the FF input and statics anchors, both shear-stiffness constructions,
-  Whitney k₁², error summary, and the pointwise profile columns
-- `pagano_S*.png` / `yu_case*.png` — the comparison figures
-- `rm_8x8.out` — the labeled 8×8 ABDG per aspect ratio
-- `*.inp` — the submit-ready Abaqus decks (MSG general-section, community-FSDT,
-  and for the Yu cases the 3-D solid benchmark strip)
-- `Abaqus_Plate/` — real Abaqus run artifacts: job `.dat` (Yu cases: RM, FSDT,
-  SOLID) or `.rpt` + example-7 dehomogenization outputs (garg caseA)
-- `garg_*.SM/.EM/.U/.out` — example-7 dehom outputs at the documented FF
-- `yu_case*_6p2.dat/.png` — the Abaqus-driven (sec.-6.2) recovery comparison
+| file | content |
+|---|---|
+| `garg_A_sg.yaml` | the through-thickness 1-D SG mesh (5-noded elements, ply sets, material db) the homogenization reads |
+| `garg_A_sg.png` | figure of that SG mesh (line elements colored per ply set) |
+| `pagano_S4.dat`, `pagano_S10.dat`, `pagano_S50.dat` | full benchmark table per aspect ratio: RM 8×8 ABDG, statics FF input, Whitney vs MSG shear stiffness, k₁², error summary, then columns z, σ₁₃ (MSG / exact / FSDT), σ₃₃ (MSG / exact) |
+| `pagano_S4.png`, `pagano_S10.png`, `pagano_S50.png` | the two-panel comparison figures (σ₁₃ at x = 0; σ₃₃ at x = a/2) |
+| `rm_8x8.out` | the labeled RM 8×8 ABDG at every aspect ratio (rows e11, e22, g12, k11, k22, k12, 2g13, 2g23) |
+| `garg_A.SM` / `.EM` / `.U` / `.out` | example-7 dehomogenization outputs at the documented FF: material-frame stress, strain, warping displacement, and the run report |
+| `garg_caseA_S10.inp` | Abaqus strip deck carrying the MSG-RM 8×8 as *SHELL GENERAL SECTION + MSG *TRANSVERSE SHEAR STIFFNESS |
+| `garg_caseA_S10_FSDT.inp`, `garg_caseA_S4_FSDT.inp` | the community-FSDT variants (*SHELL SECTION, COMPOSITE + lamina materials; Abaqus builds ABD + its own shear) |
+| `Abaqus_Plate/garg_caseA_S10.dat` | the REAL Abaqus 2024 job output of the MSG deck (validates deck + section: U3 0.013 % vs closed form, M11/Q1 on the statics anchors) |
+| `Abaqus_Plate/garg_caseA_S10.inp` | the exact deck that produced it |
+| `Abaqus_Plate/garg_caseA_S10_SF_SM.rpt`, `..._U.rpt` | section-force/moment and displacement reports extracted from the .odb (integration-point FF source) |
+| `Abaqus_Plate/dehom_mid.*`, `dehom_end.*` | example-7 dehomogenization driven by the Abaqus-extracted FF at the mid-span and end stations (.SM/.EM/.U/.out each) |
 
-## Regenerating
+(`garg_caseC/` has no `Abaqus_Plate/` — the caseA round trip is the deck
+validation for all cases.)
 
-```bash
-python examples/garg/caseA/7_helper_RM_Pagano_benchmark1.py
-python examples/garg/caseC/7_helper_RM_Pagano_benchmark3.py
-python examples/yu2003/case1/7_helper_RM_Pagano_yu2003_case1.py
-python examples/yu2003/case2/7_helper_RM_Pagano_yu2003_case2.py
-python examples/yu2003/recover_6p2.py            # needs the Abaqus job .dat files
-```
+### yu2003_case1/  (and yu2003_case2/ with 2 in place of 1)
 
-Method chain (strict separation, no Pagano content in the model inputs): exact
-3-D reference = `pagano_exact.py`; MSG-RM = statics/harmonic-solve FF → 8×8
-inversion → Yu-2003 Eq.-63 recovery → σ₃₃ by thickness equilibrium; FSDT =
-Whitney-1973 Eq.-(7) k₁² staircase (`statics_fsdt.py`).
+| file | content |
+|---|---|
+| `yu_1_sg.yaml`, `yu_1_sg.png` | the through-thickness 1-D SG mesh of the Yu laminate and its figure |
+| `yu_case1.dat` | the sec.-6.1 benchmark table: 8×8 ABDG, the harmonic RM cylindrical-bending solve (DOF amplitudes, resultants, statics checks, coupling M₁₂/Q₂), Whitney k₁², errors, then columns z, σ₁₃ (MSG / exact / FSDT), σ₂₃ (MSG / exact), σ₃₃ (MSG / exact) |
+| `yu_case1.png` | the three-panel sec.-6.1 figure (σ₁₃, σ₂₃ at x = 0; σ₃₃ at x = L/2), all σ/p₀ |
+| `rm_8x8.out` | the labeled RM 8×8 ABDG (L/h = 4) |
+| `yu_case1_RM.inp` | Abaqus S4 strip with the MSG 8×8 general section, width-tied (all 6 dofs — the infinite-plate condition), NO drilling BC (angle-ply lesson) |
+| `yu_case1_FSDT.inp` | the community-FSDT strip (TSHR13/23 requested — comes back zero for S4: no inbuilt through-thickness estimate exists) |
+| `yu_case1_SOLID.inp` | the 3-D C3D8I benchmark strip: width *EQUATION ties, per-ply *ORIENTATION, split ±p₀/2 face load, harmonic-consistent supports |
+| `Abaqus_Plate/yu_case1_RM.dat` | Abaqus job output of the RM deck — the FF source of the 6.2 chain (SF/SM at the x = 0 and x = L/2 stations) |
+| `Abaqus_Plate/yu_case1_FSDT.dat` | job output of the FSDT deck (documents the all-zero TSHR finding) |
+| `Abaqus_Plate/yu_case1_SOLID.dat` | job output of the solid benchmark (centroidal S along the two station columns; NOTE: printed in the PLY LOCAL frame — recover_6p2.py rotates back) |
+| `yu_case1_6p2.dat` | the sec.-6.2 comparison table: Abaqus FF amplitudes, exact-section anchors Q₁/M₁₁, recovery-vs-solid errors, solid-vs-exact credentials, recovery profile columns |
+| `yu_case1_6p2.png` | the three-panel 6.2 figure: exact Pagano vs OpenSG-RM recovery driven by the Abaqus FF |
