@@ -59,16 +59,25 @@ yu2003 cases at L/h = 4 (first-order recovery, deliberately thick):
 | case1 | 3.55 % | 5.54 % | 1.64 % | 3.57 / 5.38 / 1.88 % |
 | case2 | 9.64 % | 15.99 % | 4.59 % | 9.67 / 15.92 / 4.65 % |
 
-IN-PLANE stresses at x = a/2 (Eq.-66 second-order recovery, `inplane.*`) and
-3-D DISPLACEMENTS (Eq.-65, `disp_*.*`; u^2d fitted from the Abaqus RM-shell
-span row, fit residuals ≤ 2e-6):
+FULL-FIELD recovery — ALL six stresses and three displacements per case
+(`full_field.dat/.png`; u^2d from the Abaqus RM-shell jobs, fit residuals
+≤ 2e-6; the face LOAD ladders V1L/V2L reinstated per Yu Eqs. 29/45 make the
+recovered σ₃₃ faces machine-exact and supply the load-driven e₃₃ that σ₂₂
+needs — caseA σ₂₂ 30 % → 5.6 % with them):
 
-| case | σ₁₁ | σ₂₂ | σ₁₂ | U₁ | U₂ | U₃ |
-|---|---|---|---|---|---|---|
-| garg caseA (S = 10) | 2.05 % | 30.2 % | 0 (machine) | 1.42 % | 0 (machine) | 1.30 % |
-| garg caseC (S = 10) | 34.6 % | 161 % † | 0 (machine) | 0.97 % | 0 (machine) | 1.64 % |
-| yu case1 (L/h = 4) | 8.89 % | 10.33 % | 14.06 % | 9.20 % | 9.75 % | 4.46 % |
-| yu case2 (L/h = 4) | 15.22 % | 16.12 % | 18.52 % | 5.16 % | 8.17 % | 3.50 % |
+| case | σ₁₁ | σ₂₂ | σ₁₂ | σ₁₃ | σ₂₃ | σ₃₃ | U₁ | U₂ | U₃ |
+|---|---|---|---|---|---|---|---|---|---|
+| garg caseA (S = 10) | 2.00 | 5.60 | 0 (mach.) | 4.52 | 0 (mach.) | 1.29 | 1.48 | 0 (mach.) | 1.29 |
+| garg caseC (S = 10) | 32.3 † | 56.4 † | 0 (mach.) | 9.13 | 0 (mach.) | 0.88 | 1.29 | 0 (mach.) | 2.17 |
+| yu case1 (L/h = 4) | 8.69 | 8.25 | 14.01 | 4.42 | 5.52 | 3.99 | 6.56 | 9.75 | 4.46 |
+| yu case2 (L/h = 4) | 15.06 | 15.69 | 18.49 | 10.28 | 16.00 | 6.27 | 4.99 | 9.27 | 3.50 |
+
+(rel. L2 vs exact, %.  σ₃₃ plotted from the equilibrium integration; the
+DIRECT Eq.-66 σ₃₃ with the load columns has machine-exact face values and is
+recorded in each `full_field.dat`.  † the sandwich in-plane errors are REGIME,
+not defect: they collapse 32.3 → 5.4 → 1.35 % (σ₁₁) and 56.4 → 9.9 → 2.48 %
+(σ₂₂) over S = 10 → 25 → 50 — the soft-core expansion parameter is simply not
+small at S = 10, and FSDT/CLT is no better there.)
 
 σ₁₂ is COMPLETELY validated against Pagano (`sig12_sweep.dat/.png`, archive
 root): the cross-ply recovered σ₁₂ sits at the round-off floor

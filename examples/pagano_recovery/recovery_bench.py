@@ -86,27 +86,30 @@ CASES = {
                        split=False, outdir=os.path.join(EX, "garg", "caseA"),
                        abq=os.path.join(EX, "garg", "caseA", "Abaqus_Plate",
                                         "garg_caseA_S10.dat"),
-                       unit="Pa", ulab="m", norm=1.0,
+                       unit="Pa", ulab="m", norm=1.0, qt=1.0, qb=0.0,
                        label="garg caseA [0/90/0], S = a/h = 10"),
     "garg_caseC": dict(src="garg", key="caseC", S=10.0, a=1.0, q0=1.0e4,
                        split=False, outdir=os.path.join(EX, "garg", "caseC"),
                        abq=os.path.join(EX, "garg", "caseC", "Abaqus_Plate",
                                         "garg_caseC_S10.dat"),
-                       unit="Pa", ulab="m", norm=1.0,
+                       unit="Pa", ulab="m", norm=1.0, qt=1.0, qb=0.0,
                        label="garg caseC [0/core/0] sandwich, S = a/h = 10"),
     "yu2003_case1": dict(src="yu", key="case1", a=4.0, q0=1.0, split=True,
                          outdir=os.path.join(EX, "yu2003", "case1"),
                          abq=os.path.join(EX, "yu2003", "case1", "Abaqus_Plate",
                                           "yu_case1_RM.dat"),
-                         unit="$/p_0$", ulab="in", norm=1.0,
+                         unit="$/p_0$", ulab="in", norm=1.0, qt=0.5, qb=-0.5,
                          label="yu2003 case1 [15/-15], L/h = 4"),
     "yu2003_case2": dict(src="yu", key="case2", a=4.0, q0=1.0, split=True,
                          outdir=os.path.join(EX, "yu2003", "case2"),
                          abq=os.path.join(EX, "yu2003", "case2", "Abaqus_Plate",
                                           "yu_case2_RM.dat"),
-                         unit="$/p_0$", ulab="in", norm=1.0,
+                         unit="$/p_0$", ulab="in", norm=1.0, qt=0.5, qb=-0.5,
                          label="yu2003 case2 [30/-30/-30/30], L/h = 4"),
 }
+# qt / qb: the FACE-PRESSURE fractions of q0 (sigma_33 on the top / bottom
+# face) feeding the load ladders of the recovery -- garg is top-loaded,
+# the Yu cases carry the split s3 = b3 = p0/2 face load.
 
 
 def case_setup(name):
@@ -433,9 +436,15 @@ def run_inplane(name):
     z6 = np.zeros(6)
     E6 = Es_m
     dE11 = -p ** 2 * Es_m
+    # face-pressure LOAD ladders at the sin peak: q(x) = q_amp sin(px) ->
+    # [q, 0, 0, -p^2 q, 0, 0]; they carry the load-driven e33 content sigma_22
+    # needs (caseA sigma_22 30% -> 5.6% with them)
+    qt6 = np.array([1, 0, 0, -p ** 2, 0, 0]) * (cf["qt"] * cf["q0"])
+    qb6 = np.array([1, 0, 0, -p ** 2, 0, 0]) * (cf["qb"] * cf["q0"])
     s_msg = np.empty((len(zc), 3))
     for i, z in enumerate(zc):
-        S = msgrm_strain_at_depth(cf["r"], z, E6, z6, z6, dE11, z6, z6)[1]
+        S = msgrm_strain_at_depth(cf["r"], z, E6, z6, z6, dE11, z6, z6,
+                                  qt6=qt6, qb6=qb6)[1]
         s_msg[i] = [S[0], S[1], S[5]]
 
     A6c, G2c, Qlist, zpl, k1sq = clt_blocks(thk, cf["ang"], cf["mats"],
@@ -569,13 +578,20 @@ def run_disp(name, u2d="abaqus"):
     z6 = np.zeros(6)
     dE1 = p * Es
     dE11 = -p ** 2 * Es
+    # load ladders per station: gradients only at x = 0 (q ~ sin), full at a/2
+    qt_e = np.array([0, p, 0, 0, 0, 0]) * (cf["qt"] * cf["q0"])
+    qb_e = np.array([0, p, 0, 0, 0, 0]) * (cf["qb"] * cf["q0"])
+    qt_m = np.array([1, 0, 0, -p ** 2, 0, 0]) * (cf["qt"] * cf["q0"])
+    qb_m = np.array([1, 0, 0, -p ** 2, 0, 0]) * (cf["qb"] * cf["q0"])
     u1r = np.empty_like(zc); u2r = np.empty_like(zc); u3r = np.empty_like(zc)
     for i, z in enumerate(zc):
-        w0 = msgrm_warping_at_depth(cf["r"], z, z6, dE1, z6, z6, z6, z6)
-        wm = msgrm_warping_at_depth(cf["r"], z, Es, z6, z6, dE11, z6, z6)
+        w0 = msgrm_warping_at_depth(cf["r"], z, z6, dE1, z6, z6, z6, z6,
+                                    qt6=qt_e, qb6=qb_e)
+        wm = msgrm_warping_at_depth(cf["r"], z, Es, z6, z6, dE11, z6, z6,
+                                    qt6=qt_m, qb6=qb_m)
         u1r[i] = y[0] - z * p * y[2] + w0[0]      # Kirchhoff: -z w,1 = -z p W
         u2r[i] = y[1] + w0[1]                     # w,2 = 0 (d/dy = 0)
-        u3r[i] = y[2] + wm[2]
+        u3r[i] = y[2] + wm[2]                     # + the pressure-compression w3
 
     ze, _, _, uvw = cf["ex"].profile(n_per_layer=81)
     u1e = np.interp(zc, ze, uvw[:, 0])

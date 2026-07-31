@@ -167,6 +167,31 @@ def _bucket(nlay, n_per_layer, p):
         x_left = layer_bot[jlayer] + jsub * he - z_ref         # (n_elem,) element bottom x3
         Ck = C_layers[jlayer]                                  # (n_elem,6,6)
 
+        # nodal x3 grid (== _node_grid) + trapezoid weights for the TILT
+        # projection: w -> w - x3 <x3 w>/<x3^2> on the IN-PLANE components.
+        # Built here (not in _pack) so the V2 drivers below can use the SAME
+        # detilted columns the recovery uses -- the V2 natural BC then cancels
+        # the Gamma_l face traction of exactly the columns fed to Gamma_l,
+        # keeping the recovered face sigma_33 exact (see _detilt_inplane for
+        # the tilt rule itself).
+        offs_p = jnp.arange(p) / p
+        x_nodes = jnp.concatenate(
+            [(x_left[:, None] + he[:, None] * offs_p[None, :]).reshape(-1),
+             (x_left[-1] + he[-1])[None]])                     # (nnode,)
+        dx_n = x_nodes[1:] - x_nodes[:-1]
+        wtr_n = (jnp.zeros_like(x_nodes).at[:-1].add(0.5 * dx_n)
+                 .at[1:].add(0.5 * dx_n))
+        z2_mom = jnp.sum(wtr_n * x_nodes * x_nodes)
+
+        def detilt_cols(V_ns):
+            """Project the x3-linear content out of the in-plane components of a
+            warping column block (w3 keeps its tilt)."""
+            Vw = V_ns.reshape(len(x_nodes), 3, -1)
+            m1 = jnp.einsum("n,nak->ak", wtr_n * x_nodes, Vw)  # (3, ncols)
+            corr = x_nodes[:, None, None] * (m1 / z2_mom)[None, :, :]
+            corr = corr.at[:, 2, :].set(0.0)
+            return (Vw - corr).reshape(V_ns.shape)
+
         def elem_D_mats(he_e, xl_e, C_e):
             """Elemental Eq.-30 integrals (local 12x12 / 12x6 / 6x6 blocks; l = local dofs)."""
             D_hh_ll = jnp.zeros((3 * (p + 1), 3 * (p + 1)))
@@ -336,26 +361,59 @@ def _bucket(nlay, n_per_layer, p):
         c2_ks = jnp.zeros((3, 6)).at[:2].set(c2_is)
         V11bar_ns = V11_ns + jkernel_nk @ c1_ks                # V1bar columns (Eq. 58)
         V12bar_ns = V12_ns + jkernel_nk @ c2_ks
-        D21bar_ns = (D_hl1_nn - D_hl1_nn.T) @ V11bar_ns - D_l1l1_nn @ V0_ns
-        D22bar_ns = ((D_hl1_nn - D_hl1_nn.T) @ V12bar_ns + (D_hl2_nn - D_hl2_nn.T) @ V11bar_ns
+        # the DETILTED value-use variants -- and, crucially, the rung the V2
+        # drivers are built on: the V2 natural BC must cancel the Gamma_l face
+        # traction of the SAME columns the recovery feeds to Gamma_l, or the
+        # recovered face sigma_33 picks up an antisymmetric C13*tilt residual
+        # (observed as +-0.73 q0 on the caseA faces with mixed conventions)
+        V11barD_ns = detilt_cols(V11bar_ns)
+        V12barD_ns = detilt_cols(V12bar_ns)
+        D21bar_ns = (D_hl1_nn - D_hl1_nn.T) @ V11barD_ns - D_l1l1_nn @ V0_ns
+        D22bar_ns = ((D_hl1_nn - D_hl1_nn.T) @ V12barD_ns + (D_hl2_nn - D_hl2_nn.T) @ V11barD_ns
                      - (D_l1l2_nn + D_l1l2_nn.T) @ V0_ns)
-        D23bar_ns = (D_hl2_nn - D_hl2_nn.T) @ V12bar_ns - D_l2l2_nn @ V0_ns
+        D23bar_ns = (D_hl2_nn - D_hl2_nn.T) @ V12barD_ns - D_l2l2_nn @ V0_ns
         V2_n3s = solve_constrained(jnp.concatenate([D21bar_ns, D22bar_ns, D23bar_ns], axis=1))
         V21_ns = V2_n3s[:, :6]; V22_ns = V2_n3s[:, 6:12]; V23_ns = V2_n3s[:, 12:]  # Eq. (64)
 
-        # NOTE on the LOAD COLUMNS (Yu Eqs. 29/45): V1L (E V1L + L = H psi psi^T L, one
-        # more RHS on the same lu_piv) and the five V2L columns were prototyped and
-        # validated here (faces exact by construction, sigma33 1.19% at S=10 on the
-        # Pagano benchmark) and then removed by decision: the through-thickness
-        # equilibrium integration of the recovered sigma13 delivers sigma33 with equal
-        # or better accuracy for the pressure-loaded cases without extending the API,
-        # and for beam-resultant loading (this code's primary use) the load drivers
-        # vanish identically.  See git history (d1b52ac / 3e2f1d0) for the working
-        # implementation and examples/benchmarks history for its validation.
+        # ---- LOAD COLUMNS (Yu Eqs. 29/45/64): the pressure-driven warping ladder ----
+        # Reinstated (history: implemented+validated at d1b52ac, removed at b9d2658,
+        # brought back for the FULL-FIELD recovery: sigma33 DIRECT from the
+        # constitutive law, and the load-driven e33 content that sigma22 and the
+        # sandwich in-plane stresses need -- this is what VAPAS keeps).
+        # Load pattern: unit normal traction on a FACE (sigma33 = +1 there).  Virtual
+        # work <delta w . tau> on the face -> a single entry at that face node's w3
+        # dof (shape functions are 1 at their own node).  TWO columns, top and bottom,
+        # so split-face loads (Yu 2003 sec. 6.1: s3 = b3 = p0/2) compose linearly.
+        # First order (Eq.-45 load column, per unit local face pressure):
+        #     E V1L + L = H psi (psi^T L)   ->  more RHS on the same lu_piv.
+        # Second order (the V2L quintets, the Dbar2k collection with the load rung
+        # V1L in place of the eps-ladder rungs):
+        #     q,a  drivers:  (D_hla - D_hla^T) V1L ;  q,ab drivers: -D_lalb V1L.
+        # Signs: solve_constrained solves E V = -rhs with the load entering the
+        # energy as external work; the face checks (sigma33(top) = +qt and
+        # sigma33(bottom) = +qb, machine-exact) fix both signs empirically.
+        Lt_n = jnp.zeros(ndofs).at[ndofs - 1].set(-1.0)        # top-node w3 dof
+        Lb_n = jnp.zeros(ndofs).at[2].set(1.0)                 # bottom-node w3 dof
+        V1L_n2 = solve_constrained(jnp.stack([Lt_n, Lb_n], axis=1))
+        V1Lt_n = V1L_n2[:, 0]; V1Lb_n = V1L_n2[:, 1]
+
+        def v2l(V1L_n):
+            """The five second-order load columns of one face (q,1 q,2 q,11 q,12
+            q,22 drivers), Eq.-64 analog with V1L as the lower rung."""
+            return solve_constrained(jnp.stack(
+                [(D_hl1_nn - D_hl1_nn.T) @ V1L_n,
+                 (D_hl2_nn - D_hl2_nn.T) @ V1L_n,
+                 -D_l1l1_nn @ V1L_n,
+                 -(D_l1l2_nn + D_l1l2_nn.T) @ V1L_n,
+                 -D_l2l2_nn @ V1L_n], axis=1))
+
+        V2Lt_n5 = v2l(V1Lt_n)
+        V2Lb_n5 = v2l(V1Lb_n)
 
         # returned in the PAPER symbols (the public dict keys carry no dimension suffixes)
         return (A6_ss, G_gg, X_gg, H_tt, Ustar_rel, V0_ns, V11_ns, V12_ns, c1_is, c2_is,
-                ev_min, V11bar_ns, V12bar_ns, V21_ns, V22_ns, V23_ns)
+                ev_min, V11bar_ns, V12bar_ns, V11barD_ns, V12barD_ns,
+                V21_ns, V22_ns, V23_ns, V1Lt_n, V2Lt_n5, V1Lb_n, V2Lb_n5)
 
     bk = dict(nlay=nlay, n_per_layer=n_per_layer, p=p, n_elem=n_elem, ndofs=ndofs,
               elem_layer=elem_layer,
@@ -424,7 +482,8 @@ def _detilt_inplane(cols, node_x):
 
 def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer):
     (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min,
-     V11b, V12b, V21, V22, V23) = [np.asarray(o) for o in out]
+     V11b, V12b, V11bD, V12bD, V21, V22, V23,
+     V1Lt, V2Lt, V1Lb, V2Lb) = [np.asarray(o) for o in out]
     thick = [float(t) for t in thick]
     spd = float(ev_min) > 0
     # the full RM plate law, Eqs. (40) + (61):  ABDG = [[A6, 0], [0, G]]
@@ -440,9 +499,12 @@ def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer
             "V0": V0, "V11": V11, "V12": V12,
             "V11bar": V11b, "V12bar": V12b, "V21": V21, "V22": V22, "V23": V23,
             # detilted VALUE-use variants (Eq. 65 / the Gamma_l terms of Eq. 66;
-            # see _detilt_inplane for why the raw columns double-count z*phi)
-            "V11barD": _detilt_inplane(V11b, node_x),
-            "V12barD": _detilt_inplane(V12b, node_x),
+            # see _detilt_inplane for the tilt rule) -- computed INSIDE the
+            # kernel so the V2 drivers are built on the identical projection
+            "V11barD": V11bD, "V12barD": V12bD,
+            # the LOAD ladder, per face: V1L (ndofs,) per unit face pressure and
+            # V2L (ndofs, 5) for its (q,1 q,2 q,11 q,12 q,22) gradients
+            "V1Lt": V1Lt, "V2Lt": V2Lt, "V1Lb": V1Lb, "V2Lb": V2Lb,
             "node_x": node_x,
             "elem_layer": elem_layer, "C_layers": list(C_layers), "elem_order": p,
             "angles": [float(a) for a in angles_deg], "c1": c1, "c2": c2}
@@ -518,11 +580,18 @@ def _locate(obj, z):
     return e, xi, he, nodes_xi, dofs, 0.5 * (xl + xr) + 0.5 * he * xi
 
 
-def _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22):
+def _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22, qt6=None, qb6=None):
     """Eq. (58)+(64) local warping and the Gamma_l arguments of Eq. (66).
 
-    w_loc = V0 e + V1bar,a e,a + V2ab e,ab       (the S(V0 + V1bar + V2) content)
-    g_a   = (V0 e),a + (V1bar),a = V0 e,a + V11bar e,a1 + V12bar e,a2
+    w_loc = V0 e + V1bar,a e,a + V2ab e,ab + V1L q + V2L (q,a ; q,ab)
+    g_a   = (V0 e),a + (V1bar),a = V0 e,a + V11bar e,a1 + V12bar e,a2 + V1L q,a
+
+    qt6 / qb6 are the LOAD ladders of the top and bottom faces (Yu Eqs. 29/45):
+    each is [q, q,1, q,2, q,11, q,12, q,22] of the LOCAL face pressure
+    (sigma_33 = q on that face).  With them sigma_33 is recovered DIRECTLY from
+    the constitutive law (Yu's/VAPAS's route), and the load-driven e33 content
+    that sigma_22 and soft-core in-plane stresses need is present.  None (the
+    default) keeps the load-free behavior of every resultant-driven chain.
     Uses the RELAXED first-order columns V11bar/V12bar (paper Sec. 5: carry V1bar,
     not V1, into the recovery); in Gamma_h the constants drop out anyway, in the
     Gamma_l terms (second order) they are genuine contributors.
@@ -539,21 +608,33 @@ def _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22):
              + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12 + obj["V23"][dofs] @ dE22)
     g1 = obj["V0"][dofs] @ dE1 + obj["V11barD"][dofs] @ dE11 + obj["V12barD"][dofs] @ dE12
     g2 = obj["V0"][dofs] @ dE2 + obj["V11barD"][dofs] @ dE12 + obj["V12barD"][dofs] @ dE22
+    for q6, v1, v2 in ((qt6, "V1Lt", "V2Lt"), (qb6, "V1Lb", "V2Lb")):
+        if q6 is not None:
+            q6 = np.asarray(q6, float)
+            w_loc = (w_loc + obj[v1][dofs] * q6[0]
+                     + obj[v2][dofs] @ q6[1:])
+            g1 = g1 + obj[v1][dofs] * q6[1]
+            g2 = g2 + obj[v1][dofs] * q6[2]
     return w_loc, g1, g2
 
 
-def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None):
+def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None,
+                          qt6=None, qb6=None):
     """3-D Voigt strain at through-thickness x=z (same origin as node_x).
 
     With dE1/dE2 only: the FIRST-order recovery, Eq. (63).  Passing the second gradients
     dE11/dE12/dE22 (= E6,11 / E6,12 / E6,22) activates the SECOND-order recovery, Eq. (66):
-        Gam = Gamma_h S(V0+V1bar+V2) + Gamma_eps eps
-              + Gamma_l1 S(V0,1 + V1bar,1) + Gamma_l2 S(V0,2 + V1bar,2)
+        Gam = Gamma_h S(V0+V1bar+V2+V1L q+V2L) + Gamma_eps eps
+              + Gamma_l1 S(V0,1 + V1bar,1 + V1L q,1) + Gamma_l2 S(...,2)
     which is what carries the through-thickness components at their leading order.
-    For a SURFACE-PRESSURE-loaded plate, sigma33 is obtained by through-thickness
-    equilibrium integration of the recovered sigma13/sigma23 amplitudes (see the
-    load-column note in the homogenization kernel).  Returns (Gam6, Sig6,
-    ply_angle_deg)."""
+    qt6 / qb6 = the LOAD ladders [q, q,1, q,2, q,11, q,12, q,22] of the top and
+    bottom FACE pressures (sigma_33 = q on the face), Yu Eqs. 29/45: with them
+    sigma_33 comes DIRECTLY from the constitutive law with machine-exact face
+    values (Yu's/VAPAS's route) and sigma_22 gains its load-driven e33 content.
+    Left at None, sigma33 for a face-loaded plate is instead obtained by
+    through-thickness equilibrium integration of the recovered sigma_a3
+    amplitudes, and every resultant-driven chain is unchanged.  Returns
+    (Gam6, Sig6, ply_angle_deg)."""
     zeros = np.zeros(6)
     dE1 = zeros if dE1 is None else np.asarray(dE1, float)
     dE2 = zeros if dE2 is None else np.asarray(dE2, float)
@@ -564,17 +645,22 @@ def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, 
     Gamma_h = _plate_B(nodes_xi, xi, he)
     Gamma_l1, Gamma_l2 = _grad_ops(nodes_xi, xi)
     Gamma_eps = _E0 + x_q * _E1
-    w_loc, g1, g2 = _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22)
+    w_loc, g1, g2 = _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22,
+                                qt6=qt6, qb6=qb6)
     Gam = Gamma_h @ w_loc + Gamma_eps @ E6 + Gamma_l1 @ g1 + Gamma_l2 @ g2
     k = obj["elem_layer"][e]
     Sig = np.asarray(obj["C_layers"][k]) @ Gam
     return Gam, Sig, obj["angles"][k]
 
 
-def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None):
-    """The 3-D warping displacement S(V0 + V1bar + V2) at x=z -- the SG part of the
-    Eq. (65) displacement recovery (u_2d and the x3-rotation term are the plate
-    solution's contribution and are added by the caller).  Returns w (3,).
+def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None,
+                           qt6=None, qb6=None):
+    """The 3-D warping displacement S(V0 + V1bar + V2 + V1L q + V2L) at x=z -- the
+    SG part of the Eq. (65) displacement recovery (u_2d and the x3-rotation term
+    are the plate solution's contribution and are added by the caller).  qt6/qb6
+    are the face load ladders as in msgrm_strain_at_depth (the load warping is the
+    pressure-driven thickness compression the load-free field misses).
+    Returns w (3,).
 
     COMPOSITION RULE (settled by the controlled caseA sweep, S = 4..64): use
     the RAW columns here and compose with the KIRCHHOFF z-linear term,
@@ -593,6 +679,10 @@ def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None,
              + obj["V11bar"][dofs] @ dE1 + obj["V12bar"][dofs] @ dE2
              + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12
              + obj["V23"][dofs] @ dE22)
+    for q6, v1, v2 in ((qt6, "V1Lt", "V2Lt"), (qb6, "V1Lb", "V2Lb")):
+        if q6 is not None:
+            q6 = np.asarray(q6, float)
+            w_loc = w_loc + obj[v1][dofs] * q6[0] + obj[v2][dofs] @ q6[1:]
     N = _lagrange_N(nodes_xi, xi)
     w_nodes = w_loc.reshape(-1, 3)                    # (p+1, 3) nodal warping in the element
     return N @ w_nodes
