@@ -13,6 +13,24 @@ Submit manually (from a SPACE-FREE directory -- see the helper's gotcha note):
 Run:
     python examples/garg/make_abaqus_inp.py            # all three cases, S = 10
     python examples/garg/make_abaqus_inp.py --case caseC --S 4
+
+Script variables (no functions here -- straight-line deck generation)
+---------------------------------------------------------------------
+a_          parsed CLI arguments: a_.case (laminate family or None = all), a_.S
+            (aspect ratio a/h), a_.nel (span elements), a_.fsdt (deck flavour)
+q0, a, p    load amplitude [Pa], span [m], wavenumber pi/a [1/m]
+name, lay0  the LAYUPS key and its layup dict for the current case
+h           laminate thickness for this S: h = a/S [m]
+fr          per-ply thickness FRACTIONS of the family (thick_i / H)
+thk         per-ply thicknesses re-scaled to this h: fr_i * h [m]
+ang, mats   ply angles [deg] and material names of the case
+r           rm_plate_msg result dict; r["ABDG"] is the mid-surface 8x8
+D11, G11    bending and transverse-shear diagonals of the 8x8 (rows k11, 2g13)
+w_msg       closed-form plate mid-span deflection q0/(p^4 D11) + q0/(p^2 G11) [m]
+ex, zc, uvw exact solver instance and its profile (w_ex check value)
+w_ex        exact 3-D mid-surface deflection amplitude [m]
+hdr         header lines written into the .inp (case, S, both w predictions)
+out         the deck path examples/garg/case<X>/garg_<X>_S<S>[_FSDT].inp
 """
 import argparse
 import os
@@ -24,9 +42,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CC = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, CC)
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(CC, "examples", "TW-paper", "rm_thickness"))
 
-from exact_cyl import ExactCyl
+from pagano_exact import ExactCyl
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
 from opensg_jax.fe_jax.helper_inp_plate import (write_plate_strip_inp,
                                                 write_plate_strip_inp_fsdt)

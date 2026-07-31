@@ -75,13 +75,36 @@ from opensg_jax.fe_jax.msg_materials import rotated_stiffness_6x6     # noqa: E4
 
 
 def statics_resultants(q0, a, x):
-    """Q1(x) and M11(x) of section 1 above (statics only)."""
+    """Q1(x) and M11(x) of section 1 above (statics only, no material property).
+
+    Variables: q0 = load amplitude of q(x) = q0 sin(px) [Pa]; a = span [m];
+    x = station [m]; p = pi/a the wavenumber [1/m].  Returns
+    (Q1, M11) = ((q0/p) cos(px), (q0/p^2) sin(px)) [N/m, N].
+    """
     p = np.pi / a
     return (q0 / p) * np.cos(p * x), (q0 / p ** 2) * np.sin(p * x)
 
 
 def _ply_props(thick, angles_deg, mat_names, material_db, npts=200):
-    """Fine z-grid with the plane-stress reduced Qb11(z) and C55(z)."""
+    """Fine z-grid with the plane-stress reduced Qb11(z) and C55(z).
+
+    Variables
+    ---------
+    thick, angles_deg, mat_names, material_db
+                laminate definition (ply thicknesses [m], fibre angles [deg],
+                material names, and the {name: {E, G, nu}} database)
+    npts        sample points per ply on the returned grid
+    keep, drop  Voigt index sets of the plane-stress condensation: keep the
+                in-plane rows [11, 22, 12] = (0, 1, 5), condense out the
+                transverse rows [33, 23, 13] = (2, 3, 4)
+    bot         (nply+1,) ply interface heights measured from the MID-surface [m]
+    C           (6, 6) rotated ply stiffness (OpenSG Voigt order)
+    Q3          (3, 3) plane-stress reduced stiffness
+                Q = C_kk - C_kd C_dd^{-1} C_dk; its [0, 0] entry is Qb11
+    zz          the per-ply z-samples; z_all/Qb11/C55 the concatenated grids
+
+    Returns (z, Qb11(z), C55(z)) as flat arrays of length nply * npts.
+    """
     keep = np.array([0, 1, 5]); drop = np.array([2, 3, 4])
     z_all, Qb11, C55 = [], [], []
     bot = np.concatenate([[0.0], np.cumsum(thick)]) - 0.5 * float(np.sum(thick))
@@ -100,6 +123,27 @@ def _ply_props(thick, angles_deg, mat_names, material_db, npts=200):
 
 def whitney_k1sq(thick, angles_deg, mat_names, material_db):
     """Whitney Eq. (7), computed exactly as derived in the module docstring.
+
+    Variables
+    ---------
+    z, Qb11, C55    the fine grid from _ply_props (z from the mid-surface [m])
+    bot             ply interface heights from the mid-surface [m]
+    keepv, dropv    the same condensation index sets as in _ply_props
+    C, Q3, z1, z2   per-ply rotated stiffness, its plane-stress reduction, and the
+                    ply's bottom/top heights
+    A11, B11, D11   laminate moments int Qb11 (1, z, z^2) dz, accumulated with the
+                    EXACT closed-form per-ply integrals (Qb11 is ply-constant), not
+                    quadrature -- trapezoid on z^2 is not exact
+    D               the bending-gradient denominator A11 D11 - B11^2 of Eq. (3)
+    integrand       the Eq.-(3) stress gradient shape Qb11 (B11 - A11 z)/D; its
+                    SIGN is the one that makes int ghat dz = +1 (the flipped sign
+                    was a real bug: it integrated to -1)
+    ghat            the Eq.-(5) equilibrium shear shape: cumulative trapezoid of
+                    integrand from the free bottom face; checked ghat(top) = 0
+                    (machine) and int ghat dz = 1 (1e-4: trapezoid on a piecewise
+                    quadratic at npts = 200 per ply)
+    A55             int C55 dz [N/m]
+    k1sq            Eq. (7): 1 / (A55 int ghat^2 / C55 dz); homogeneous -> 5/6
 
     Returns (k1sq, A55, ghat_fn) where ghat_fn(z_query) evaluates the equilibrium
     shear shape (resultant 1) -- exposed so callers can inspect the Eq.-(5) shape.

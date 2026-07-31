@@ -51,8 +51,32 @@ def _fmt_data_lines(vals):
     return out
 
 
-def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, nel):
-    """The common strip model; the caller supplies the material + section blocks."""
+def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, nel,
+               coupled=False):
+    """The common strip model; the caller supplies the material + section blocks.
+
+    Variables
+    ---------
+    path            output .inp path
+    title           the *HEADING line
+    header_lines    ** comment lines recorded at the top of the deck
+    material_lines  the *MATERIAL block (empty for a general section)
+    section_lines   the shell-section block (general 8x8 or composite stack)
+    a, q0, nel      span [m], load amplitude [Pa], S4 elements along the span
+    coupled         BC mode.  False (default, the orthotropic cylindrical-bending
+                    set): u2 = ur1 = ur3 = 0 on ALL nodes -- exact when the layup
+                    has no extension/shear or bending/twist coupling.  True (the
+                    ANGLE-PLY set, e.g. the Yu-2003 laminates): shear coupling
+                    makes v(x) and the twist rotation NONZERO under cylindrical
+                    bending, so u2/ur1 must be left FREE; nothing varies across
+                    the one-element width (identical loads on both node rows), so
+                    y-uniformity holds without constraints and only the u2 rigid
+                    mode is pinned (node 1); drilling ur3 stays constrained.
+    p, b            wavenumber pi/a; element width (one square element)
+    nid(i, j)       node numbering: span index i (0..nel), width row j (0, 1)
+    L, A            the accumulated deck lines and the append shorthand
+    xc              per-element centroid x for the piecewise-constant sine load
+    """
     p = np.pi / a
     b = a / nel                                   # one square element across the width
     L = []
@@ -90,9 +114,13 @@ def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, 
     A("**")
     A("** ---- cylindrical bending + simple supports ----")
     A("*BOUNDARY")
-    A("NALL, 2, 2")                               # u2 = 0   (nothing varies with x2)
-    A("NALL, 4, 4")                               # ur1 = 0  (kappa22 = 0)
-    A("NALL, 6, 6")                               # ur3 = 0  (drilling)
+    if coupled:
+        A("1, 2, 2")                              # pin the u2 rigid mode only
+        A("NALL, 6, 6")                           # ur3 = 0  (drilling)
+    else:
+        A("NALL, 2, 2")                           # u2 = 0   (nothing varies with x2)
+        A("NALL, 4, 4")                           # ur1 = 0  (kappa22 = 0)
+        A("NALL, 6, 6")                           # ur3 = 0  (drilling)
     A("NX0, 3, 3")
     A("NXA, 3, 3")
     A("NX0, 1, 1")
@@ -120,10 +148,15 @@ def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, 
     return path
 
 
-def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=()):
+def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=(),
+                          coupled=False):
     """The MSG-RM route: the 8x8 plate law installed as a general shell section.
 
-    ABDG is (8, 8) = [[A,B,0],[B,D,0],[0,0,G]] (e.g. rm_plate_msg's r["ABDG"]).
+    Variables: ABDG = (8, 8) [[A,B,0],[B,D,0],[0,0,G]] (e.g. rm_plate_msg's
+    r["ABDG"]); AB/G2 = its 6x6 and 2x2 blocks; tri = the 21 general-section
+    constants (Abaqus order: lower triangle of [[A,B],[B,D]] BY COLUMNS); the
+    *TRANSVERSE SHEAR STIFFNESS line is (K11, K22, K12); coupled = the BC mode
+    passed through to _strip_inp (True for angle-ply laminates).
     """
     ABDG = np.asarray(ABDG, float)
     if ABDG.shape != (8, 8):
@@ -140,11 +173,12 @@ def write_plate_strip_inp(path, ABDG, a=1.0, q0=1.0e4, nel=100, header_lines=())
     hdr = list(header_lines) + [
         "D11 = %.6e ; G11 = %.6e ; G22 = %.6e" % (AB[3, 3], G2[0, 0], G2[1, 1])]
     return _strip_inp(path, "Cylindrical-bending strip, MSG-RM 8x8 general shell section",
-                      hdr, [], section, a, q0, nel)
+                      hdr, [], section, a, q0, nel, coupled=coupled)
 
 
 def write_plate_strip_inp_fsdt(path, thick, angles_deg, mat_names, material_db,
-                               a=1.0, q0=1.0e4, nel=100, header_lines=()):
+                               a=1.0, q0=1.0e4, nel=100, header_lines=(),
+                               coupled=False):
     """The COMMUNITY-FSDT route: ply-by-ply composite section, Abaqus does the rest.
 
     Materials go in as *ELASTIC, TYPE=LAMINA (E1, E2, nu12, G12, G13, G23) and the
@@ -152,6 +186,11 @@ def write_plate_strip_inp_fsdt(path, thick, angles_deg, mat_names, material_db,
     points, material, angle).  Abaqus assembles A/B/D by classical lamination theory
     and computes its OWN transverse-shear stiffness estimate from the layup -- the
     standard practitioner's FSDT shell model, with no MSG content anywhere.
+
+    Variables: used = the distinct material names (one *MATERIAL block each);
+    mat_lines/section = the lamina-material and composite-stack deck blocks (one
+    ply line = thickness, 3 section points, material, angle); coupled = the BC
+    mode passed through to _strip_inp (True for angle-ply laminates).
     """
     used = list(dict.fromkeys(mat_names))
     mat_lines = ["** ---- ply materials (lamina) ----"]
@@ -166,4 +205,5 @@ def write_plate_strip_inp_fsdt(path, thick, angles_deg, mat_names, material_db,
     for t, ang, m in zip(thick, angles_deg, mat_names):
         section.append("%.8e, 3, %s, %g" % (t, m.upper(), ang))
     return _strip_inp(path, "Cylindrical-bending strip, community FSDT composite section",
-                      list(header_lines), mat_lines, section, a, q0, nel)
+                      list(header_lines), mat_lines, section, a, q0, nel,
+                      coupled=coupled)

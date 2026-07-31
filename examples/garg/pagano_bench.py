@@ -43,8 +43,57 @@ p = np.pi / a
 
 
 def run_case(case, S, tag):
-    """One (layup, S) benchmark.  Writes pagano_S<S>.dat + pagano_S<S>.png into the
-    case folder and returns the error summary dict."""
+    """One (layup, S) benchmark: all three chains, the .dat, and the two-panel plot.
+
+    Variables
+    ---------
+    case, S, tag   LAYUPS key ("caseA"/"caseB"/"caseC"), aspect ratio a/h, and the
+                   benchmark number used only in the .dat header
+    outdir         the case subfolder examples/garg/<case>/ everything is written to
+    h              laminate thickness for this S: h = a/S [m]
+    lay, fr, thk   the layup dict; its ply thickness FRACTIONS (thick_i / H); the
+                   ply thicknesses re-scaled to this h (fr_i * h) [m]
+    ang, mats      ply angles [deg] and material names
+    zc, sig, uvw   chain 1 (reference ONLY): exact through-thickness grid from the
+                   mid-surface [m], stress amplitudes (n, 6) Voigt
+                   [11,22,33,23,13,12], displacement amplitudes (n, 3)
+    w_ex           exact mid-surface deflection amplitude w(a/2) [m]
+    Q1             the statics shear resultant at x = 0: q0/p [N/m] -- the ONLY
+                   load input the two plate chains receive
+    FF_end         (8,) plate force-resultant vector at x = 0 in the RM order
+                   [N11, N22, N12, M11, M22, M12, Q1, Q2]: pure shear there
+    r              chain 2: rm_plate_msg result dict (mid-surface, fraction = 0.5);
+                   r["ABDG"] the 8x8, r["A6"] its 6x6 in-plane/bending block,
+                   r["G_msg"] the Yu-2003 Eq.-61 least-squares 2x2 shear
+    D11, G11       bending / transverse-shear diagonals of the 8x8 (rows k11, 2g13)
+    w_msg          closed-form plate deflection q0/(p^4 D11) + q0/(p^2 G11) [m]
+    S6             inverse of the 6x6 block: strains from resultants
+    E6_end         (6,) mid-surface strain state at x = 0: S6 @ FF_end[:6]
+    dE1_end        (6,) x-gradient of that strain at x = 0: statics gives
+                   dM11/dx = Q1 there (and the harmonics kill everything else),
+                   so dE1 = S6 @ [0, 0, 0, Q1, 0, 0]
+    z6             (6,) zeros: the y-gradient (cylindrical bending, d/dy = 0)
+    s13_m          (n,) MSG-RM sigma_13 amplitude: Eq.-63 recovery at each zc
+                   (msgrm_strain_at_depth returns (strain, STRESS, angle); [1][4]
+                   is the sigma_13 slot of the Voigt stress)
+    s33_m          (n,) MSG-RM sigma_33 amplitude by through-thickness equilibrium:
+                   families s13 ~ cos(px), s33 ~ sin(px) turn
+                   sigma_33,3 = -sigma_13,1 into d(s33_hat)/dz = p * s13_hat,
+                   trapezoid-integrated from the free bottom face
+    s13_f          (n,) chain 3: the FSDT staircase C55(z) Q1 / (k1^2 A55)
+    k1sq, A55      the Whitney-1973 Eq.-(7) correction and int C55 dz [N/m]
+    G_w            (2, 2) complementary-energy transverse-shear stiffness (printed
+                   next to r["G_msg"] in the .dat for the two-construction compare)
+    relerr         inner helper: 100 ||m - e|| / ||e||, the relative L2 error [%]
+    e13, e13f, e33 the three error numbers: MSG s13, FSDT s13, MSG s33 [%]
+    hdr            the .dat header block (8x8, statics input, both G's, k1^2,
+                   the chain description, errors, column legend)
+    fig, ax1, ax2  the two panels: sigma_13 at x = 0, sigma_33 at x = a/2, with
+                   ONE shared legend outside the right edge
+
+    Writes pagano_S<S>.dat + pagano_S<S>.png into the case folder and returns
+    dict(case, S, e13, e13f, e33, ABDG).
+    """
     outdir = os.path.join(HERE, case)
     h = a / S
     lay = LAYUPS[case]
@@ -81,6 +130,7 @@ def run_case(case, S, tag):
     G_w = np.asarray(transverse_shear_stiffness(thk, ang, mats, MATERIAL_DB)[0])
 
     def relerr(m, e):
+        """Relative L2 error [%]: m = model profile, e = exact profile (both (n,))."""
         return 100 * np.linalg.norm(m - e) / np.linalg.norm(e)
 
     e13 = relerr(s13_m, sig[:, 4]); e13f = relerr(s13_f, sig[:, 4])
@@ -153,6 +203,14 @@ def run_case(case, S, tag):
 
 
 def run_benchmark(case, S_list, tag):
+    """Run one laminate family over its aspect-ratio sweep and write rm_8x8.out.
+
+    Variables: case/tag as in run_case; S_list = the aspect ratios a/h to sweep
+    (the benchmark set is (10, 50): moderate + thin, both inside the plate-model
+    regime); m = the per-S summary dict from run_case; out8 = the accumulated
+    rm_8x8.out lines (one labelled 8x8 ABDG block per S, since the 8x8 depends on
+    h).  Prints the one-line error summary per S.
+    """
     print("%s (benchmark %s): stations x=0 (s13) and x=a/2 (s33), mid-surface reference"
           % (case, tag))
     out8 = ["RM 8x8 ABDG for %s (mid-surface reference; rows e11,e22,g12,k11,k22,"

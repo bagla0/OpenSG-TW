@@ -19,6 +19,19 @@ Writes, per case, into its own subfolder:
 
 Run:
     python examples/garg/garg_layups.py
+
+Module variables (no functions here -- this is the shared data module)
+----------------------------------------------------------------------
+MATERIAL_DB   {name: {"E": [E1, E2, E3], "G": [G12, G13, G23],
+              "nu": [nu12, nu13, nu23], "rho"}} in Pa; "pagano" is the classic
+              25:1 graphite/epoxy ratio set, "as4"/"face" are the Garg sec.-3
+              lamina, "core" the soft sandwich core
+H             total laminate thickness [m] the LAYUPS entries are written at;
+              only the ply FRACTIONS thick_i/H matter downstream (the benchmark
+              re-scales to h = a/S)
+LAYUPS        {case: {"mat_names", "thick" [m], "angles" [deg]}}, ply 0 at the
+              BOTTOM face -- the single source every garg script reads
+name, layup   the __main__ loop pair; out/png = the per-case SG yaml + figure
 """
 import os
 import sys
