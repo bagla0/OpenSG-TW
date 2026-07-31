@@ -154,21 +154,28 @@ of the recovered amplitude (families $\sigma_{13}\sim\cos \Rightarrow
 \hat\sigma_{33}(z) = \int_{-h/2}^{z} p\,\hat\sigma_{13}(z')\,\mathrm dz'
 \qquad\text{(lands on } q_0 \text{ at the top face in every case)}
 \end{equation}
-\emph{Why equilibrium here, when MSG recovers 3-D stress directly?}  The direct
-recovery does produce $\sigma_{33} = [C(z)\Gamma(z)]_3$ --- but its content splits by
-driver.  The strain-gradient part (the $V_0$ thickness-stretch and the $V_2$ blocks) is
-the SELF-EQUILIBRATED $\sigma_{33}$, and for this state it is zero: the $V_2$ drivers
-$\bm\epsilon_{,\alpha\beta}$ vanish (constant $Q$).  The physical $\sigma_{33}$ of the
-Pagano problem --- the pressure ramp from $0$ to $q_0$ --- is LOAD-driven: in the full
-theory it is carried by the load columns $V_{1L}, V_{2L}$ (forced by the surface
-traction through $L$ of Yu Eq.~29), which are deliberately not implemented in the core
-(their drivers vanish for beam-resultant loading, the code's primary use).  The
-through-thickness integration above is the leading-order equivalent of those columns
-and involves NO assumption --- it is the pointwise 3-D equilibrium
-$\sigma_{13,1} + \sigma_{33,3} = 0$, the same equation the exact solution satisfies,
-applied to the recovered $\sigma_{13}$.  (In the blade pipeline, where loads enter as
-beam resultants and no panel pressure acts, the DIRECT recovery $\sigma_{33}$ is the
-correct self-equilibrated content and is what example~7 outputs.)
+\emph{Why equilibrium here, when MSG recovers 3-D stress directly?}  In Yu's OWN
+procedure it does not: his 2003 recovery paper states explicitly that ``it is not
+necessary to use integration through the thickness of the 3-D equilibrium equations to
+get the transverse normal and transverse shear \dots{} results presented herein'' ---
+his $\sigma_{33}$ comes from the 3-D constitutive law applied to the recovered strain
+of Eq.~66.  He can do that because his implementation (VAPAS) carries the LOAD COLUMNS:
+his $V_1 = V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2} + V_{1L}$ (his Eq.~45) and
+$V_2$ include the parts forced by the surface traction through $L$ (his Eq.~29), and
+for a pressure-loaded plate it is precisely $V_{1L}, V_{2L}$ that carry the
+$\sigma_{33}$ ramp from $0$ to $q_0$.  The present core implements the full
+strain-gradient ladder ($V_0, V_{1a}, V_{2k}$) but deliberately omits the load columns
+(their drivers vanish for beam-resultant loading, the code's primary use; $A$ and $G$
+are unaffected either way).  Consequently the direct $\sigma_{33}$ here contains only
+the self-equilibrated part --- zero for this constant-$Q$ state --- and the load-driven
+ramp is restored by the through-thickness integration above, which is the
+leading-order equivalent of the missing columns and involves no assumption: it is the
+pointwise 3-D equilibrium $\sigma_{13,1} + \sigma_{33,3} = 0$ applied to the recovered
+$\sigma_{13}$ (top face lands on $q_0$ exactly; $0.8$--$1.2\%$ profile error at
+$S{=}10$).  Implementing $V_{1L}, V_{2L}$ --- one extra right-hand side per column
+against the same factorization --- would reproduce Yu's direct route verbatim.  (In
+the blade pipeline, beam resultants and no panel pressure, the direct recovery
+$\sigma_{33}$ IS the correct content and is what example~7 outputs.)
 \begin{verbatim}
 for i, z in enumerate(zc):
     s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
