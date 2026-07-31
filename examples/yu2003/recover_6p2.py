@@ -339,15 +339,15 @@ def run_case(case):
                np.column_stack([zc, s13_r, s23_r, s33_r]),
                header="\n".join(hdr), fmt="%15.6e")
 
+    # the plot compares against the EXACT Pagano curves only -- the Abaqus solid
+    # is kept as the parsed/validated cross-check in the .dat numbers, not drawn
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(13.2, 5.0))
-    for ax, (zb, b), (zm, mth), exact, lbl in (
-            (ax1, (zs, s13_s), (zc, s13_r), sige[:, 4], r"$\sigma_{13}/p_0$  at  $x=0$"),
-            (ax2, (zs, s23_s), (zc, s23_r), sige[:, 3], r"$\sigma_{23}/p_0$  at  $x=0$"),
-            (ax3, (zs, s33_s), (zc, s33_r), sige[:, 2], r"$\sigma_{33}/p_0$  at  $x=L/2$")):
-        ax.plot(exact, ze / h, "-", color="0.6", lw=1.0,
-                label="exact 3-D (reference)" if ax is ax1 else None)
-        ax.plot(b, zb / h, "-", color="k", lw=2.0,
-                label="Abaqus 3-D solid (benchmark)" if ax is ax1 else None)
+    for ax, (zm, mth), exact, lbl in (
+            (ax1, (zc, s13_r), sige[:, 4], r"$\sigma_{13}/p_0$  at  $x=0$"),
+            (ax2, (zc, s23_r), sige[:, 3], r"$\sigma_{23}/p_0$  at  $x=0$"),
+            (ax3, (zc, s33_r), sige[:, 2], r"$\sigma_{33}/p_0$  at  $x=L/2$")):
+        ax.plot(exact, ze / h, "-", color="k", lw=2.0,
+                label="exact 3-D (Pagano)" if ax is ax1 else None)
         ax.plot(mth, zm / h, ":s", color="#ff7f0e", ms=4, mfc="none", mew=1.2,
                 lw=1.6, markevery=6,
                 label="OpenSG-RM recovery\n(FF from Abaqus RM shell)"
