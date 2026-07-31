@@ -6,10 +6,17 @@ through-thickness stress recovery is benchmarked against the exact 3-D
 elasticity solution (state-space Pagano solver, `examples/garg/pagano_exact.py`)
 and, for the Yu cases, an Abaqus 3-D solid model.
 
-Every file here is a **data snapshot copied from the source folders below** —
-the runnable pipeline (solver, benchmark orchestrators, deck generators, case
-drivers) lives in `examples/garg/` and `examples/yu2003/`; the driver scripts
-included in each case folder run from THOSE locations, not from here.
+This folder is SELF-CONTAINED — the MAIN home of the Pagano validation work:
+
+- `garg/` and `yu2003/` are complete copies of the original pipeline folders
+  (exact solver `garg/pagano_exact.py`, statics/FSDT chain, benchmark
+  orchestrators, Abaqus deck generators, all case subfolders and drivers) —
+  everything RUNS from here, e.g.
+  `python examples/RM_OpenSG_pagano/garg/caseA/7_helper_RM_Pagano_benchmark1.py`
+- `garg_caseA/`, `garg_caseC/`, `yu2003_case1/`, `yu2003_case2/` are the
+  CURATED four-case highlight set (data snapshots picked for the paper story;
+  the driver scripts inside them are provenance copies that run from the
+  pipeline folders above).
 
 ## The four cases and why these
 
