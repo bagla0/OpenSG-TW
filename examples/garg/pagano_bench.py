@@ -121,11 +121,11 @@ def run_case(case, S, tag):
     A55 = float(np.sum(np.array(thk) * C55))
     G_w = np.asarray(transverse_shear_stiffness(thk, ang, mats, MATERIAL_DB)[0])
     s13_f = C55[ply_of] * FF_end[6] / float(G_w[0, 0])
-    # the resultant-level "Abaqus contribution": the S4 model (as run) stores only the
-    # section forces, so the only shape-free out-of-plane statement it makes is the
-    # thickness AVERAGE  s13_avg = Q1 / h  (its internal TSS is Whitney-style energy
-    # equivalence, i.e. the same G_w above -- amplitude, not a through-thickness shape)
-    s13_avg = FF_end[6] / h
+    # NOTE on Abaqus: a shell FE cannot predict a through-thickness stress standalone,
+    # so no Abaqus curve appears in the plots.  Its legitimate role is FF supply on
+    # geometries where statics alone cannot give the resultants -- and then the deck
+    # must carry the SAME section law as the recovery chain (the MSG 8x8 deck feeds
+    # MSG-RM; the composite-FSDT deck belongs to the FSDT chain).
 
     def relerr(m, e):
         return 100 * np.linalg.norm(m - e) / np.linalg.norm(e)
@@ -161,19 +161,22 @@ def run_case(case, S, tag):
             "  effective k1^2 = G11/A55:  Whitney %.6f   MSG %.6f   (uniform-k ref 5/6"
             " = 0.8333)" % (G_w[0, 0] / A55, r["G_msg"][0, 0] / A55),
             "",
-            "OUT-OF-PLANE stresses only.  FSDT s13 = constitutive layerwise-constant",
-            "C55(z) Q1 / G_whitney11 (Whitney-1973 k; FSDT has NO s33).  s13_abq_avg =",
-            "Q1/h, the shape-free average from the S4 resultants (the model as run",
-            "stores section forces only).  Exact stress solution: Pagano cylindrical",
-            "bending (J. Compos. Mater. 3 (1969) 398-411; Garg Eqs. (18)-(24)).",
+            "THREE STANDALONE CHAINS, out-of-plane stresses only:",
+            "  exact       Pagano cylindrical bending (J. Compos. Mater. 3 (1969)",
+            "              398-411; Garg Eqs. (18)-(24)) -- reference only",
+            "  MSG-RM      statics FF -> 8x8 inversion -> warping recovery (Eq. 63)",
+            "              + thickness-equilibrium s33",
+            "  FSDT        statics Q1 -> constitutive staircase C55(z) Q1 / (k1^2 A55),",
+            "              k1^2 per Whitney JAM 40 (1973) Eq. (7); FSDT has NO s33",
+            "No Abaqus content anywhere: a shell FE cannot predict through-thickness",
+            "stress standalone, so it appears in no curve.",
             "rel L2 errors vs exact:  s13 %7.3f%%  (FSDT-Whitney %7.2f%%)   s33 %7.3f%%"
             % (e13, e13f, e33),
             "s33 top-face closure: %.4f q0" % (s33_m[-1] / q0),
             "",
-            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s13_abq_avg  s33_msg  s33_exact  [Pa]"]
+            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s33_msg  s33_exact  [Pa]"]
     np.savetxt(os.path.join(outdir, "pagano_S%g.dat" % S),
-               np.column_stack([zc, s13_m, sig[:, 4], s13_f,
-                                np.full_like(zc, s13_avg), s33_m, sig[:, 2]]),
+               np.column_stack([zc, s13_m, sig[:, 4], s13_f, s33_m, sig[:, 2]]),
                header="\n".join(hdr), fmt="%15.6e")
 
     # ------------------------------------------------------------------- plot
@@ -182,9 +185,7 @@ def run_case(case, S, tag):
     ax1.plot(s13_m, zc / h, ":s", color="#ff7f0e", ms=4, mfc="none", mew=1.2, lw=1.6,
              markevery=4, label="MSG-RM")
     ax1.plot(s13_f, zc / h, "--", color="#1f77b4", lw=1.4,
-             label="FSDT constitutive (Whitney-1973 k)")
-    ax1.axvline(s13_avg, color="0.5", lw=1.1, ls="-.",
-                label="Abaqus S4 resultant avg $Q_1/h$")
+             label="FSDT constitutive (Whitney-1973 $k_1^2$)")
     ax1.set_xlabel(r"$\sigma_{13}$ [Pa]  at  $x=0$", fontsize=11)
     ax1.set_ylabel("$z/h$", fontsize=11)
     ax2.plot(sig[:, 2], zc / h, "-", color="k", lw=2.0)
