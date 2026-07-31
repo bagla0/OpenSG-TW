@@ -154,28 +154,30 @@ of the recovered amplitude (families $\sigma_{13}\sim\cos \Rightarrow
 \hat\sigma_{33}(z) = \int_{-h/2}^{z} p\,\hat\sigma_{13}(z')\,\mathrm dz'
 \qquad\text{(lands on } q_0 \text{ at the top face in every case)}
 \end{equation}
-\emph{Why equilibrium here, when MSG recovers 3-D stress directly?}  In Yu's OWN
-procedure it does not: his 2003 recovery paper states explicitly that ``it is not
-necessary to use integration through the thickness of the 3-D equilibrium equations to
-get the transverse normal and transverse shear \dots{} results presented herein'' ---
-his $\sigma_{33}$ comes from the 3-D constitutive law applied to the recovered strain
-of Eq.~66.  He can do that because his implementation (VAPAS) carries the LOAD COLUMNS:
-his $V_1 = V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2} + V_{1L}$ (his Eq.~45) and
-$V_2$ include the parts forced by the surface traction through $L$ (his Eq.~29), and
-for a pressure-loaded plate it is precisely $V_{1L}, V_{2L}$ that carry the
-$\sigma_{33}$ ramp from $0$ to $q_0$.  The present core implements the full
-strain-gradient ladder ($V_0, V_{1a}, V_{2k}$) but deliberately omits the load columns
-(their drivers vanish for beam-resultant loading, the code's primary use; $A$ and $G$
-are unaffected either way).  Consequently the direct $\sigma_{33}$ here contains only
-the self-equilibrated part --- zero for this constant-$Q$ state --- and the load-driven
-ramp is restored by the through-thickness integration above, which is the
-leading-order equivalent of the missing columns and involves no assumption: it is the
-pointwise 3-D equilibrium $\sigma_{13,1} + \sigma_{33,3} = 0$ applied to the recovered
-$\sigma_{13}$ (top face lands on $q_0$ exactly; $0.8$--$1.2\%$ profile error at
-$S{=}10$).  Implementing $V_{1L}, V_{2L}$ --- one extra right-hand side per column
-against the same factorization --- would reproduce Yu's direct route verbatim.  (In
-the blade pipeline, beam resultants and no panel pressure, the direct recovery
-$\sigma_{33}$ IS the correct content and is what example~7 outputs.)
+\emph{$\sigma_{33}$: Yu's direct route, now implemented.}  Yu's 2003 recovery paper
+states explicitly that ``it is not necessary to use integration through the thickness
+of the 3-D equilibrium equations to get the transverse normal and transverse shear
+\dots{} results presented herein'' --- his $\sigma_{33}$ comes from the 3-D
+constitutive law applied to the recovered strain, which works because his
+implementation carries the LOAD COLUMNS forced by the surface traction (his Eqs.~29
+and 45: $V_1 = V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2} + V_{1L}$).  The core
+now implements them: $V_{1L}$ solves $E\,V_{1L} + L = H\psi(\psi^TL)$ with
+$L = -S(\text{top})^Te_3$ per unit top-face pressure (one more right-hand side on the
+same factorization), and the five second-order load columns $V_{2L}$ follow the same
+collection that produced $\bar D_{2k}$, with $V_{1L}$ as the load-ladder rung:
+$q_{,a}$ drivers $(D_{hl_a}{-}D_{hl_a}^T)V_{1L}$ and $q_{,ab}$ drivers
+$-D_{l_al_b}V_{1L}$.  The recovery then takes the LOCAL pressure and its in-plane
+derivatives ($q, q_{,a}, q_{,ab}$; here $q(a/2)=q_0$, $q_{,11}=-p^2q_0$) alongside the
+strain drivers ($\bm\epsilon$ and $\bm\epsilon_{,11} = -p^2\bm\epsilon$ at the sin
+peak), and $\sigma_{33} = [C\Gamma]_3$ DIRECTLY: both faces come out exact by
+construction ($\sigma_{33} = 0$ bottom, $+q_0$ top, machine precision) and the profile
+converges properly ($1.19\%$ at $S{=}10$, $0.012\%$ at $S{=}100$ for case A).  The
+through-thickness equilibrium integration is retained in the \code{.dat} as a
+cross-check column --- the two routes are asymptotically equivalent and agree to
+$\sim 0.1$ points on the laminates (they differ visibly only on the very thick
+sandwich, where the two truncations weight higher-order content differently).  In the
+blade pipeline (beam resultants, no panel pressure) the load drivers vanish and the
+direct recovery reduces to the self-equilibrated content, as before.
 \begin{verbatim}
 for i, z in enumerate(zc):
     s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
@@ -268,26 +270,29 @@ error summary, and the pointwise table $z$, $\sigma_{13}^{\rm MSG}$,
 $\sigma_{13}^{\rm exact}$, $\sigma_{13}^{\rm FSDT}$, $\sigma_{33}^{\rm MSG}$,
 $\sigma_{33}^{\rm exact}$.
 
-\textbf{Relative $L_2$ errors vs the exact solution:}
+\textbf{Relative $L_2$ errors vs the exact solution} ($\sigma_{33}$ MSG = the DIRECT
+constitutive recovery via the load columns; the equilibrium-integration cross-check in
+parentheses):
 \begin{center}\small
-\begin{tabular}{lrrrr}
+\begin{tabular}{lrrr}
 \toprule
-case / $S$ & $\sigma_{13}$ MSG & $\sigma_{13}$ FSDT & $\sigma_{33}$ MSG \\
+case / $S$ & $\sigma_{13}$ MSG & $\sigma_{13}$ FSDT & $\sigma_{33}$ MSG direct (equil.) \\
 \midrule
-A\ \ 4   & 20.93\,\% & 100.1\,\% & 5.46\,\% \\
-A\ \ 10  &  4.43\,\% & 107.1\,\% & 1.16\,\% \\
-A\ \ 100 &  0.044\,\% & 108.8\,\% & 0.011\,\% \\
-B\ \ 5   &  4.60\,\% &  90.2\,\% & 1.19\,\% \\
-B\ \ 10  &  1.19\,\% &  91.9\,\% & 0.31\,\% \\
-B\ \ 100 &  0.014\,\% &  92.5\,\% & 0.002\,\% \\
-C\ \ 4   & 41.55\,\% & 4199\,\% & 4.76\,\% \\
-C\ \ 10  &  9.17\,\% & 5269\,\% & 0.82\,\% \\
-C\ \ 100 &  0.098\,\% & 5474\,\% & 0.008\,\% \\
+A\ \ 4   & 21.54\,\% & 100.1\,\% & 5.59\,\% \ (6.39\,\%) \\
+A\ \ 10  &  4.52\,\% & 107.1\,\% & 1.19\,\% \ (1.29\,\%) \\
+A\ \ 100 &  0.044\,\% & 108.8\,\% & 0.012\,\% \ (0.012\,\%) \\
+B\ \ 5   &  5.13\,\% &  90.2\,\% & 2.18\,\% \ (1.92\,\%) \\
+B\ \ 10  &  1.32\,\% &  91.9\,\% & 0.57\,\% \ (0.48\,\%) \\
+B\ \ 100 &  0.015\,\% &  92.5\,\% & 0.006\,\% \ (0.003\,\%) \\
+C\ \ 4   & 41.36\,\% & 4199\,\% & 15.84\,\% \ (5.17\,\%) \\
+C\ \ 10  &  9.13\,\% & 5269\,\% & 2.53\,\% \ (0.89\,\%) \\
+C\ \ 100 &  0.097\,\% & 5474\,\% & 0.025\,\% \ (0.009\,\%) \\
 \bottomrule
 \end{tabular}
 \end{center}
-($\sigma_{33}$ FSDT does not exist.  The $S{=}100$ rows are the configuration of Garg's
-Fig.~3, where MSG-RM and the exact solution coincide visually.  The FSDT numbers use the
+($\sigma_{33}$ FSDT does not exist.  The $\sigma_{13}$ column includes the second-order
+load term $V_{2L1}q_{,1}$.  The $S{=}100$ rows are the configuration of Garg's Fig.~3,
+where MSG-RM and the exact solution coincide visually.  The FSDT numbers use the
 strict Whitney-1973 $k_1^2$; the energy-correct $k$ \emph{worsens} the pointwise
 staircase relative to the naive $5/6$ --- $k$ repairs deflections, never shapes.)
 

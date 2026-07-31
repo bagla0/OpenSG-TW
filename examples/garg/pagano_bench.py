@@ -59,19 +59,31 @@ def run_case(case, S, tag):
     Q1, _ = statics_resultants(q0, a, 0.0)            # x = 0: Q1 = q0/p, M11 = 0
     FF_end = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Q1, 0.0])
 
-    # chain 2: MSG-RM (8x8 inversion -> gradient closure -> Eq.-63 recovery)
+    # chain 2: MSG-RM (8x8 inversion -> gradient closure -> Eq.-66 recovery WITH the
+    # load ladder: sigma33 comes DIRECTLY from the constitutive law, Yu's route)
     r = rm_plate_msg(thk, ang, mats, MATERIAL_DB, fraction=0.5)
     D11 = float(r["ABDG"][3, 3]); G11 = float(r["ABDG"][6, 6])
     w_msg = q0 / (p ** 4 * D11) + q0 / (p ** 2 * G11)
     S6 = np.linalg.inv(np.asarray(r["A6"]))
+    # sigma13 station x = 0:  E(0) = 0, E,1 = S6 [0,0,0,Q1,0,0]; load: q(0) = 0,
+    # q,1(0) = p q0 (cos family) -> the V1L/V2L1 load terms are active
     E6_end = S6 @ FF_end[:6]
     dE1_end = S6 @ np.array([0, 0, 0, Q1, 0, 0.0])
+    # sigma33 station x = a/2:  E = S6 [0,0,0,M11,0,0], E,11 = -p^2 E (sin family);
+    # load: q = q0, q,11 = -p^2 q0.  Direct recovery -- no equilibrium integration.
+    _, M11_mid = statics_resultants(q0, a, a / 2.0)
+    E6_mid = S6 @ np.array([0, 0, 0, M11_mid, 0, 0.0])
+    dE11_mid = -p * p * E6_mid
     z6 = np.zeros(6)
-    s13_m = np.empty_like(zc)
+    s13_m = np.empty_like(zc); s33_m = np.empty_like(zc)
     for i, z in enumerate(zc):
-        s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
-    s33_m = np.concatenate([[0.0], np.cumsum(0.5 * p * (s13_m[1:] + s13_m[:-1])
-                                             * np.diff(zc))])
+        s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6,
+                                         dq1=p * q0)[1][4]
+        s33_m[i] = msgrm_strain_at_depth(r, z, E6_mid, None, None, dE11=dE11_mid,
+                                         q=q0, dq11=-p * p * q0)[1][2]
+    # cross-check column: the thickness-equilibrium route (leading-order equivalent)
+    s33_eq = np.concatenate([[0.0], np.cumsum(0.5 * p * (s13_m[1:] + s13_m[:-1])
+                                              * np.diff(zc))])
 
     # chain 3: standalone FSDT with the Whitney-1973 k (statics_fsdt secs. 2-3)
     s13_f, k1sq, A55 = fsdt_s13(zc, thk, ang, mats, MATERIAL_DB, Q1)
@@ -81,7 +93,7 @@ def run_case(case, S, tag):
         return 100 * np.linalg.norm(m - e) / np.linalg.norm(e)
 
     e13 = relerr(s13_m, sig[:, 4]); e13f = relerr(s13_f, sig[:, 4])
-    e33 = relerr(s33_m, sig[:, 2])
+    e33 = relerr(s33_m, sig[:, 2]); e33eq = relerr(s33_eq, sig[:, 2])
 
     # ------------------------------------------------------------------- .dat
     hdr = ["%s -- MSG-RM vs EXACT (Pagano) benchmark %s,  S = a/h = %g" % (case, tag, S),
@@ -109,15 +121,21 @@ def run_case(case, S, tag):
             "",
             "THREE STANDALONE CHAINS, out-of-plane stresses only:",
             "  exact   Pagano cyl. bending (JCM 3 (1969) 398-411; Garg Eqs. 18-24)",
-            "  MSG-RM  statics Q1 -> 8x8 inversion -> Eq.-63 recovery -> equil. s33",
+            "  MSG-RM  statics -> 8x8 inversion -> Eq.-66 recovery WITH the load",
+            "          ladder (V1L/V2L, Yu Eqs. 29/45): s33 DIRECT from the",
+            "          constitutive law -- Yu's route, no equilibrium integration",
             "  FSDT    statics Q1 -> staircase C55(z) Q1/(k1^2 A55); NO s33 in FSDT",
-            "rel L2 errors vs exact:  s13 %7.3f%%  (FSDT-Whitney %7.2f%%)   s33 %7.3f%%"
-            % (e13, e13f, e33),
-            "s33 top-face closure: %.4f q0" % (s33_m[-1] / q0),
+            "rel L2 errors vs exact:  s13 %7.3f%%  (FSDT-Whitney %7.2f%%)"
+            % (e13, e13f),
+            "  s33 DIRECT %7.3f%%   (equilibrium-integration cross-check %7.3f%%)"
+            % (e33, e33eq),
+            "s33 faces (bot, top)/q0 = (%+.4f, %+.4f)   (direct recovery)"
+            % (s33_m[0] / q0, s33_m[-1] / q0),
             "",
-            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s33_msg  s33_exact  [Pa]"]
+            "columns: z[m]  s13_msg  s13_exact  s13_fsdt  s33_msg_direct  s33_msg_equil"
+            "  s33_exact  [Pa]"]
     np.savetxt(os.path.join(outdir, "pagano_S%g.dat" % S),
-               np.column_stack([zc, s13_m, sig[:, 4], s13_f, s33_m, sig[:, 2]]),
+               np.column_stack([zc, s13_m, sig[:, 4], s13_f, s33_m, s33_eq, sig[:, 2]]),
                header="\n".join(hdr), fmt="%15.6e")
 
     # ------------------------------------------------------------------- plot
@@ -144,7 +162,7 @@ def run_case(case, S, tag):
     fig.savefig(os.path.join(outdir, "pagano_S%g.png" % S), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    return dict(case=case, S=S, e13=e13, e13f=e13f, e33=e33,
+    return dict(case=case, S=S, e13=e13, e13f=e13f, e33=e33, e33eq=e33eq,
                 ABDG=np.asarray(r["ABDG"]))
 
 
@@ -155,8 +173,8 @@ def run_benchmark(case, S_list, tag):
             "k12,2g13,2g23)" % case]
     for S in S_list:
         m = run_case(case, S, tag)
-        print("  S = %-4g  s13 %7.3f%% (FSDT %7.2f%%)   s33 %7.3f%%"
-              % (S, m["e13"], m["e13f"], m["e33"]))
+        print("  S = %-4g  s13 %7.3f%% (FSDT %7.2f%%)   s33 DIRECT %7.3f%% (equil %7.3f%%)"
+              % (S, m["e13"], m["e13f"], m["e33"], m["e33eq"]))
         out8.append("")
         out8.append("S = a/h = %g  (h = %g m):" % (S, a / S))
         out8 += ["  " + " ".join("%14.6e" % v for v in row) for row in m["ABDG"]]
