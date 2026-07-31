@@ -121,12 +121,12 @@ def run_case(case, S, tag):
                header="\n".join(hdr), fmt="%15.6e")
 
     # ------------------------------------------------------------------- plot
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.0, 5.2))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.6, 5.2))
     ax1.plot(sig[:, 4], zc / h, "-", color="k", lw=2.0, label="exact 3-D (Pagano)")
     ax1.plot(s13_m, zc / h, ":s", color="#ff7f0e", ms=4, mfc="none", mew=1.2, lw=1.6,
              markevery=4, label="MSG-RM")
     ax1.plot(s13_f, zc / h, "--", color="#1f77b4", lw=1.4,
-             label="FSDT constitutive (Whitney-1973 $k_1^2$)")
+             label="FSDT constitutive\n(Whitney-1973 $k_1^2$)")
     ax1.set_xlabel(r"$\sigma_{13}$ [Pa]  at  $x=0$", fontsize=11)
     ax1.set_ylabel("$z/h$", fontsize=11)
     ax2.plot(sig[:, 2], zc / h, "-", color="k", lw=2.0)
@@ -135,7 +135,11 @@ def run_case(case, S, tag):
     ax2.set_xlabel(r"$\sigma_{33}$ [Pa]  at  $x=a/2$", fontsize=11)
     for ax in (ax1, ax2):
         ax.grid(alpha=0.3)
-    ax1.legend(fontsize=9, frameon=False, loc="best")
+    # vertical legend OUTSIDE the axes (right of the second panel): it can never
+    # block a curve, whatever shape the profiles take across the nine cases
+    handles, labels = ax1.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="center left", bbox_to_anchor=(0.995, 0.5),
+               frameon=False, fontsize=10)
     fig.tight_layout()
     fig.savefig(os.path.join(outdir, "pagano_S%g.png" % S), dpi=150, bbox_inches="tight")
     plt.close(fig)
