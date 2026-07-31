@@ -1664,6 +1664,11 @@ SF, SM
 U
 *NODE PRINT, NSET=NMID
 U
+** the whole span row: the harmonic amplitudes (U, V, W, F1, F2) of the
+** plate solution are least-squares fitted from these for the Eq.-65
+** displacement recovery (examples/pagano_recovery/recovery_bench.py)
+*NODE PRINT, NSET=NROW0
+U
 *EL PRINT, ELSET=EMID
 SF, SM
 *EL PRINT, ELSET=EEND

@@ -382,6 +382,46 @@ def _node_grid(thick, n_per_layer, p, z_ref):
     return node_x - z_ref
 
 
+def _detilt_inplane(cols, node_x):
+    """Project the TILT (x3-linear content) out of the IN-PLANE components of a
+    warping-column block.
+
+    Variables: cols (ndofs, 6) = nodal warping columns (dof order w1, w2, w3
+    per node); node_x = the through-thickness node coordinates (reference-
+    surface origin); W = (nnode, 3, 6) view; z2/m1 = trapezoid moments
+    int x3^2 dx3 and int x3 w dx3 on the sorted grid.
+
+    WHY (the theory, per Yu 2002 IJSS / Yu 2003 C&S): the warping gauge is
+    ONLY <w_i> = 0 -- no first-moment constraint exists, deliberately: the
+    x3-linear (tilt) content of the in-plane V1bar columns IS the transverse
+    shear deformation (Yu constrains the triad normal to the deformed surface,
+    so shear has exactly one home, the warping).  Yu's recovery is stated in
+    CLASSICAL measures: when the 2-D solver is Reissner-like, its output R is
+    converted by eps = R - D_alpha gamma,_alpha (Yu 2003 Eq. 50) BEFORE
+    driving the warping.  This code's public API takes the RM measures R
+    directly; using DETILTED columns in the Gamma_l (value) terms performs
+    that conversion implicitly -- numerically equivalent to the literal
+    Eq.-50 route in the asymptotic regime (0.043% vs 0.044% at S = 64 on
+    Pagano caseA) and far better-behaved thick (26.8% vs 2373% at S = 4,
+    where the eps-substitution itself is no longer asymptotic).  Callers must
+    therefore pass R, NOT a pre-converted eps (that would double-correct).
+    The DERIVATIVE use (Gamma_h, the transverse-shear recovery) keeps the RAW
+    columns: there the tilt delivers the mean shear into the 3-D field
+    (sigma_13 validated to 0.18% at S = 50).  Raw columns in a VALUE use next
+    to z*phi would double-count the shear: caseA U1 85%/3.4% at S = 10/50 raw
+    vs 2.1%/0.07% handled correctly; the in-plane second-order strain -76%
+    raw vs +-2% detilted.  w3 keeps its tilt: U3 has no z*phi partner.
+    """
+    W = np.asarray(cols).reshape(len(node_x), 3, 6).copy()
+    order = np.argsort(node_x)
+    xs = np.asarray(node_x)[order]
+    z2 = np.trapezoid(xs * xs, xs)
+    for comp in (0, 1):
+        m1 = np.trapezoid(xs[:, None] * W[order, comp, :], xs, axis=0)
+        W[:, comp, :] -= np.outer(np.asarray(node_x), m1 / z2)
+    return W.reshape(-1, 6)
+
+
 def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer):
     (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min,
      V11b, V12b, V21, V22, V23) = [np.asarray(o) for o in out]
@@ -394,11 +434,16 @@ def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer
         ABDG = np.zeros((8, 8))
         ABDG[:6, :6] = A6
         ABDG[6:, 6:] = G
+    node_x = _node_grid(thick, n_per_layer, p, float(fraction) * sum(thick))
     return {"A6": A6, "G_msg": (G if spd else None), "ABDG": ABDG, "X": X, "H": H,
             "Ustar_rel": float(Ustar_rel),
             "V0": V0, "V11": V11, "V12": V12,
             "V11bar": V11b, "V12bar": V12b, "V21": V21, "V22": V22, "V23": V23,
-            "node_x": _node_grid(thick, n_per_layer, p, float(fraction) * sum(thick)),
+            # detilted VALUE-use variants (Eq. 65 / the Gamma_l terms of Eq. 66;
+            # see _detilt_inplane for why the raw columns double-count z*phi)
+            "V11barD": _detilt_inplane(V11b, node_x),
+            "V12barD": _detilt_inplane(V12b, node_x),
+            "node_x": node_x,
             "elem_layer": elem_layer, "C_layers": list(C_layers), "elem_order": p,
             "angles": [float(a) for a in angles_deg], "c1": c1, "c2": c2}
 
@@ -480,11 +525,20 @@ def _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22):
     g_a   = (V0 e),a + (V1bar),a = V0 e,a + V11bar e,a1 + V12bar e,a2
     Uses the RELAXED first-order columns V11bar/V12bar (paper Sec. 5: carry V1bar,
     not V1, into the recovery); in Gamma_h the constants drop out anyway, in the
-    Gamma_l terms (second order) they are genuine contributors."""
+    Gamma_l terms (second order) they are genuine contributors.
+
+    COLUMN VARIANTS BY USE: w_loc feeds Gamma_h (the through-thickness
+    DERIVATIVE) and uses the RAW V1bar columns -- their tilt is what delivers
+    the mean transverse shear into the sigma_a3 recovery (validated 0.18% at
+    S = 50).  g_a feeds Gamma_l (the warping VALUE, the in-plane rows of the
+    second-order recovery) and uses the DETILTED variants V11barD/V12barD: next
+    to a plate solution the raw tilt double-counts z*phi (see _detilt_inplane;
+    raw columns drove the caseA in-plane recovery to -76% at S = 10, detilted
+    to +-2%)."""
     w_loc = (obj["V0"][dofs] @ E6 + obj["V11bar"][dofs] @ dE1 + obj["V12bar"][dofs] @ dE2
              + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12 + obj["V23"][dofs] @ dE22)
-    g1 = obj["V0"][dofs] @ dE1 + obj["V11bar"][dofs] @ dE11 + obj["V12bar"][dofs] @ dE12
-    g2 = obj["V0"][dofs] @ dE2 + obj["V11bar"][dofs] @ dE12 + obj["V12bar"][dofs] @ dE22
+    g1 = obj["V0"][dofs] @ dE1 + obj["V11barD"][dofs] @ dE11 + obj["V12barD"][dofs] @ dE12
+    g2 = obj["V0"][dofs] @ dE2 + obj["V11barD"][dofs] @ dE12 + obj["V12barD"][dofs] @ dE22
     return w_loc, g1, g2
 
 
@@ -520,7 +574,14 @@ def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, 
 def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None):
     """The 3-D warping displacement S(V0 + V1bar + V2) at x=z -- the SG part of the
     Eq. (65) displacement recovery (u_2d and the x3-rotation term are the plate
-    solution's contribution and are added by the caller).  Returns w (3,)."""
+    solution's contribution and are added by the caller).  Returns w (3,).
+
+    COMPOSITION RULE (settled by the controlled caseA sweep, S = 4..64): use
+    the RAW columns here and compose with the KIRCHHOFF z-linear term,
+        U_alpha = u_alpha^2d - x3 w,alpha + w_alpha ,   U3 = w + w3 ,
+    NOT with x3*phi_alpha.  The raw V1bar tilt is exactly the mean-shear
+    content the Kirchhoff term lacks (U1 error 1.41%/0.016% at S = 10/64;
+    composing with x3*phi double-counts it: 85%/2.1% raw/detilted)."""
     zeros = np.zeros(6)
     dE1 = zeros if dE1 is None else np.asarray(dE1, float)
     dE2 = zeros if dE2 is None else np.asarray(dE2, float)
@@ -528,7 +589,10 @@ def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None,
     dE12 = zeros if dE12 is None else np.asarray(dE12, float)
     dE22 = zeros if dE22 is None else np.asarray(dE22, float)
     e, xi, he, nodes_xi, dofs, x_q = _locate(obj, z)
-    w_loc, _, _ = _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22)
+    w_loc = (obj["V0"][dofs] @ E6
+             + obj["V11bar"][dofs] @ dE1 + obj["V12bar"][dofs] @ dE2
+             + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12
+             + obj["V23"][dofs] @ dE22)
     N = _lagrange_N(nodes_xi, xi)
     w_nodes = w_loc.reshape(-1, 3)                    # (p+1, 3) nodal warping in the element
     return N @ w_nodes

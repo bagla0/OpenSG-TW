@@ -320,6 +320,8 @@ Cylindrical-bending strip, MSG-RM 8x8 general shell section
 201, 202
 *NSET, NSET=NMID
 101
+*NSET, NSET=NROW0, GENERATE
+1, 201, 2
 *NSET, NSET=NALL, GENERATE
 1, 202, 1
 **
@@ -449,6 +451,11 @@ SF, SM
 *NODE OUTPUT
 U
 *NODE PRINT, NSET=NMID
+U
+** the whole span row: the harmonic amplitudes (U, V, W, F1, F2) of the
+** plate solution are least-squares fitted from these for the Eq.-65
+** displacement recovery (examples/pagano_recovery/recovery_bench.py)
+*NODE PRINT, NSET=NROW0
 U
 *EL PRINT, ELSET=EMID
 SF, SM

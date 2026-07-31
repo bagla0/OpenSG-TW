@@ -34,6 +34,13 @@ staircase (`examples/garg/statics_fsdt.py`).
 Left out by choice: garg caseB (repeats caseA's cross-ply physics, milder
 contrast) and yu2003 case3 (near-duplicate of caseA; σ₂₃ too small to plot).
 
+`202603_PlateRM/` is the RAW Abaqus workspace snapshot copied verbatim from
+the remote machine's OneDrive transfer folder: the original garg caseA MSG-deck
+job (with its .odb and the .rpt extracts), the community-FSDT runs
+(`FSDT/caseA_S10`, `caseA_S4`, `caseB_S10`, `caseC_S10`, `caseC_S4`), and the
+yu2003 working copies used during the sec.-6.2 campaign — kept as provenance
+for every Abaqus number quoted in the benchmarks.
+
 ## Headline numbers (rel. L2 vs exact 3-D)
 
 garg cases (σ₁₃ at x = 0 / σ₃₃ at x = a/2):
