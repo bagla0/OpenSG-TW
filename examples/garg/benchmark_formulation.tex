@@ -154,6 +154,21 @@ of the recovered amplitude (families $\sigma_{13}\sim\cos \Rightarrow
 \hat\sigma_{33}(z) = \int_{-h/2}^{z} p\,\hat\sigma_{13}(z')\,\mathrm dz'
 \qquad\text{(lands on } q_0 \text{ at the top face in every case)}
 \end{equation}
+\emph{Why equilibrium here, when MSG recovers 3-D stress directly?}  The direct
+recovery does produce $\sigma_{33} = [C(z)\Gamma(z)]_3$ --- but its content splits by
+driver.  The strain-gradient part (the $V_0$ thickness-stretch and the $V_2$ blocks) is
+the SELF-EQUILIBRATED $\sigma_{33}$, and for this state it is zero: the $V_2$ drivers
+$\bm\epsilon_{,\alpha\beta}$ vanish (constant $Q$).  The physical $\sigma_{33}$ of the
+Pagano problem --- the pressure ramp from $0$ to $q_0$ --- is LOAD-driven: in the full
+theory it is carried by the load columns $V_{1L}, V_{2L}$ (forced by the surface
+traction through $L$ of Yu Eq.~29), which are deliberately not implemented in the core
+(their drivers vanish for beam-resultant loading, the code's primary use).  The
+through-thickness integration above is the leading-order equivalent of those columns
+and involves NO assumption --- it is the pointwise 3-D equilibrium
+$\sigma_{13,1} + \sigma_{33,3} = 0$, the same equation the exact solution satisfies,
+applied to the recovered $\sigma_{13}$.  (In the blade pipeline, where loads enter as
+beam resultants and no panel pressure acts, the DIRECT recovery $\sigma_{33}$ is the
+correct self-equilibrated content and is what example~7 outputs.)
 \begin{verbatim}
 for i, z in enumerate(zc):
     s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
