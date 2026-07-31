@@ -48,30 +48,51 @@ def read_elprint_tables(dat_path):
     ---------
     dat_path   the job .dat text file
     lines      its content split into lines
-    tables     the result: {(elset, tuple(labels)): rows}, rows = (n, 1+ncol)
+    tables     the result: {(elset, tuple(labels)): rows}, rows = (n, 1+nval)
                arrays [element id, values...]; multiple tables for the same
-               elset (e.g. SF and TSHR requests) stay separate entries
-    elset      the current "ELEMENT SET <NAME>" context (regex on the table
-               preamble Abaqus prints above each block)
+               elset (e.g. SF and TSHR requests) stay separate entries; a table
+               Abaqus prints as "ALL VALUES IN THIS TABLE ARE ZERO" has no data
+               rows and is dropped
+    elset      the current "ELEMENT SET <NAME>" context.  Abaqus WRAPS long
+               preambles: "... FOR ELEMENT TYPE C3D8I AND ELEMENT" / "SET COL0"
+               on the next line -- both the one-line and the wrapped form are
+               matched (pend flags the dangling "...ELEMENT" line)
     labels     the column names taken from the header line that lists the
                requested identifiers (tokens like S11/SF1/TSHR13); Abaqus column
                ORDER is version-dependent -- everything downstream selects
                columns BY LABEL, never by position
-    rows       numeric lines "<eid> <pt> <values...>"; the section-point / PT
-               column is kept when present (shell tables) and absent for
-               POSITION=CENTROIDAL solid tables -- the parser stores whatever
-               floats follow the leading integer(s)
+    rows       data lines "<eid> [pt] [sec] [OR] <values...>": the leading token
+               must be an integer id; every remaining FLOAT-parsable token is
+               kept and non-numeric footnote tokens (the "OR" orientation flag
+               of oriented solids) are dropped, so a row is [eid, numbers...]
+               with the labeled values LAST; summary lines (MAXIMUM/MINIMUM/
+               ELEMENT) start with a word and are skipped
 
     Returns the tables dict.
     """
     with open(dat_path, errors="replace") as f:
         lines = f.read().splitlines()
     tables = {}
-    elset, labels, key = None, None, None
+    elset, labels, key, pend = None, None, None, False
     for ln in lines:
         m = re.search(r"ELEMENT SET\s+(\S+)", ln)
         if m:
-            elset, labels, key = m.group(1), None, None
+            elset, labels, key, pend = m.group(1), None, None, False
+            continue
+        if pend:
+            m = re.match(r"\s*SET\s+(\S+)\s*$", ln)
+            pend = False
+            if m:
+                elset, labels, key = m.group(1), None, None
+                continue
+        if re.search(r"AND ELEMENT\s*$", ln):
+            pend = True
+            continue
+        if "TABLE IS PRINTED" in ln:
+            # any OTHER table (node prints etc.) ends the element-table context;
+            # without this the NMID/NW node rows (different width) would be
+            # appended to the previous element table and make it ragged
+            elset, labels, key = None, None, None
             continue
         toks = ln.split()
         if elset and not labels and toks and any(
@@ -81,11 +102,14 @@ def read_elprint_tables(dat_path):
             tables.setdefault(key, [])
             continue
         if key and toks and re.fullmatch(r"\d+", toks[0]):
-            try:
-                vals = [float(t) for t in toks]
-            except ValueError:
-                continue
-            tables[key].append(vals)
+            vals = [float(toks[0])]
+            for t in toks[1:]:
+                try:
+                    vals.append(float(t))
+                except ValueError:
+                    pass
+            if len(vals) > 1:
+                tables[key].append(vals)
     return {k: np.array(v) for k, v in tables.items() if len(v)}
 
 
@@ -139,19 +163,27 @@ def ff_from_shell_dat(dat_path, a, nel=100):
     return R6amp, Qamp
 
 
-def solid_profiles(dat_path, thick, a, nx=160, nz_per_ply=10):
+def solid_profiles(dat_path, thick, angles_deg, a, nx=160, nz_per_ply=10):
     """Benchmark through-thickness profiles from the solid job .dat.
 
     Variables
     ---------
-    thick, a, nx,   the deck parameters (element -> z mapping and the harmonic
-    nz_per_ply      centroid corrections must match make_abaqus_6p2)
+    thick, angles_deg, the deck parameters (element -> z/ply mapping and the
+    a, nx, nz_per_ply  harmonic centroid corrections must match make_abaqus_6p2)
     p, dx           wavenumber and span element size
     zpl, zk         ply interfaces and node planes from the bottom face
     zc              (nzt,) element-centroid heights from the MID-surface [in]
     t               the parsed tables; COL0 rows ascending element id = ascending
                     k (eid(0, k) = 1 + k nx), same for COLM
-    s13, s23        COL0 centroidal stresses divided by cos(p dx/2)
+    th, cth, sth    the PLY ANGLE of each thickness element and its cos/sin:
+                    with a *SOLID SECTION ... ORIENTATION Abaqus prints S in the
+                    PLY LOCAL frame (the "OR" footnote) -- e.g. a 90.5-deg ply
+                    reports local S13 ~ global sigma_23 and local S23 ~
+                    -sigma_13.  The transverse-shear pair rotates back with
+                    sigma_13 = c S13loc - s S23loc, sigma_23 = s S13loc +
+                    c S23loc (sigma_33 is rotation-invariant about the normal);
+                    verified against exact to 4 digits on all three Yu cases
+    s13, s23        COL0 GLOBAL-frame shears divided by cos(p dx/2)
     s33             COLM centroidal stresses divided by sin(p (a/2 + dx/2))
 
     Returns (zc, s13, s23, s33).
@@ -162,11 +194,14 @@ def solid_profiles(dat_path, thick, a, nx=160, nz_per_ply=10):
     zk = np.concatenate([np.linspace(zpl[m], zpl[m + 1], nz_per_ply + 1)[:-1]
                          for m in range(len(thick))] + [[zpl[-1]]])
     zc = 0.5 * (zk[:-1] + zk[1:]) - zpl[-1] / 2
+    lay = np.searchsorted(zpl[1:-1], zc + zpl[-1] / 2, side="right")
+    th = np.deg2rad(np.asarray(angles_deg, float))[lay]
+    cth, sth = np.cos(th), np.sin(th)
     t = read_elprint_tables(dat_path)
     _, c0 = pick(t, "COL0", ["S13", "S23"])
     _, cm = pick(t, "COLM", ["S33"])
-    s13 = c0[0] / np.cos(p * 0.5 * dx)
-    s23 = c0[1] / np.cos(p * 0.5 * dx)
+    s13 = (cth * c0[0] - sth * c0[1]) / np.cos(p * 0.5 * dx)
+    s23 = (sth * c0[0] + cth * c0[1]) / np.cos(p * 0.5 * dx)
     s33 = cm[0] / np.sin(p * (a / 2 + 0.5 * dx))
     return zc, s13, s23, s33
 
@@ -174,26 +209,44 @@ def solid_profiles(dat_path, thick, a, nx=160, nz_per_ply=10):
 def tshr_profile(dat_path, thick, a, nel=100):
     """Abaqus inbuilt-FSDT transverse-shear estimate TSHR13/TSHR23 at x = 0.
 
-    Variables: thick/a/nel as the FSDT deck; PT = the shell section-point number
-    (3 per ply, bottom/mid/top, numbered from the BOTTOM ply up); z_pt = its
-    height from the mid-surface; rows = the EEND TSHR table divided by
-    cos(p dx/2).  Returns (z_pt, tshr13, tshr23) or None when the table is
-    absent (output not supported by the installed version).
+    Variables: thick/a/nel as the FSDT deck; rows = the EEND TSHR table, columns
+    [eid, PT, SEC, TSHR13, TSHR23] (PT = the S4 in-plane integration point 1-4,
+    SEC = the composite section point, 3 per ply numbered from the BOTTOM ply
+    up); sec/v13/v23 = the SEC index and the values AVERAGED over the 4 in-plane
+    points of the element, divided by cos(p dx/2) (the element sits at x =
+    dx/2); z_pt = the section-point heights from the mid-surface (ply bottom /
+    mid / top).  Returns (z_pt, tshr13, tshr23) or None when the table is absent
+    or Abaqus printed it as all-zero (TSHR is not populated for every shell
+    element type -- plain S4 gives zeros; the caller then simply omits the
+    inbuilt curve).
     """
     p = np.pi / a
     dx = a / nel
     try:
         t = read_elprint_tables(dat_path)
-        _, cols = pick(t, "EEND", ["TSHR13", "TSHR23"])
-    except (KeyError, OSError):
+        for (es, labels), rows in t.items():
+            if es == "EEND" and "TSHR13" in labels and rows.shape[1] >= 5:
+                break
+        else:
+            return None
+    except OSError:
         return None
     zpl = np.concatenate([[0.0], np.cumsum(np.asarray(thick, float))])
-    z_pt = np.array([zpl[m] + f * (zpl[m + 1] - zpl[m])
-                     for m in range(len(thick)) for f in (0.0, 0.5, 1.0)])
-    z_pt -= zpl[-1] / 2
-    n = min(len(z_pt), len(cols[0]))
-    return (z_pt[:n], cols[0][:n] / np.cos(p * 0.5 * dx),
-            cols[1][:n] / np.cos(p * 0.5 * dx))
+    z_all = np.array([zpl[m] + f * (zpl[m + 1] - zpl[m])
+                      for m in range(len(thick)) for f in (0.0, 0.5, 1.0)])
+    z_all -= zpl[-1] / 2
+    secs = sorted(set(rows[:, 2].astype(int)))
+    z_pt, v13, v23 = [], [], []
+    for s in secs:
+        sel = rows[rows[:, 2].astype(int) == s]
+        if s - 1 < len(z_all):
+            z_pt.append(z_all[s - 1])
+            v13.append(np.mean(sel[:, 3]))
+            v23.append(np.mean(sel[:, 4]))
+    if not z_pt or np.allclose(v13, 0.0):
+        return None
+    c = np.cos(p * 0.5 * dx)
+    return np.array(z_pt), np.array(v13) / c, np.array(v23) / c
 
 
 def run_case(case):
@@ -246,7 +299,7 @@ def run_case(case):
         [[0.0], np.cumsum(0.5 * p * (s13_r[1:] + s13_r[:-1]) * np.diff(zc))])
 
     zs, s13_s, s23_s, s33_s = solid_profiles(
-        os.path.join(adir, "yu_%s_SOLID.dat" % case), thk, a)
+        os.path.join(adir, "yu_%s_SOLID.dat" % case), thk, ang, a)
     tsh = tshr_profile(os.path.join(adir, "yu_%s_FSDT.dat" % case), thk, a)
 
     ex = ExactCyl(thk, ang, mats, MATERIAL_DB, a, q0=0.5 * q0, q_bot=-0.5 * q0)
@@ -261,6 +314,10 @@ def run_case(case):
     e13 = relerr(zc, s13_r, zs, s13_s)
     e23 = relerr(zc, s23_r, zs, s23_s)
     e33 = relerr(zc, s33_r, zs, s33_s)
+    # the benchmark's own credentials: solid vs the exact Pagano solution
+    es13 = relerr(zs, s13_s, ze, sige[:, 4])
+    es23 = relerr(zs, s23_s, ze, sige[:, 3])
+    es33 = relerr(zs, s33_s, ze, sige[:, 2])
 
     hdr = ["%s -- Yu-2003 sec.-6.2 analog: Abaqus as the 2-D solver (DYMORE role)"
            % case,
@@ -272,6 +329,8 @@ def run_case(case):
            "Abaqus Q = [%.6g, %.6g]" % (q0 / p ** 2, q0 / p, Qamp[0], Qamp[1]),
            "rel L2 errors of the recovery vs the SOLID benchmark:  "
            "s13 %7.3f%%  s23 %7.3f%%  s33 %7.3f%%" % (e13, e23, e33),
+           "benchmark credentials, solid vs exact Pagano:  "
+           "s13 %7.3f%%  s23 %7.3f%%  s33 %7.3f%%" % (es13, es23, es33),
            "TSHR13/23 present: %s" % ("yes" if tsh else "no"),
            "",
            "columns: z[in]  s13_rec  s23_rec  s33_rec  [/p0]  "
@@ -308,7 +367,8 @@ def run_case(case):
                 bbox_inches="tight")
     plt.close(fig)
     print("  %s (vs solid benchmark): s13 %7.3f%%  s23 %7.3f%%  s33 %7.3f%%"
-          % (case, e13, e23, e33))
+          "   [solid vs exact: %5.2f / %5.2f / %5.2f%%]"
+          % (case, e13, e23, e33, es13, es23, es33))
     return dict(case=case, e13=e13, e23=e23, e33=e33)
 
 

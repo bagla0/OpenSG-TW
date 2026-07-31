@@ -68,10 +68,18 @@ def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, 
                     has no extension/shear or bending/twist coupling.  True (the
                     ANGLE-PLY set, e.g. the Yu-2003 laminates): shear coupling
                     makes v(x) and the twist rotation NONZERO under cylindrical
-                    bending, so u2/ur1 must be left FREE; nothing varies across
-                    the one-element width (identical loads on both node rows), so
-                    y-uniformity holds without constraints and only the u2 rigid
-                    mode is pinned (node 1); drilling ur3 stays constrained.
+                    bending, so u2/ur1 must be left FREE and the two width rows
+                    are tied node-by-node with *EQUATION on all six dofs --
+                    enforcing d/dy = 0, the infinite plate.  Free y-edges are NOT
+                    enough: the one-element strip then sheds the coupling twist
+                    like a narrow beam in torsion (M12/Q2 average to ~0 across
+                    the width; observed on the Yu-2003 case1 deck).  BCs touch
+                    only the master j = 0 row (the j = 1 dofs are the eliminated
+                    equation terms): u2 pinned at one node, u3 = 0 at the two
+                    end nodes, u1 = 0 at x = 0, and NO drilling BC -- the
+                    angle-ply ur3 ~ v,1 is nonzero and constraining it injects a
+                    spurious constant N12 (S4's internal drilling stabilization
+                    suffices).
     p, b            wavenumber pi/a; element width (one square element)
     nid(i, j)       node numbering: span index i (0..nel), width row j (0, 1)
     L, A            the accumulated deck lines and the append shorthand
@@ -100,23 +108,49 @@ def _strip_inp(path, title, header_lines, material_lines, section_lines, a, q0, 
     A("%d" % (nel // 2))
     A("*ELSET, ELSET=EEND")
     A("1")
-    A("*NSET, NSET=NX0")
-    A("%d, %d" % (nid(0, 0), nid(0, 1)))
-    A("*NSET, NSET=NXA")
-    A("%d, %d" % (nid(nel, 0), nid(nel, 1)))
+    if coupled:
+        # BCs may only touch the j = 0 (master) row: the j = 1 row is the
+        # ELIMINATED first term of the width-tie equations below
+        A("*NSET, NSET=NX0")
+        A("%d" % nid(0, 0))
+        A("*NSET, NSET=NXA")
+        A("%d" % nid(nel, 0))
+    else:
+        A("*NSET, NSET=NX0")
+        A("%d, %d" % (nid(0, 0), nid(0, 1)))
+        A("*NSET, NSET=NXA")
+        A("%d, %d" % (nid(nel, 0), nid(nel, 1)))
     A("*NSET, NSET=NMID")
     A("%d" % nid(nel // 2, 0))
+    A("*NSET, NSET=NROW0, GENERATE")
+    A("%d, %d, 2" % (nid(0, 0), nid(nel, 0)))
     A("*NSET, NSET=NALL, GENERATE")
     A("1, %d, 1" % nid(nel, 1))
     A("**")
     L.extend(material_lines)
     L.extend(section_lines)
     A("**")
+    if coupled:
+        # width ties u(j=1) = u(j=0) on ALL SIX dofs -> d/dy = 0 exactly (the
+        # infinite plate).  Without them the one-element strip has FREE y-edges
+        # and sheds the coupling twist like a narrow beam in torsion (M12/Q2
+        # average to ~0 across the width) -- seen live on the Yu case1 deck.
+        A("** ---- width ties: infinite-plate condition for the coupled layup ----")
+        A("*EQUATION")
+        for i in range(nel + 1):
+            for d in (1, 2, 3, 4, 5, 6):
+                A("2")
+                A("%d, %d, 1.0, %d, %d, -1.0" % (nid(i, 1), d, nid(i, 0), d))
+        A("**")
     A("** ---- cylindrical bending + simple supports ----")
     A("*BOUNDARY")
     if coupled:
-        A("1, 2, 2")                              # pin the u2 rigid mode only
-        A("NALL, 6, 6")                           # ur3 = 0  (drilling)
+        A("%d, 2, 2" % nid(0, 0))                 # pin the u2 rigid mode only
+        # NO drilling BC here: the angle-ply solution has ur3 ~ v,1 != 0, and
+        # constraining it injects a spurious CONSTANT N12 (drilling reaction ->
+        # membrane shear; observed as N12 = -0.018 on the Yu case1 strip while
+        # the infinite plate has N12 = 0).  S4's internal drilling stabilization
+        # keeps the model well-posed without it.
     else:
         A("NALL, 2, 2")                           # u2 = 0   (nothing varies with x2)
         A("NALL, 4, 4")                           # ur1 = 0  (kappa22 = 0)
