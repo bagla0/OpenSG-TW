@@ -123,15 +123,33 @@ E6_end  = S6 @ FF_end[:6]
 dE1_end = S6 @ np.array([0, 0, 0, Q1, 0, 0.0])
 \end{verbatim}
 
-\subsection*{2d.  Pointwise recovery (Yu Eq.~63) and $\sigma_{33}$}
-\begin{equation}
-\Gamma(z) = \Gamma_h S\big(V_0\bm\epsilon + V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2}\big)
- + \Gamma_\epsilon\bm\epsilon + \Gamma_{l_1}S(V_0\bm\epsilon)_{,1} + \Gamma_{l_2}S(V_0\bm\epsilon)_{,2},
+\subsection*{2d.  Pointwise recovery (Yu Eqs.~63/66) and $\sigma_{33}$}
+The implemented recovery is the full SECOND-order formula (Eq.~66), carrying the
+$V_2$ warping blocks of Eq.~64 ($\bar V_{1a} = V_{1a} + \mathrm{kernel}\,c_a$ are the
+relaxed first-order columns of Eq.~58):
+\begin{align}
+\Gamma(z) ={}& \Gamma_h S\big(V_0\bm\epsilon + \bar V_{11}\bm\epsilon_{,1}
+ + \bar V_{12}\bm\epsilon_{,2}
+ + V_{21}\bm\epsilon_{,11} + V_{22}\bm\epsilon_{,12} + V_{23}\bm\epsilon_{,22}\big)
+ + \Gamma_\epsilon\bm\epsilon \notag\\
+ &+ \Gamma_{l_1}S\big(V_0\bm\epsilon + \bar V_{11}\bm\epsilon_{,1}
+ + \bar V_{12}\bm\epsilon_{,2}\big)_{,1}
+ + \Gamma_{l_2}S\big(V_0\bm\epsilon + \bar V_{11}\bm\epsilon_{,1}
+ + \bar V_{12}\bm\epsilon_{,2}\big)_{,2},
 \qquad \sigma(z) = C(z)\,\Gamma(z)
-\end{equation}
-The $\sigma_{13}$ content is carried by $V_{11}\bm\epsilon_{,1}$; the traction-free faces
-emerge naturally.  $\sigma_{33}$ by through-thickness equilibrium of the recovered
-amplitude (families $\sigma_{13}\sim\cos \Rightarrow \sigma_{33}\sim\sin$):
+\end{align}
+For THIS load case the $V_2$ terms carry exactly zero, for two independent reasons:
+(i) the constant-$Q$ statics state has $\bm\epsilon_{,11} = \bm\epsilon_{,12} =
+\bm\epsilon_{,22} = 0$ (the second gradients of the resultants vanish when $Q$ is
+constant), and (ii) for monoclinic laminates the $V_2$ contribution to
+$\sigma_{13},\sigma_{23}$ is identically zero by the parity ladder regardless of the
+load ($V_2$'s payload is $\sigma_{33}$, which enters here through the equilibrium
+integration below).  The code nevertheless evaluates the full formula
+(\code{msgrm\_strain\_at\_depth} accepts \code{dE11/dE12/dE22}).
+The $\sigma_{13}$ content is carried by $\bar V_{11}\bm\epsilon_{,1}$; the
+traction-free faces emerge naturally.  $\sigma_{33}$ by through-thickness equilibrium
+of the recovered amplitude (families $\sigma_{13}\sim\cos \Rightarrow
+\sigma_{33}\sim\sin$):
 \begin{equation}
 \hat\sigma_{33}(z) = \int_{-h/2}^{z} p\,\hat\sigma_{13}(z')\,\mathrm dz'
 \qquad\text{(lands on } q_0 \text{ at the top face in every case)}
