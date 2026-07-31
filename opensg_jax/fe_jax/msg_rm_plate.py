@@ -343,34 +343,19 @@ def _bucket(nlay, n_per_layer, p):
         V2_n3s = solve_constrained(jnp.concatenate([D21bar_ns, D22bar_ns, D23bar_ns], axis=1))
         V21_ns = V2_n3s[:, :6]; V22_ns = V2_n3s[:, 6:12]; V23_ns = V2_n3s[:, 12:]  # Eq. (64)
 
-        # ---- LOAD COLUMNS (Yu Eqs. 29/45/64): the pressure-driven warping ladder ----
-        # Load pattern: UNIT normal traction on the TOP face, tau = e3 (sigma33 = +1
-        # there).  Virtual work <delta w . tau> on the face -> L = S(top)^T e3, i.e. a
-        # single 1 at the top node's w3 dof (shape functions are 1 at their own node).
-        # First order (the Eq.-45 load column, per unit local pressure q):
-        #     E V1L + L = H psi (psi^T L)     ->  one more RHS on the same lu_piv.
-        # Its recovered Gamma_h S V1L strain is what carries sigma33 = q at the top
-        # face and 0 at the bottom -- the load-driven ramp Yu recovers directly.
-        # Second order (the V2L columns, same collection that produced Dbar2k, with the
-        # load rung V1L in place of the eps-ladder rungs):
-        #     q,a   drivers:  (D_hla - D_hla^T) V1L
-        #     q,ab  drivers:  -D_lalb V1L  (mixed gets both orderings)
-        # sign: solve_constrained solves E V = -rhs, and the energy carries the load as
-        # -2V^T L (external work), so the rhs handed in is -L; the face check
-        # (sigma33(top) = +q, sigma33(bottom) = 0, exact to machine precision) fixes it
-        L_n = jnp.zeros(ndofs).at[ndofs - 1].set(-1.0)         # top-node w3 dof
-        V1L_n = solve_constrained(L_n[:, None])[:, 0]
-        D2L1_n = (D_hl1_nn - D_hl1_nn.T) @ V1L_n
-        D2L2_n = (D_hl2_nn - D_hl2_nn.T) @ V1L_n
-        D2L11_n = -D_l1l1_nn @ V1L_n
-        D2L12_n = -(D_l1l2_nn + D_l1l2_nn.T) @ V1L_n
-        D2L22_n = -D_l2l2_nn @ V1L_n
-        V2L_n5 = solve_constrained(jnp.stack([D2L1_n, D2L2_n, D2L11_n, D2L12_n,
-                                              D2L22_n], axis=1))
+        # NOTE on the LOAD COLUMNS (Yu Eqs. 29/45): V1L (E V1L + L = H psi psi^T L, one
+        # more RHS on the same lu_piv) and the five V2L columns were prototyped and
+        # validated here (faces exact by construction, sigma33 1.19% at S=10 on the
+        # Pagano benchmark) and then removed by decision: the through-thickness
+        # equilibrium integration of the recovered sigma13 delivers sigma33 with equal
+        # or better accuracy for the pressure-loaded cases without extending the API,
+        # and for beam-resultant loading (this code's primary use) the load drivers
+        # vanish identically.  See git history (d1b52ac / 3e2f1d0) for the working
+        # implementation and examples/benchmarks history for its validation.
 
         # returned in the PAPER symbols (the public dict keys carry no dimension suffixes)
         return (A6_ss, G_gg, X_gg, H_tt, Ustar_rel, V0_ns, V11_ns, V12_ns, c1_is, c2_is,
-                ev_min, V11bar_ns, V12bar_ns, V21_ns, V22_ns, V23_ns, V1L_n, V2L_n5)
+                ev_min, V11bar_ns, V12bar_ns, V21_ns, V22_ns, V23_ns)
 
     bk = dict(nlay=nlay, n_per_layer=n_per_layer, p=p, n_elem=n_elem, ndofs=ndofs,
               elem_layer=elem_layer,
@@ -399,7 +384,7 @@ def _node_grid(thick, n_per_layer, p, z_ref):
 
 def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer):
     (A6, G, X, H, Ustar_rel, V0, V11, V12, c1, c2, ev_min,
-     V11b, V12b, V21, V22, V23, V1L, V2L) = [np.asarray(o) for o in out]
+     V11b, V12b, V21, V22, V23) = [np.asarray(o) for o in out]
     thick = [float(t) for t in thick]
     spd = float(ev_min) > 0
     # the full RM plate law, Eqs. (40) + (61):  ABDG = [[A6, 0], [0, G]]
@@ -413,8 +398,6 @@ def _pack(out, thick, angles_deg, C_layers, n_per_layer, p, fraction, elem_layer
             "Ustar_rel": float(Ustar_rel),
             "V0": V0, "V11": V11, "V12": V12,
             "V11bar": V11b, "V12bar": V12b, "V21": V21, "V22": V22, "V23": V23,
-            "V1L": V1L, "V2L1": V2L[:, 0], "V2L2": V2L[:, 1],
-            "V2L11": V2L[:, 2], "V2L12": V2L[:, 3], "V2L22": V2L[:, 4],
             "node_x": _node_grid(thick, n_per_layer, p, float(fraction) * sum(thick)),
             "elem_layer": elem_layer, "C_layers": list(C_layers), "elem_order": p,
             "angles": [float(a) for a in angles_deg], "c1": c1, "c2": c2}
@@ -490,43 +473,33 @@ def _locate(obj, z):
     return e, xi, he, nodes_xi, dofs, 0.5 * (xl + xr) + 0.5 * he * xi
 
 
-def _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22,
-                q=0.0, dq1=0.0, dq2=0.0, dq11=0.0, dq12=0.0, dq22=0.0):
-    """Eq. (58)+(64) local warping and the Gamma_l arguments of Eq. (66), INCLUDING
-    the load ladder (Yu Eqs. 29/45): q is the LOCAL surface pressure (top-face
-    sigma33 = q) and dq* its in-plane derivatives.
+def _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22):
+    """Eq. (58)+(64) local warping and the Gamma_l arguments of Eq. (66).
 
-    w_loc = V0 e + V1bar,a e,a + V2ab e,ab + V1L q + V2La q,a + V2Lab q,ab
-    g_a   = V0 e,a + V11bar e,a1 + V12bar e,a2 + V1L q,a
+    w_loc = V0 e + V1bar,a e,a + V2ab e,ab       (the S(V0 + V1bar + V2) content)
+    g_a   = (V0 e),a + (V1bar),a = V0 e,a + V11bar e,a1 + V12bar e,a2
     Uses the RELAXED first-order columns V11bar/V12bar (paper Sec. 5: carry V1bar,
     not V1, into the recovery); in Gamma_h the constants drop out anyway, in the
     Gamma_l terms (second order) they are genuine contributors."""
     w_loc = (obj["V0"][dofs] @ E6 + obj["V11bar"][dofs] @ dE1 + obj["V12bar"][dofs] @ dE2
-             + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12 + obj["V23"][dofs] @ dE22
-             + obj["V1L"][dofs] * q
-             + obj["V2L1"][dofs] * dq1 + obj["V2L2"][dofs] * dq2
-             + obj["V2L11"][dofs] * dq11 + obj["V2L12"][dofs] * dq12
-             + obj["V2L22"][dofs] * dq22)
-    g1 = (obj["V0"][dofs] @ dE1 + obj["V11bar"][dofs] @ dE11 + obj["V12bar"][dofs] @ dE12
-          + obj["V1L"][dofs] * dq1)
-    g2 = (obj["V0"][dofs] @ dE2 + obj["V11bar"][dofs] @ dE12 + obj["V12bar"][dofs] @ dE22
-          + obj["V1L"][dofs] * dq2)
+             + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12 + obj["V23"][dofs] @ dE22)
+    g1 = obj["V0"][dofs] @ dE1 + obj["V11bar"][dofs] @ dE11 + obj["V12bar"][dofs] @ dE12
+    g2 = obj["V0"][dofs] @ dE2 + obj["V11bar"][dofs] @ dE12 + obj["V12bar"][dofs] @ dE22
     return w_loc, g1, g2
 
 
-def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None,
-                          q=0.0, dq1=0.0, dq2=0.0, dq11=0.0, dq12=0.0, dq22=0.0):
+def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, dE22=None):
     """3-D Voigt strain at through-thickness x=z (same origin as node_x).
 
     With dE1/dE2 only: the FIRST-order recovery, Eq. (63).  Passing the second gradients
     dE11/dE12/dE22 (= E6,11 / E6,12 / E6,22) activates the SECOND-order recovery, Eq. (66):
-        Gam = Gamma_h S(V0+V1bar+V2+V1L q+V2L) + Gamma_eps eps
-              + Gamma_l1 S(V0,1 + V1bar,1 + V1L q,1) + Gamma_l2 S(...,2)
-    which is what carries the through-thickness components (sigma33 in particular) at
-    their leading order.  q / dq1 / dq2 / dq11 / dq12 / dq22 are the LOCAL top-face
-    pressure (sigma33 = q there) and its in-plane derivatives -- the LOAD ladder of
-    Yu Eqs. 29/45: with them, sigma33 is recovered DIRECTLY from the constitutive law
-    (Yu's route, no equilibrium integration).  Returns (Gam6, Sig6, ply_angle_deg)."""
+        Gam = Gamma_h S(V0+V1bar+V2) + Gamma_eps eps
+              + Gamma_l1 S(V0,1 + V1bar,1) + Gamma_l2 S(V0,2 + V1bar,2)
+    which is what carries the through-thickness components at their leading order.
+    For a SURFACE-PRESSURE-loaded plate, sigma33 is obtained by through-thickness
+    equilibrium integration of the recovered sigma13/sigma23 amplitudes (see the
+    load-column note in the homogenization kernel).  Returns (Gam6, Sig6,
+    ply_angle_deg)."""
     zeros = np.zeros(6)
     dE1 = zeros if dE1 is None else np.asarray(dE1, float)
     dE2 = zeros if dE2 is None else np.asarray(dE2, float)
@@ -537,8 +510,7 @@ def msgrm_strain_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None, 
     Gamma_h = _plate_B(nodes_xi, xi, he)
     Gamma_l1, Gamma_l2 = _grad_ops(nodes_xi, xi)
     Gamma_eps = _E0 + x_q * _E1
-    w_loc, g1, g2 = _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22,
-                                q, dq1, dq2, dq11, dq12, dq22)
+    w_loc, g1, g2 = _warp_terms(obj, dofs, E6, dE1, dE2, dE11, dE12, dE22)
     Gam = Gamma_h @ w_loc + Gamma_eps @ E6 + Gamma_l1 @ g1 + Gamma_l2 @ g2
     k = obj["elem_layer"][e]
     Sig = np.asarray(obj["C_layers"][k]) @ Gam

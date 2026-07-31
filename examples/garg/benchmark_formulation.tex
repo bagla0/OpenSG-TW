@@ -154,30 +154,23 @@ of the recovered amplitude (families $\sigma_{13}\sim\cos \Rightarrow
 \hat\sigma_{33}(z) = \int_{-h/2}^{z} p\,\hat\sigma_{13}(z')\,\mathrm dz'
 \qquad\text{(lands on } q_0 \text{ at the top face in every case)}
 \end{equation}
-\emph{$\sigma_{33}$: Yu's direct route, now implemented.}  Yu's 2003 recovery paper
-states explicitly that ``it is not necessary to use integration through the thickness
-of the 3-D equilibrium equations to get the transverse normal and transverse shear
-\dots{} results presented herein'' --- his $\sigma_{33}$ comes from the 3-D
-constitutive law applied to the recovered strain, which works because his
+\emph{$\sigma_{33}$: equilibrium integration, and its relation to Yu's direct route.}
+Yu's 2003 recovery paper obtains $\sigma_{33}$ from the 3-D constitutive law applied
+to the recovered strain (``it is not necessary to use integration through the
+thickness of the 3-D equilibrium equations \dots''), which works because his
 implementation carries the LOAD COLUMNS forced by the surface traction (his Eqs.~29
-and 45: $V_1 = V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2} + V_{1L}$).  The core
-now implements them: $V_{1L}$ solves $E\,V_{1L} + L = H\psi(\psi^TL)$ with
-$L = -S(\text{top})^Te_3$ per unit top-face pressure (one more right-hand side on the
-same factorization), and the five second-order load columns $V_{2L}$ follow the same
-collection that produced $\bar D_{2k}$, with $V_{1L}$ as the load-ladder rung:
-$q_{,a}$ drivers $(D_{hl_a}{-}D_{hl_a}^T)V_{1L}$ and $q_{,ab}$ drivers
-$-D_{l_al_b}V_{1L}$.  The recovery then takes the LOCAL pressure and its in-plane
-derivatives ($q, q_{,a}, q_{,ab}$; here $q(a/2)=q_0$, $q_{,11}=-p^2q_0$) alongside the
-strain drivers ($\bm\epsilon$ and $\bm\epsilon_{,11} = -p^2\bm\epsilon$ at the sin
-peak), and $\sigma_{33} = [C\Gamma]_3$ DIRECTLY: both faces come out exact by
-construction ($\sigma_{33} = 0$ bottom, $+q_0$ top, machine precision) and the profile
-converges properly ($1.19\%$ at $S{=}10$, $0.012\%$ at $S{=}100$ for case A).  The
-through-thickness equilibrium integration is retained in the \code{.dat} as a
-cross-check column --- the two routes are asymptotically equivalent and agree to
-$\sim 0.1$ points on the laminates (they differ visibly only on the very thick
-sandwich, where the two truncations weight higher-order content differently).  In the
-blade pipeline (beam resultants, no panel pressure) the load drivers vanish and the
-direct recovery reduces to the self-equilibrated content, as before.
+and 45: $V_1 = V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2} + V_{1L}$).  Those
+columns were prototyped in the present core and validated on this benchmark (faces
+exact by construction; $\sigma_{33}$ $1.19\%$ at $S{=}10$, case A) and then REMOVED by
+decision: the through-thickness equilibrium integration used here,
+$\hat\sigma_{33}(z) = \int p\,\hat\sigma_{13}\,\mathrm dz'$ (the pointwise 3-D
+equilibrium $\sigma_{13,1}+\sigma_{33,3}=0$ applied to the recovered $\sigma_{13}$ ---
+no assumption), delivers equal or better accuracy for the pressure-loaded cases
+without extending the recovery interface, and for beam-resultant loading (the code's
+primary use) the load drivers vanish identically.  The two routes were measured
+asymptotically equivalent ($\sim0.1$-point agreement on the laminates); the working
+load-column implementation is preserved in the repository history (commits
+\code{d1b52ac}/\code{3e2f1d0}).
 \begin{verbatim}
 for i, z in enumerate(zc):
     s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
@@ -276,19 +269,18 @@ parentheses):
 \begin{center}\small
 \begin{tabular}{lrrr}
 \toprule
-case / $S$ & $\sigma_{13}$ MSG & $\sigma_{13}$ FSDT & $\sigma_{33}$ MSG direct (equil.) \\
+case / $S$ & $\sigma_{13}$ MSG & $\sigma_{13}$ FSDT & $\sigma_{33}$ MSG \\
 \midrule
-A\ \ 10  &  4.52\,\% & 107.1\,\% & 1.19\,\% \ (1.29\,\%) \\
-A\ \ 50  &  0.19\,\% & 108.7\,\% & 0.050\,\% \ (0.053\,\%) \\
-B\ \ 10  &  1.32\,\% &  91.9\,\% & 0.57\,\% \ (0.48\,\%) \\
-B\ \ 50  &  0.046\,\% &  92.4\,\% & 0.022\,\% \ (0.016\,\%) \\
-C\ \ 10  &  9.13\,\% & 5269\,\% & 2.53\,\% \ (0.89\,\%) \\
-C\ \ 50  &  0.39\,\% & 5468\,\% & 0.101\,\% \ (0.036\,\%) \\
+A\ \ 10  &  4.43\,\% & 107.1\,\% & 1.16\,\% \\
+A\ \ 50  &  0.18\,\% & 108.7\,\% & 0.048\,\% \\
+B\ \ 10  &  1.19\,\% &  91.9\,\% & 0.31\,\% \\
+B\ \ 50  &  0.041\,\% &  92.4\,\% & 0.010\,\% \\
+C\ \ 10  &  9.17\,\% & 5269\,\% & 0.82\,\% \\
+C\ \ 50  &  0.39\,\% & 5468\,\% & 0.034\,\% \\
 \bottomrule
 \end{tabular}
 \end{center}
-($\sigma_{33}$ FSDT does not exist.  The $\sigma_{13}$ column includes the second-order
-load term $V_{2L1}q_{,1}$.  The aspect ratios are restricted to the PLATE-MODEL REGIME
+($\sigma_{33}$ FSDT does not exist.  The aspect ratios are restricted to the PLATE-MODEL REGIME
 --- $S = 10$ (moderately thick) and $S = 50$ (thin) --- since at $S \le 5$ the
 first-order plate truncation itself dominates every plate theory and the comparison
 stops discriminating between them.  The FSDT numbers use the strict Whitney-1973
