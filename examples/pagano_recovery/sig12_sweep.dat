@@ -1,0 +1,28 @@
+sigma_12 validation vs the exact Pagano solution
+============================================================
+
+1. CROSS-PLY zero-field check (exact sigma_12 = 0 identically):
+   recovered max|s12|/max|s11| must sit at the round-off floor
+   caseA [0/90/0] S=10    max|s12_rec|/max|s11_rec| = 1.43e-16   (exact ||s12||/||s11|| = 5.2e-19)
+   caseC sandwich S=10    max|s12_rec|/max|s11_rec| = 2.23e-16   (exact ||s12||/||s11|| = 0.0e+00)
+
+2. ANGLE-PLY convergence sweep (Yu material, span a = 4 in,
+   errors = rel L2 vs exact at x = a/2; order between rows):
+   [15/-15]:
+     S = a/h    s11 err%%   s12 err%%   order(s12)
+     4           8.8904    14.0597      --
+     8           4.3609     6.9732    1.01
+     16          1.5691     2.5005    1.48
+     32          0.4419     0.7033    1.83
+     64          0.1141     0.1815    1.95
+   [30/-30/-30/30]:
+     S = a/h    s11 err%%   s12 err%%   order(s12)
+     4          15.2182    18.5210      --
+     8           3.5460     4.3537    2.09
+     16          0.8868     1.0707    2.02
+     32          0.2223     0.2665    2.01
+     64          0.0556     0.0666    2.00
+
+verdict: a ~2nd-order falling error curve = the recovery is
+correct and the thick-plate numbers are thickness effects; a
+plateau would indicate an operator/driver defect.
