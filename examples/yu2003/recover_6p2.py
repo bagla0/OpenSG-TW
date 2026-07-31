@@ -258,11 +258,16 @@ def run_case(case):
     adir            <case>/Abaqus_Plate/ holding yu_<case>_{RM,FSDT,SOLID}.dat
     lay, thk, ang,  the laminate; a/h/p/q0 the geometry and load (P0 = 1 ->
     mats            everything is already sigma/p0)
-    R6amp, Qamp     the Abaqus FF amplitudes (ff_from_shell_dat; the .dat also
-                    records the statics anchors q0/p^2 and q0/p they should hit)
+    R6amp, Qamp     the Abaqus FF amplitudes (ff_from_shell_dat) -- CROSS-CHECK
+                    only, printed in the .dat next to the statics anchors
     r, S6           rm_plate_msg result and inv(A6): strains from resultants
-    Es, dE1_0       the sin-family strain amplitude S6 R6amp and its x = 0
-                    gradient p Es (E6(x) = Es sin(px), zero AT x = 0)
+    ze, sige        the exact profile grid and stress amplitudes (n, 6)
+    Q1_ex, M11_ex   the FF actually USED: section resultants integrated from
+                    the exact 3-D stresses, Q1 = int s13_hat dz (the x = 0
+                    amplitude) and M11 = int s11_hat z dz (x = L/2, mid-surface
+                    reference); both land on the statics q0/p and q0/p^2
+    dE1_0           the recovery input at x = 0, garg-style standalone:
+                    S6 [0, 0, 0, Q1_ex, 0, 0] (dM11/dx = Q1; E6(0) = 0)
     zc              recovery grid from the mid-surface (81 points per ply)
     s13_r, s23_r    the Eq.-63 recovered amplitudes at each zc
     s33_r           thickness-equilibrium integral d(s33)/dz = p s13 from the
@@ -285,8 +290,17 @@ def run_case(case):
         os.path.join(adir, "yu_%s_RM.dat" % case), a)
     r = rm_plate_msg(thk, ang, mats, MATERIAL_DB, fraction=0.5)
     S6 = np.linalg.inv(np.asarray(r["A6"]))
-    Es = S6 @ R6amp
-    dE1_0 = p * Es
+    ex = ExactCyl(thk, ang, mats, MATERIAL_DB, a, q0=0.5 * q0, q_bot=-0.5 * q0)
+    ze, sige, _, _ = ex.profile(n_per_layer=81)
+    # FF from the EXACT 3-D solution's own SECTION RESULTANTS (the garg-style
+    # standalone input): Q1 = int sigma13_hat dz at x = 0 and M11 = int
+    # sigma11_hat z dz at x = L/2 (mid-surface reference); both must land on
+    # the statics values q0/p and q0/p^2 (printed check).  The recovery input
+    # is then dE1 = S6 [0, 0, 0, Q1, 0, 0] exactly as in the Garg benchmark
+    # (dM11/dx = Q1); the Abaqus FF above stays as a cross-check only.
+    Q1_ex = float(np.trapezoid(sige[:, 4], ze))
+    M11_ex = float(np.trapezoid(sige[:, 0] * ze, ze))
+    dE1_0 = S6 @ np.array([0.0, 0.0, 0.0, Q1_ex, 0.0, 0.0])
     z6 = np.zeros(6)
     zpl = np.concatenate([[0.0], np.cumsum(np.asarray(thk, float))]) - h / 2
     zc = np.concatenate([np.linspace(zpl[m] + 1e-9, zpl[m + 1] - 1e-9, 81)
@@ -302,9 +316,6 @@ def run_case(case):
         os.path.join(adir, "yu_%s_SOLID.dat" % case), thk, ang, a)
     tsh = tshr_profile(os.path.join(adir, "yu_%s_FSDT.dat" % case), thk, a)
 
-    ex = ExactCyl(thk, ang, mats, MATERIAL_DB, a, q0=0.5 * q0, q_bot=-0.5 * q0)
-    ze, sige, _, _ = ex.profile(n_per_layer=81)
-
     def relerr(zm, m, zb, b):
         """Rel L2 error [%] of model (zm, m) vs benchmark (zb, b), interpolated
         onto the benchmark grid."""
@@ -319,14 +330,17 @@ def run_case(case):
     es23 = relerr(zs, s23_s, ze, sige[:, 3])
     es33 = relerr(zs, s33_s, ze, sige[:, 2])
 
-    hdr = ["%s -- Yu-2003 sec.-6.2 analog: Abaqus as the 2-D solver (DYMORE role)"
-           % case,
-           "chain: Abaqus RM-shell SF/SM -> FF -> OpenSG-RM Eq.-63 recovery;",
-           "benchmark = Abaqus 3-D solid strip; baseline = inbuilt-FSDT TSHR",
-           "FF amplitudes from Abaqus [N11,N22,N12,M11,M22,M12] = [%s]"
+    hdr = ["%s -- Yu-2003 sec.-6.2 analog" % case,
+           "chain: FF = SECTION RESULTANTS OF THE EXACT 3-D SOLUTION (garg-style",
+           "standalone input) -> dE1 = S6 [0,0,0,Q1,0,0] -> OpenSG-RM Eq.-63",
+           "recovery; benchmark = Abaqus 3-D solid strip (cross-check numbers)",
+           "FF from the exact section: Q1 = int s13 dz = %.6g (statics q0/p = %.6g)"
+           % (Q1_ex, q0 / p),
+           "                           M11 = int s11 z dz = %.6g (q0/p^2 = %.6g)"
+           % (M11_ex, q0 / p ** 2),
+           "Abaqus RM-shell FF, cross-check only [N11,N22,N12,M11,M22,M12] = [%s]"
            % ", ".join("%.6g" % v for v in R6amp),
-           "  statics anchors: M11 -> q0/p^2 = %.6g ; Q1 -> q0/p = %.6g, "
-           "Abaqus Q = [%.6g, %.6g]" % (q0 / p ** 2, q0 / p, Qamp[0], Qamp[1]),
+           "  with Abaqus Q = [%.6g, %.6g]" % (Qamp[0], Qamp[1]),
            "rel L2 errors of the recovery vs the SOLID benchmark:  "
            "s13 %7.3f%%  s23 %7.3f%%  s33 %7.3f%%" % (e13, e23, e33),
            "benchmark credentials, solid vs exact Pagano:  "
@@ -350,7 +364,7 @@ def run_case(case):
                 label="exact 3-D (Pagano)" if ax is ax1 else None)
         ax.plot(mth, zm / h, ":s", color="#ff7f0e", ms=4, mfc="none", mew=1.2,
                 lw=1.6, markevery=6,
-                label="OpenSG-RM recovery\n(FF from Abaqus RM shell)"
+                label="OpenSG-RM recovery\n(FF = exact section $Q_1$)"
                 if ax is ax1 else None)
         ax.set_xlabel(lbl, fontsize=11)
         ax.grid(alpha=0.3)
