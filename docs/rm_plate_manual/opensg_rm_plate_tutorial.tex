@@ -1,199 +1,220 @@
 \documentclass[11pt]{article}
-\usepackage[margin=1in]{geometry}
+\usepackage[margin=0.9in]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
 \usepackage[hidelinks]{hyperref}
 \newcommand{\code}[1]{\texttt{#1}}
 
+% notebook-style boxes: code cells (light gray) and output cells (framed)
+\definecolor{cellbg}{RGB}{247,247,247}
+\definecolor{outbg}{RGB}{255,255,255}
+\lstdefinestyle{pycode}{language=Python, basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{cellbg}, frame=single, rulecolor=\color{black!25},
+  showstringspaces=false, breaklines=true, columns=fullflexible,
+  keepspaces=true, commentstyle=\color{black!55},
+  keywordstyle=\color{blue!60!black}, stringstyle=\color{green!40!black},
+  numbers=left, numberstyle=\tiny\color{black!40}, xleftmargin=1.6em}
+\lstdefinestyle{out}{basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{outbg}, frame=single, rulecolor=\color{black!45},
+  breaklines=true, columns=fullflexible, keepspaces=true}
+
 \title{OpenSG-RM Plate: Tutorials\\[4pt]
-\large Four validated Pagano cases --- exactly the input a user writes}
+\large Four standalone, fully runnable cases with their real outputs}
 \author{OpenSG-TW}
 \date{\today}
 
 \begin{document}
 \maketitle
 
-Each tutorial shows \emph{only} the code a user needs: material and
-layup definition, the YAML round trip, homogenization, and the
-dehomogenization call for the case's load.  No benchmark scaffolding,
-no exact solver, no \code{main()}.  Conventions, argument meanings and
-load-case theory are in the companion \emph{User Manual}; the check
-values quoted let you confirm your installation reproduces the
-validated results.  All four problems are the simply supported
-cylindrical-bending strip, span $a$ along $x_1$, single sinusoidal
-face load, so the plate solution is available from statics/closed
-form; in a general application steps ``plate solution'' come from your
-own 2-D solver instead.
+Each tutorial is a \textbf{complete standalone script} committed at
+\code{docs/rm\_plate\_manual/tutorial\_caseN.py}.  Run it from anywhere
+inside the repository with no edits and no further involvement:
+\begin{lstlisting}[style=out]
+python docs/rm_plate_manual/tutorial_case1.py
+\end{lstlisting}
+Every script: builds its 1-D SG YAML and mesh figure, homogenizes and
+\emph{prints the plate law}, computes the plate solution of its benchmark
+problem, dehomogenizes the full 3-D stress and displacement fields at the two
+governing stations, compares against the exact 3-D elasticity solution of
+the same problem, writes the out-of-plane / in-plane / displacement figures,
+and evaluates \emph{both} the max-stress and Tsai--Wu failure indices from
+the recovered ply-frame stresses.  The output blocks and figures below are
+the \emph{actual} products of running the scripts.
+
+\paragraph{User options (every tutorial).}
+\begin{lstlisting}[style=out]
+--model 0     classical ABD: 6x6 lamination matrix, Kirchhoff kinematics
+--model 1     RM shear-refined 8x8 (default)
+--FF N11 N22 N12 M11 M22 M12 Q1 Q2
+              dehomogenize from YOUR resultants (the exact-3-D comparison
+              is skipped: an arbitrary FF has no exact twin)
+\end{lstlisting}
 
 \tableofcontents
 
 %=====================================================================
-\section{Tutorial 1: cross-ply [0/90/0] (Pagano material), $S=10$}
-Graphite/epoxy 25:1, three equal plies, top-face pressure
-$q(x)=q_0\sin(\pi x/a)$, $a=1$~m, $h=a/10$, $q_0=10^4$~Pa,
-mid-surface reference.
+\newpage
+\section{Tutorial 1: cross-ply [0/90/0], $S=a/h=10$}
+Simply supported strip, span $a=1$~m, thickness $h=a/10$, top-face pressure
+$q(x)=q_0\sin(\pi x/a)$ with $q_0=10$~kPa; graphite/epoxy 25:1 plies, three
+equal thicknesses, $[0/90/0]$ bottom-up, mid-surface reference.
 
-\subsection{Homogenization}
-\begin{verbatim}
-import numpy as np
-from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, read_plate_sg_yaml
-from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
+\begin{figure}[htb]\centering
+\includegraphics[width=0.55\textwidth]{tutorial_case1_sg.png}
+\caption{The 1-D through-thickness SG of Tutorial 1 (three plies, one
+element each), as written by the script.}
+\end{figure}
 
-MATERIAL_DB = {"pagano": {"E": [25.0e9, 1.0e9, 1.0e9],
-                          "G": [0.5e9, 0.5e9, 0.2e9],
-                          "nu": [0.25, 0.25, 0.25], "rho": 1.0}}
-h = 0.1
-layup = {"mat_names": ["pagano"]*3,
-         "thick":     [h/3]*3,
-         "angles":    [0.0, 90.0, 0.0]}          # bottom ply first
+\subsection{The complete script}
+\lstinputlisting[style=pycode]{tutorial_case1.py}
 
-plate_sg_yaml("caseA_sg.yaml", layup, MATERIAL_DB, fraction=0.5)
-inp = read_plate_sg_yaml("caseA_sg.yaml")
-r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
-                 inp["material_db"], fraction=inp["fraction"])
-print(np.array2string(np.asarray(r["ABDG"]), precision=4))
-\end{verbatim}
-\textbf{Check values} ($S{=}10$ laminate above):
-$D_{11}=\mathrm{ABDG}[3,3]=2.0143\times10^{6}$,
-$G_{11}=\mathrm{ABDG}[6,6]=2.3337\times10^{7}$ (SI).
+\subsection{Output of the default run}
+\lstinputlisting[style=out]{tutorial_case1_output.txt}
 
-\subsection{Dehomogenization: $\sigma_{13}$ at the support, $\sigma_{33}$ at midspan}
-Statics of the strip gives $Q_1(0)=q_0/p$ with $p=\pi/a$
-(load case 2 of the manual), and the top-face pressure ladder is
-known (load case 4):
-\begin{verbatim}
-from opensg_jax.fe_jax.msg_rm_plate import msgrm_strain_at_depth
+\subsection{Results}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.78\textwidth]{tutorial_case1_outofplane.png}
+\caption{Out-of-plane stresses, OpenSG-RM vs the exact 3-D solution.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case1_inplane.png}
+\caption{In-plane stresses at the bending peak.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case1_disp.png}
+\caption{Recovered 3-D displacements.}
+\end{figure}
 
-a, q0 = 1.0, 1.0e4
-p  = np.pi / a
-S6 = np.linalg.inv(np.asarray(r["A6"]))
-Q1 = q0 / p
-dE1  = S6 @ np.array([0, 0, 0, Q1, 0, 0.0])      # from dM11/dx = Q1
-qt6_0 = np.array([0, p*q0, 0, 0, 0, 0.0])        # q ~ sin: only q,1 at x = 0
+\clearpage
+\subsection{Using the options}
+\textbf{Classical ABD (\code{--model 0}).}  Same script, classical
+lamination matrix and Kirchhoff kinematics --- the errors show exactly what
+the shear refinement buys at $S=10$:
+\lstinputlisting[style=out]{tutorial_case1_model0_output.txt}
 
-z  = np.linspace(-h/2 + 1e-9, h/2 - 1e-9, 201)
-s13 = np.array([msgrm_strain_at_depth(r, zi, np.zeros(6), dE1,
-                                      qt6=qt6_0)[1][4] for zi in z])
-# sigma33 at x = a/2 by equilibrium integration (load case 5):
-s33 = np.concatenate([[0.0],
-        np.cumsum(0.5*p*(s13[1:] + s13[:-1])*np.diff(z))])
-\end{verbatim}
-\textbf{Check values}: rel.~$L_2$ vs exact 3-D:
-$\sigma_{13}$ 4.5\,\%, $\sigma_{33}$ 1.2--1.3\,\%; the $\sigma_{33}$
-top face lands on $q_0$ by resultant closure.
-
-\subsection{In-plane stresses at midspan (second order)}
-At $x=a/2$ the state is $E_6(x)=E_s\sin px$ (load case 3): with the
-harmonic plate solution $E_s$ (from your solver, or the closed-form
-5-DOF solve of the strip),
-\begin{verbatim}
-qt6_m = np.array([q0, 0, 0, -p**2*q0, 0, 0.0])   # full ladder at the sin peak
-Sig = msgrm_strain_at_depth(r, zi, Es, dE11=-p**2*Es,
-                            qt6=qt6_m)[1]         # [0]=s11 [1]=s22 [5]=s12
-\end{verbatim}
-\textbf{Check values}: $\sigma_{11}$ 2.0\,\%, $\sigma_{22}$ 5.6\,\%,
-$\sigma_{12}$ machine zero (cross-ply).
+\textbf{User resultants (\code{--FF}).}  Dehomogenization from a
+user-supplied resultant vector (here the strip's own statics values
+$M_{11}=q_0/p^2$, $Q_1=q_0/p$, so the recovered fields reproduce the
+default run's shear station):
+\lstinputlisting[style=out]{tutorial_case1_ff_output.txt}
 
 %=====================================================================
+\newpage
 \section{Tutorial 2: sandwich [0/core/0], $S=10$}
-Stiff faces $0.1h$ each, soft core $0.8h$; same strip and load as
-Tutorial~1.  Only the material/layup block changes:
-\begin{verbatim}
-MATERIAL_DB = {
- "face": {"E": [131.0e9, 10.34e9, 10.34e9], "G": [6.205e9, 6.205e9, 3.0e9],
-          "nu": [0.22, 0.22, 0.22], "rho": 1.0},
- "core": {"E": [0.5776e9]*3, "G": [0.1079e9]*3,
-          "nu": [0.0025]*3, "rho": 1.0}}
-layup = {"mat_names": ["face", "core", "face"],
-         "thick":     [0.1*h, 0.8*h, 0.1*h],
-         "angles":    [0.0, 0.0, 0.0]}
-\end{verbatim}
-Everything downstream is identical to Tutorial~1.
-\textbf{Check values}: $D_{11}=5.3724\times10^{6}$,
-$G_{11}=1.0985\times10^{7}$; $\sigma_{13}$ 9.1\,\%, $\sigma_{33}$
-0.9\,\% at $S{=}10$.  \emph{Note}: the sandwich \emph{in-plane}
-second-order recovery is regime-limited at $S{=}10$ (32\,\%/56\,\%,
-collapsing to 1.4\,\%/2.5\,\% by $S{=}50$) --- see the manual's
-accuracy table; classical lamination is no better there.
+Same strip and load as Tutorial 1; stiff carbon faces ($0.1h$ each) over a
+soft core ($0.8h$) --- the layup where the soft core makes transverse shear
+dominant.  Only the material/layup block differs from Tutorial~1.
+
+\begin{figure}[htb]\centering
+\includegraphics[width=0.55\textwidth]{tutorial_case2_sg.png}
+\caption{The 1-D SG of Tutorial 2 (face/core/face).}
+\end{figure}
+
+\subsection{The complete script}
+\lstinputlisting[style=pycode]{tutorial_case2.py}
+
+\subsection{Output of the default run}
+\lstinputlisting[style=out]{tutorial_case2_output.txt}
+
+\subsection{Results}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.78\textwidth]{tutorial_case2_outofplane.png}
+\caption{Out-of-plane stresses: the transverse shear lives almost entirely
+in the soft core; $\sigma_{33}$ from the equilibrium route.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case2_inplane.png}
+\caption{In-plane stresses.  At $S=10$ the soft-core in-plane recovery is
+regime-limited (the errors collapse to 1--3\,\% by $S=50$); the transverse
+components and displacements above remain accurate.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case2_disp.png}
+\caption{Recovered 3-D displacements.}
+\end{figure}
 
 %=====================================================================
-\section{Tutorial 3: antisymmetric angle ply [15/$-$15], $L/h=4$ (Yu 2003)}
-Yu's thick benchmark: psi units, $E_L=25\times10^{6}$,
-$E_T=10^{6}$~psi ratios, $L=4$~in, $h=1$~in, and the \emph{split} face
-load $s_3=b_3=(p_0/2)\sin(\pi x/L)$, $p_0=1$~psi.
-\begin{verbatim}
-MATERIAL_DB = {"yu": {"E": [25.0e6, 1.0e6, 1.0e6],
-                      "G": [0.5e6, 0.5e6, 0.2e6],
-                      "nu": [0.25, 0.25, 0.25], "rho": 1.0}}
-layup = {"mat_names": ["yu", "yu"],
-         "thick":     [0.5, 0.5],
-         "angles":    [15.0, -15.0]}
-plate_sg_yaml("yu1_sg.yaml", layup, MATERIAL_DB, fraction=0.5)
-inp = read_plate_sg_yaml("yu1_sg.yaml")
-r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
-                 inp["material_db"], fraction=inp["fraction"])
-\end{verbatim}
-The angle plies COUPLE: the plate solution has nonzero
-$N_{22},M_{22},M_{12},Q_2$, so take the full resultant set from your
-2-D solver (an Abaqus S4 model of the strip works; print SF/SM at the
-stations) --- statics alone fixes only $Q_1,M_{11}$.  With the
-resultant amplitudes $F\!F_6$ and $Q$:
-\begin{verbatim}
-a, q0 = 4.0, 1.0
-p   = np.pi / a
-S6  = np.linalg.inv(np.asarray(r["A6"]))
-Es  = S6 @ FF6                      # sin-family amplitudes from your solver
-qt6_0 = np.array([0,  p*q0/2, 0, 0, 0, 0.0])     # split load: +q0/2 top,
-qb6_0 = np.array([0, -p*q0/2, 0, 0, 0, 0.0])     #             -q0/2 bottom
-Sig0 = msgrm_strain_at_depth(r, zi, np.zeros(6), p*Es,
-                             qt6=qt6_0, qb6=qb6_0)[1]  # [4]=s13 [3]=s23
-\end{verbatim}
-and at midspan use \code{Es}, \code{dE11=-p**2*Es} plus the full
-ladders \code{[q, 0, 0, -p**2*q, 0, 0]} per face with
-$q=\pm q_0/2$.  \textbf{Check values} ($L/h{=}4$, deliberately
-thick): $\sigma_{13}$ 4.4\,\%, $\sigma_{23}$ 5.5\,\%, $\sigma_{33}$
-(equilibrium, starting from $-q_0/2$ at the bottom face) 1.6--4\,\%,
-$\sigma_{11}$ 8.7\,\%, $U_1$ 6.6\,\%, $U_3$ 4.5\,\%.
+\newpage
+\section{Tutorial 3: antisymmetric angle ply [15/$-$15], $L/h=4$}
+A deliberately \emph{thick} plate: span $a=4$~in, thickness $h=1$~in, loaded
+on \emph{both} faces, $\sigma_{33}=\pm(q_0/2)\sin(\pi x/a)$ with
+$q_0=1$~psi; two equal plies $[15/-15]$ bottom-up (25:1 material, psi--in
+units).  The off-axis plies couple: the plate solution carries nonzero
+$N_{22},M_{22},M_{12},Q_2$ and the response has $\sigma_{23}$ and $U_2$ ---
+all recovered.
+
+\begin{figure}[htb]\centering
+\includegraphics[width=0.55\textwidth]{tutorial_case3_sg.png}
+\caption{The 1-D SG of Tutorial 3 (two plies).}
+\end{figure}
+
+\subsection{The complete script}
+\lstinputlisting[style=pycode]{tutorial_case3.py}
+
+\subsection{Output of the default run}
+\lstinputlisting[style=out]{tutorial_case3_output.txt}
+
+\subsection{Results}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case3_outofplane.png}
+\caption{Out-of-plane stresses at $L/h=4$; the split face load makes the
+$\sigma_{33}$ faces $\pm q_0/2$.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case3_inplane.png}
+\caption{In-plane stresses --- $\sigma_{12}$ is a genuine field for the
+angle plies.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case3_disp.png}
+\caption{Recovered 3-D displacements, including the coupled $U_2$.}
+\end{figure}
 
 %=====================================================================
+\newpage
 \section{Tutorial 4: symmetric angle ply [30/$-$30/$-$30/30], $L/h=4$}
-Same material, geometry and split load as Tutorial~3; only the layup
-changes:
-\begin{verbatim}
-layup = {"mat_names": ["yu"]*4,
-         "thick":     [0.25]*4,
-         "angles":    [30.0, -30.0, -30.0, 30.0]}
-\end{verbatim}
-$B=0$ (symmetric) but $D_{16}$ bending--twist coupling makes
-$M_{12}$, $Q_2$ and $\sigma_{23}$ large ($\sigma_{23}\sim0.5\,p_0$) ---
-again feed the \emph{full} resultant set from your solver.
-\textbf{Check values}: $M_{12}=0.339$, $Q_2=pM_{12}=0.267$ (psi-in
-units, from the plate solve or the Abaqus strip);
-$\sigma_{13}$ 10.3\,\%, $\sigma_{23}$ 16.0\,\%, $\sigma_{12}$
-18.5\,\% at $L/h{=}4$, all falling at $\mathcal{O}(S^{-2})$
-($\sigma_{12}$: 0.07\,\% by $S{=}64$).
+Same geometry, material and split load as Tutorial 3; four equal plies
+$[30/-30/-30/30]$.  $B=0$ (symmetric) but the bending--twist coupling makes
+$M_{12}$, $Q_2$ and $\sigma_{23}$ large ($\sigma_{23}\sim0.5\,q_0$).
+
+\begin{figure}[htb]\centering
+\includegraphics[width=0.55\textwidth]{tutorial_case4_sg.png}
+\caption{The 1-D SG of Tutorial 4 (four plies).}
+\end{figure}
+
+\subsection{The complete script}
+\lstinputlisting[style=pycode]{tutorial_case4.py}
+
+\subsection{Output of the default run}
+\lstinputlisting[style=out]{tutorial_case4_output.txt}
+
+\subsection{Results}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case4_outofplane.png}
+\caption{Out-of-plane stresses; the strongest $\sigma_{23}$ of the four
+cases.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case4_inplane.png}
+\caption{In-plane stresses.}
+\end{figure}
+\begin{figure}[htb]\centering
+\includegraphics[width=0.98\textwidth]{tutorial_case4_disp.png}
+\caption{Recovered 3-D displacements.}
+\end{figure}
 
 %=====================================================================
-\section{Displacement recovery (any case)}
-With the plate solution $(u^{2d}, v^{2d}, w^{2d})$ at the stations
-(closed form, or least-squares-fitted from your solver's node output):
-\begin{verbatim}
-from opensg_jax.fe_jax.msg_rm_plate import msgrm_warping_at_depth
-w0 = msgrm_warping_at_depth(r, zi, np.zeros(6), p*Es, qt6=qt6_0, qb6=qb6_0)
-wm = msgrm_warping_at_depth(r, zi, Es, dE11=-p**2*Es, qt6=qt6_m, qb6=qb6_m)
-U1 = u2d - zi*(p*w2d) + w0[0]     # Kirchhoff tilt -z w,1  (w ~ sin: w,1 = pW at x=0)
-U2 = v2d + w0[1]
-U3 = w2d + wm[2]
-\end{verbatim}
-\textbf{Check values}: $U_1$ 1.5\,\% / 1.3\,\% (Tutorials 1/2 at
-$S{=}10$), 6.6\,\% / 5.0\,\% (Tutorials 3/4 at $L/h{=}4$); $U_3$
-1.3--4.5\,\%.  Do \emph{not} compose with $x_3\varphi$ (manual
-Sec.~5.4).
-
-\section{Material-frame stress (failure criteria)}
-\begin{verbatim}
-from opensg_jax.fe_jax.msg_materials import rotation_6x6
-Gam, Sig, th = msgrm_strain_at_depth(r, zi, ...)
-Sig_mat = rotation_6x6(-th) @ Sig
-\end{verbatim}
+\newpage
+\section{Reading the errors}
+All four cases fall at second order in thickness: halving $h/a$ divides
+every error by $\approx4$.  The $L/h=4$ numbers of Tutorials 3--4 are the
+deliberately thick limit; at $S=10$ they drop to a few percent and by
+$S=50$--64 to the 0.05--0.2\,\% level (the machine-generated check-value
+table in the User Manual freezes the anchors).  The failure indices printed
+by every script use \emph{example} allowables --- replace the
+\code{Xt/Xc/Yt/Yc/S12a/S13a/S23a} block with your material system before
+drawing conclusions.
 \end{document}

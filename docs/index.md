@@ -78,6 +78,16 @@ tutorials/solid_taper_jax
 
 ```{toctree}
 :hidden:
+:caption: RM-OpenSG plate (through-thickness SG)
+
+rm_plate/index
+rm_plate/user_guide
+rm_plate/tutorials
+rm_plate/cli
+```
+
+```{toctree}
+:hidden:
 :caption: Usage
 
 architecture

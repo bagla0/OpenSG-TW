@@ -3,6 +3,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{graphicx}
 \usepackage[hidelinks]{hyperref}
 \usepackage{xcolor}
 \newcommand{\code}[1]{\texttt{#1}}
@@ -21,21 +22,44 @@
 \tableofcontents
 
 %=====================================================================
+\section{Quick start}
+Five lines from a layup to the plate law:
+\begin{verbatim}
+from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
+db = {"uni": {"E": [140e9, 9e9, 9e9], "G": [5e9, 5e9, 3e9],
+              "nu": [0.3, 0.3, 0.3], "rho": 1550.0}}
+r = rm_plate_msg(thick=[0.001]*4, angles_deg=[45, -45, -45, 45],
+                 mat_names=["uni"]*4, material_db=db, fraction=0.5)
+print(r["ABDG"])          # the 8x8 Reissner-Mindlin plate law
+\end{verbatim}
+Or, without writing Python, from a self-contained SG YAML
+(Sec.~\ref{sec:yaml}):
+\begin{verbatim}
+python -m opensg_jax.fe_jax.cli_rm_plate homo  my_sg.yaml
+python -m opensg_jax.fe_jax.cli_rm_plate plot  my_sg.yaml
+python -m opensg_jax.fe_jax.cli_rm_plate dehom my_sg.yaml \
+       --FF 0 0 0 1e3 0 0 5e2 0 --n-per-ply 21 --base out/my_wall
+\end{verbatim}
+(installed as \code{opensg-rm-plate} when the package is pip-installed).
+The \code{dehom} subcommand writes \code{.SM}/\code{.EM}/\code{.U}
+files: ply-frame stress, ply-frame strain, and the recovered 3-D
+displacement through the thickness.
+
+%=====================================================================
 \section{Introduction and scope}
-OpenSG-RM Plate builds, from a laminate definition, the full
-Reissner--Mindlin plate constitutive law (the $8\times8$ \emph{ABDG}
-matrix) by the Mechanics of Structure Genome / Variational Asymptotic
-Method construction of Yu, Hodges and Volovoi
-\cite{yu2002,yu2003,yu2005}, and \emph{dehomogenizes}: it recovers the
-full 3-D stress, strain and displacement fields through the thickness
-from the 2-D plate solution.  The workflow is the plate analog of the
-VABS two-step beam workflow:
+OpenSG-RM Plate is a \textbf{standalone} tool that builds, from a
+laminate definition, the full Reissner--Mindlin plate constitutive law
+(the $8\times8$ \emph{ABDG} matrix) by the Mechanics of Structure
+Genome variational construction over a through-thickness 1-D Structure
+Gene, and \emph{dehomogenizes}: it recovers the full 3-D stress,
+strain and displacement fields through the thickness from the 2-D
+plate solution.  The two-step workflow:
 \begin{enumerate}
 \item \textbf{Homogenization} (this code): laminate $\rightarrow$
   $8\times8$ plate law.
-\item \textbf{2-D plate analysis} (any solver: Abaqus, an in-house
-  plate code, or a closed form): loads $\rightarrow$ plate resultants /
-  strains at the points of interest.
+\item \textbf{2-D plate analysis} (any solver: a commercial shell FE
+  code, an in-house plate code, or a closed form): loads $\rightarrow$
+  plate resultants / strains at the points of interest.
 \item \textbf{Dehomogenization} (this code): plate strains (and, when
   present, applied face pressures) $\rightarrow$ pointwise 3-D
   $\sigma_{ij}$, $\varepsilon_{ij}$, $U_i$ through the thickness.
@@ -43,8 +67,8 @@ VABS two-step beam workflow:
 The construction is valid for laminates of \emph{monoclinic} plies
 (any fiber angle in the plate plane); every quantity below has been
 validated against exact 3-D elasticity (Pagano cylindrical bending)
---- the tutorial document reproduces four validation cases with the
-exact user input.
+--- the tutorial document reproduces four validation cases with
+complete, runnable user input.
 
 %=====================================================================
 \section{Conventions}
@@ -65,6 +89,13 @@ exact user input.
   \code{fraction}, and make sure your 2-D solver's resultants refer to
   the same surface.
 \end{itemize}
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.95\textwidth]{conventions.png}
+\caption{Stacking, reference-surface (\code{fraction}) and fiber-angle
+conventions.  Ply 1 is the bottom ply; $\theta$ rotates the material
+1-axis about $+x_3$ from $x_1$.}
+\end{figure}
 
 \subsection{Voigt orders and the plate law}
 \begin{keybox}
@@ -81,7 +112,8 @@ $F\!F = \mathrm{ABDG}\;\varepsilon_{\text{plate}}$, with
 $\mathrm{ABDG}=\begin{bmatrix}A_6 & 0\\ 0 & G\end{bmatrix}$,
 $A_6$ the $6\times6$ in-plane/bending block
 ($[[A,B],[B,D]]$) and $G$ the $2\times2$ transverse-shear stiffness
-from the least-squares energy fit of Yu 2003 Eq.~61.
+from OpenSG-RM's least-squares energy fit (its residual is reported as
+\code{Ustar\_rel}).
 \end{keybox}
 The 3-D strain expansion through the thickness is
 $\varepsilon_{11}=\epsilon_{11}+x_3\kappa_{11}$ etc.\ at leading
@@ -170,6 +202,35 @@ key & content \\
 The same dictionary \code{r} is the first argument of every recovery
 call --- homogenize once, recover as often as needed.
 
+\subsection{The ABDG matrix in full --- a computed example}
+The Tutorial-1 laminate ($[0/90/0]$, graphite/epoxy 25:1, $h=0.1$~m,
+mid-surface reference; SI units, so $A$-block entries are N/m,
+$B$-block N, $D$-block N$\cdot$m, $G$-block N/m):
+{\scriptsize
+\begin{verbatim}
+         e11          e22          g12          k11          k22          k12         2g13         2g23
+e11   1.7043e+09   2.5063e+07   ~0           ~0           ~0           ~0           0            0
+e22   2.5063e+07   9.0226e+08   ~0           ~0           ~0           ~0           0            0
+g12   ~0           ~0           5.0000e+07   ~0           ~0           ~0           0            0
+k11   ~0           ~0           ~0           2.0143e+06   2.0886e+04   ~0           0            0
+k22   ~0           ~0           ~0           2.0886e+04   1.5780e+05   ~0           0            0
+k12   ~0           ~0           ~0           ~0           ~0           4.1667e+04   0            0
+2g13  0            0            0            0            0            0            2.3337e+07   ~0
+2g23  0            0            0            0            0            0            ~0           2.5289e+07
+\end{verbatim}}
+Reading it: the upper-left $3\times3$ is the membrane block $A$, the
+middle $3\times3$ the bending block $D$, the off-diagonal $3\times3$
+blocks are the membrane--bending coupling $B$ (here $\sim10^{-9}$,
+i.e.\ zero: a symmetric laminate about the mid-surface reference ---
+entries below $\sim10^{-8}$ of the block scale are numerical zeros,
+shown as \code{$\sim$0}), and the lower-right $2\times2$ is the
+shear-refined transverse stiffness $G$.  The matrix is symmetric;
+rows/columns follow the plate-measure order of Sec.~3.2, and the
+resultant produced by row $i$ is the conjugate of measure $i$ (row
+\code{k11} $\rightarrow M_{11}$, row \code{2g13} $\rightarrow Q_1$).
+Homogenizing with \code{fraction} $\ne$ mid-surface, or an
+unsymmetric layup, fills the $B$ blocks.
+
 \subsection{YAML input}\label{sec:yaml}
 The layup can equivalently be carried in a self-contained 1-D SG YAML,
 written and read by
@@ -207,24 +268,31 @@ sections:         # one per ply, BOTTOM FIRST
 The reader \emph{cross-checks} the stored \code{thickness} and
 \code{reference\_fraction} against the mesh and refuses inconsistent
 (hand-edited, corrupt) files; keep header and mesh in sync when
-editing.
+editing (Appendix~\ref{sec:errors} lists the exact error messages).
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.62\textwidth]{sg_mesh_example.png}
+\caption{The SG mesh figure \code{plot\_plate\_sg} writes for a
+three-ply laminate: 1-D through-thickness elements colored per ply
+set, nodes marked.}
+\end{figure}
 
 %=====================================================================
 \section{Dehomogenization (3-D recovery)}
-\subsection{The recovery inputs --- the VABS parallel}
-Exactly as VABS recovers 3-D fields from the sectional resultants (and
-optionally distributed loads), OpenSG-RM recovers from:
+\subsection{The recovery inputs}
+OpenSG-RM recovers the pointwise 3-D fields from the local 2-D plate
+state:
 \begin{center}
-\begin{tabular}{lp{8.8cm}l}
+\begin{tabular}{lp{11.2cm}}
 \toprule
-input & meaning & VABS analog \\
+input & meaning \\
 \midrule
 $E_6$ & plate strain $[\epsilon_{11},\epsilon_{22},\gamma_{12},
-        \kappa_{11},\kappa_{22},\kappa_{12}]$ at the point & sectional strains \\
+        \kappa_{11},\kappa_{22},\kappa_{12}]$ at the point \\
 $E_{6,1},E_{6,2}$ & its in-plane gradients (transverse shear enters here:
-        e.g.\ $dM_{11}/dx_1=Q_1$) & F/M gradients \\
-$E_{6,11},E_{6,12},E_{6,22}$ & second gradients (second-order recovery) & --- \\
-$q^{t},q^{b}$ ladders & applied \emph{face pressures} (optional) & distributed loads \\
+        e.g.\ $dM_{11}/dx_1=Q_1$) \\
+$E_{6,11},E_{6,12},E_{6,22}$ & second gradients (second-order recovery) \\
+$q^{t},q^{b}$ ladders & applied \emph{face pressures} (optional) \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -246,8 +314,8 @@ w3vec = msgrm_warping_at_depth(r, z, E6, ..., qt6=None, qb6=None)
 (Voigt order of Sec.~2.2); \code{ply\_angle} is the local fiber angle
 for the material-frame rotation.  All gradient and load arguments
 default to zero --- \textbf{the pure-resultant call is the general
-two-step dehomogenization} (blade/airfoil workflow) and is identical
-to the standard VABS recovery.
+two-step dehomogenization} (the blade/airfoil workflow needs nothing
+else).
 
 \subsection{Load cases}\label{sec:loadcases}
 \begin{enumerate}
@@ -284,7 +352,7 @@ to the standard VABS recovery.
   the most accurate route in our benchmarks.
 \end{enumerate}
 
-\subsection{Displacement recovery (Yu Eq.~65)}
+\subsection{Displacement recovery}
 \begin{keybox}
 $U_\alpha(x_3) = u_\alpha^{2d} \;-\; x_3\,w^{2d}_{,\alpha}
                 \;+\; w_\alpha(x_3),\qquad
@@ -329,6 +397,22 @@ face/core stiffness contrast), while their $\sigma_{13}$,
 $\sigma_{33}$ and displacement recovery remain accurate at $S=10$.
 If \code{G\_msg} is \code{None}, the shear energy fit failed the SPD
 gate --- inspect \code{Ustar\_rel} and the layup.
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.98\textwidth]{full_field_caseA.png}
+\caption{The full-field recovery of the $[0/90/0]$ tutorial case at
+$S{=}10$: all six stresses and three displacements (orange) against
+exact 3-D elasticity (black).}
+\end{figure}
+
+\subsection{Machine-generated check values}
+The anchors below (and the check values quoted in the tutorials) are
+\emph{generated from the code} by
+\code{docs/rm\_plate\_manual/gen\_check\_values.py} and guarded by
+\code{tests/test\_manual\_check\_values.py} in the test suite: a code
+change that moves any number fails CI until the generator is re-run
+and this manual rebuilt --- the documents cannot silently drift.
+\input{check_values}
 
 %=====================================================================
 \section{The general two-step workflow (blades)}
@@ -342,23 +426,54 @@ via load case 4 when wanted.  The homogenized $8\times8$ never
 depends on the load columns.
 
 %=====================================================================
-\begin{thebibliography}{9}
-\bibitem{yu2002} Yu, W., Hodges, D.H., Volovoi, V.V., ``Asymptotic
-construction of Reissner-like composite plate theory with accurate
-strain recovery,'' \emph{Int.\ J.\ Solids Structures} 39 (2002)
-5185--5203.
-\bibitem{yu2003} Yu, W., Hodges, D.H., Volovoi, V.V.,
-``Asymptotically accurate 3-D recovery from Reissner-like composite
-plate finite elements,'' \emph{Computers \& Structures} 81 (2003)
-439--454.
-\bibitem{yu2005} Yu, W., ``Mathematical construction of a
-Reissner--Mindlin plate theory for composite laminates,''
-\emph{Int.\ J.\ Solids Structures} 42 (2005) 6680--6699.
-\bibitem{pagano} Pagano, N.J., ``Exact solutions for composite
-laminates in cylindrical bending,'' \emph{J.\ Composite Materials} 3
-(1969) 398--411.
-\bibitem{whitney} Whitney, J.M., ``Shear correction factors for
-orthotropic laminates under static load,'' \emph{J.\ Applied
-Mechanics} 40 (1973) 302--304.
-\end{thebibliography}
+\appendix
+\section{Input errors and their fixes}\label{sec:errors}
+The exact exception texts the input layer raises, and what each means.
+\begin{center}
+\begin{tabular}{p{7.6cm}p{7.2cm}}
+\toprule
+message (\code{ValueError}/\code{KeyError}) & cause and fix \\
+\midrule
+\code{layup lists disagree: N materials, M thicknesses, K angles} &
+the three layup lists must have one entry per ply --- check for a
+missing/extra entry. \\
+\code{ply thicknesses must be positive, got [...]} &
+a zero or negative \code{thick} entry. \\
+\code{materials not in the database: NAME} &
+a \code{mat\_names} entry has no \code{MATERIAL\_DB} key --- check
+spelling/case. \\
+\code{FILE is a 'TYPE' SG, not a through-thickness plate\_1d SG} &
+the YAML's \code{sg.type} is not \code{plate\_1d} --- you passed a
+shell/solid cross-section SG to the plate reader. \\
+\code{ply 'ply\_k' declares thickness T but its elements span S} &
+hand-edited YAML: the section's \code{thickness} no longer matches the
+node spans --- fix either the nodes or the header value. \\
+\code{plies carry different element counts [...]} &
+the per-ply element sets are uneven --- regenerate the YAML with
+\code{plate\_sg\_yaml} rather than editing sets by hand. \\
+\code{reference\_fraction F puts the bottom face at A, but the first
+node is at B} &
+header/mesh mismatch on the reference surface --- regenerate, or fix
+\code{reference\_fraction} to $-x_3^{\min}/h$. \\
+\midrule
+\code{r["ABDG"] is None} (no exception) &
+the transverse-shear least-squares fit is not SPD.  Inspect
+\code{r["Ustar\_rel"]}; extreme property contrasts or a degenerate
+layup are the usual causes. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%=====================================================================
+\section*{Background reading}
+The mechanics-of-structure-genome plate construction and the exact
+solution used for validation:
+\begin{itemize}
+\item Yu, W., Hodges, D.H., Volovoi, V.V., \emph{Int.\ J.\ Solids
+Structures} 39 (2002) 5185--5203.
+\item Yu, W., Hodges, D.H., Volovoi, V.V., \emph{Computers \&
+Structures} 81 (2003) 439--454.
+\item Yu, W., \emph{Int.\ J.\ Solids Structures} 42 (2005) 6680--6699.
+\item Pagano, N.J., \emph{J.\ Composite Materials} 3 (1969) 398--411.
+\end{itemize}
 \end{document}

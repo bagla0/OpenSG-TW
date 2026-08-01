@@ -1,0 +1,19 @@
+model 0: CLASSICAL ABD (6x6; rows/cols: e11, e22, g12, k11, k22, k12):
+  e11   1.7043e+09   2.5063e+07   5.0643e-10  -2.8292e-09  -9.6013e-12  -2.0413e-27
+  e22   2.5063e+07   9.0226e+08   4.8602e-08   1.0681e-10  -3.8933e-09  -2.0246e-25
+  g12   5.0643e-10   4.8602e-08   5.0000e+07  -1.0486e-27  -2.0185e-25  -4.5901e-10
+  k11  -2.7856e-09   1.9503e-11  -1.3759e-27   2.0143e+06   2.0886e+04   4.6892e-14
+  k22   1.9503e-11  -3.9151e-09  -2.0175e-25   2.0886e+04   1.5780e+05   4.5002e-12
+  k12  -1.9068e-27  -2.0228e-25  -4.5901e-10   4.6892e-14   4.5002e-12   4.1667e+04
+plate solution amplitudes [U, V, W, F1, F2] = [-2.65801e-22, -6.65555e-40, 5.09656e-05, -0.000160113, 0]
+check M11 amplitude = 1013.21  (statics q0/p^2 = 1013.21)
+
+recovery errors vs exact 3-D (rel L2 %):
+  s13   4.44   s33   1.16
+  s11  13.92   s22  35.27   s12 machine zero
+  U1   85.35   U3   45.30
+
+wrote tutorial_case1_{sg,outofplane,inplane,disp}.png
+
+failure indices over both stations (example allowables):
+  max-stress index = 0.0009   Tsai-Wu index = 0.0002   (>= 1 = failure)

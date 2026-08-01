@@ -54,6 +54,9 @@ docs = [
     "numpydoc>=1.1.0",
 ]
 
+[project.scripts]
+opensg-rm-plate = "opensg_jax.fe_jax.cli_rm_plate:main"
+
 [project.urls]
 Homepage = "https://github.com/wenbinyugroup/OpenSG"
 Documentation = "https://wenbinyugroup.github.io/OpenSG/"
