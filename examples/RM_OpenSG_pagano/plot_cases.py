@@ -160,14 +160,35 @@ def run_case(name):
         "U3": (rm["U"][:, 2], fs["U"][:, 2], exu[:, 2],
                r"$U_3$%s  at  $x=a/2$" % ul),
     }
+    # reference scale per panel family, used to RECOGNIZE identically-zero
+    # fields (cross-ply sigma_12/sigma_23/U2): without this the axis
+    # auto-scales to the ~1e-14-relative numerical noise and machine-zero
+    # looks like a wild curve.  Zero fields are drawn on an axis scaled to
+    # the family's dominant component so all methods collapse onto zero.
+    fam_scale = {"s11": np.max(np.abs(exs[:, 0])),
+                 "s22": np.max(np.abs(exs[:, 0])),
+                 "s12": np.max(np.abs(exs[:, 0])),
+                 "s13": np.max(np.abs(exs[:, 4])),
+                 "s23": np.max(np.abs(exs[:, 4])),
+                 "s33": np.max(np.abs(exs[:, 2])),
+                 "U1": np.max(np.abs(exu)), "U2": np.max(np.abs(exu)),
+                 "U3": np.max(np.abs(exu))}
     outdir = os.path.join(HERE, OUTDIRS[name])
     for key, (m_rm, m_fs, m_ex, xlabel) in panels.items():
+        scale = fam_scale[key]
+        zero_field = (max(np.max(np.abs(m_ex)), np.max(np.abs(m_rm)))
+                      < 1e-6 * scale)
         fig, ax = plt.subplots(figsize=(5.4, 4.8))
         ax.plot(m_ex, zc / h, "-", color="k", lw=2.0, label="Pagano exact 3-D")
         ax.plot(m_rm, zc / h, ":s", color="#ff7f0e", ms=4, mfc="none",
                 mew=1.2, lw=1.6, markevery=10, label="OpenSG-RM")
         ax.plot(m_fs, zc / h, "--", color="#1f77b4", lw=1.5,
-                label="FSDT (Whitney)")
+                label="Whitney-1973")
+        if zero_field:
+            ax.set_xlim(-0.05 * scale, 0.05 * scale)
+            ax.text(0.5, 0.06, "identically zero field\n(all methods $=0$ "
+                    "at plot scale)", transform=ax.transAxes, ha="center",
+                    fontsize=9, color="0.35")
         ax.set_xlabel(xlabel, fontsize=11)
         ax.set_ylabel("$z/h$", fontsize=11)
         ax.grid(alpha=0.3)
