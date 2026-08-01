@@ -80,7 +80,8 @@ results and the full narrative are in [RESULTS.md](RESULTS.md)**:
 |---|---|
 | `ex5/recover_dyn.py` | individual three-way figures, each with its own legend: `w_history_*`, `profile_{s13,s23,s33,s11}_*`, `iface_s13_*` (+ `dyn_*.dat` numbers) |
 | `ex5/reddy_hsdt_navier.py` | the ANALYTICAL Reddy-TSDT (= Nayak's theory) + RM Navier responses, `reddy_wt_*/profiles_*/iface_*.dat`, `reddy_fig13.png`, and the Ex.2 Table-3 anchor check |
-| `ex4/ex4_free_vibration.py` | `ex4_freq_table.dat` + per-layup comparison figures `ex4_freq_*.png` + the three SG yamls — Nayak Ex.4 (Crawley cantilever): experiment / Nayak HSDT FE / OpenSG-RM Ritz |
+| `ex4/make_abaqus_freq.py` | the three SG yamls + the three `ex4_*_freq.inp` Abaqus `*FREQUENCY` decks (S4 + MSG ABDG general section, clamped cantilever) |
+| `ex4/collect_freq.py` | `ex4_freq_table.dat` + per-layup four-curve figures `ex4_freq_*.png` — Table-5 literature data (Crawley experiment/FEM, Nayak Reddy-HSDT FE) + the OpenSG-RM/Abaqus column |
 
 ## Supporting literature (downloaded alongside the benchmark)
 

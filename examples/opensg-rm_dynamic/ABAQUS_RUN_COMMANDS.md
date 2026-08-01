@@ -40,6 +40,14 @@ for %j in (sandwich_RM_step sandwich_RM_blast sandwich_SOLID_step sandwich_SOLID
   jobs ~5.5 min each** (20×20×16 C3D8I, 400 increments) — the shell-vs-solid
   cost ratio quoted in the comparison.
 
+## 2b. The Ex.4 frequency jobs (same pattern, ~10 s each)
+
+```bat
+copy /Y "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex4\ex4_*_freq.inp" .
+for %j in (ex4_04_Al_freq ex4_0_pm45_90_Al_freq ex4_pm45x2_Al_freq) do call abaqus job=%j interactive ask_delete=OFF
+copy /Y ex4_*_freq.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex4\Abaqus_results\"
+```
+
 ## 3. Copy the results back to the local drive
 
 The recovery post-processor only needs the `.dat` files (all history prints
