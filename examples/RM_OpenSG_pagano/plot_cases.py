@@ -1,34 +1,26 @@
 """plot_cases.py -- the archive's plot generator: for each of the four curated
-Pagano cases, compare THREE methods through the thickness --
+Pagano cases AND each of two thickness ratios (L/h = 4 and L/h = 10), compare
+THREE methods through the thickness --
 
-    OpenSG-RM   the full recovery chain (stress + displacement, the same
-                composition as the tutorials: load ladders, equilibrium
-                sigma_33, mean-zero warping + Kirchhoff displacement)
-    FSDT        first-order shear deformation theory with the Whitney shear
-                correction: classical lamination in-plane stress, the
-                constitutive transverse-shear staircase, sigma_33 = 0, and
-                plate-kinematics displacements (u + z phi, w constant)
-    Pagano      the exact 3-D elasticity solution of the same problem
+    OpenSG-RM     the full recovery chain (stress + displacement: load
+                  ladders, equilibrium sigma_33, mean-zero warping +
+                  Kirchhoff displacement composition)
+    Whitney-1973  first-order shear deformation theory with the Whitney shear
+                  correction: classical-lamination in-plane staircase, the
+                  constitutive transverse-shear staircase, sigma_33 = 0, and
+                  plate-kinematics displacements (u + z phi, w constant)
+    Pagano        the exact 3-D elasticity solution of the same problem
 
--- and save EVERY component as its OWN figure:
+-- and save EVERY component as its OWN figure into per-thickness subfolders:
 
-    <case>/plot_s11.png ... plot_s12.png       in-plane stresses (x = a/2)
-    <case>/plot_s13.png, plot_s23.png          transverse shear (x = 0)
-    <case>/plot_s33.png                        transverse normal (x = a/2)
-    <case>/plot_U1.png, plot_U2.png, plot_U3.png   displacements
-    <case>/three_method.dat                    all curves as columns
+    <case>/L_h_4/plot_s11.png ... plot_U3.png  +  three_method.dat
+    <case>/L_h_10/...                             (same set, thinner plate)
+
+Identically-zero fields (cross-ply sigma_12 / sigma_23 / U2) are plotted at
+their ACTUAL values -- the axis multiplier (x 1e-14 style) plus an in-figure
+"max |...| = ... (numerical zero)" annotation make the magnitude explicit.
 
 Run:  python examples/RM_OpenSG_pagano/plot_cases.py  [--case NAME]
-
-Functions
----------
-fsdt_chain(cf)   the standalone FSDT solution of the case's strip: classical
-                 ABD + Whitney-corrected shear stiffness, its own 5-DOF
-                 harmonic plate solve, then pointwise in-plane (CLT
-                 staircase), transverse-shear (constitutive staircase from
-                 [Q1, Q2]), sigma_33 = 0, and plate-kinematics displacements
-rm_chain(cf)     the OpenSG-RM chain of the case (identical to full_field)
-run_case(name)   compute the three chains + write the 9 figures and the .dat
 """
 import argparse
 import os
@@ -46,43 +38,75 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
     ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "examples", "garg"))
-sys.path.insert(0, os.path.join(ROOT, "examples", "yu2003"))
 sys.path.insert(0, os.path.join(ROOT, "examples", "pagano_recovery"))
 
-from opensg_jax.fe_jax.msg_rm_plate import (msgrm_strain_at_depth,    # noqa: E402
+from opensg_jax.fe_jax.msg_rm_plate import (rm_plate_msg,             # noqa: E402
+                                            msgrm_strain_at_depth,
                                             msgrm_warping_at_depth)
 from opensg_jax.fe_jax.msg_materials import rotated_stiffness_6x6     # noqa: E402
-from recovery_bench import (CASES, case_setup, plate_dofs_theory,     # noqa: E402
-                            harmonic_ops, clt_blocks, fsdt_inplane, _grid)
-from statics_fsdt import whitney_k1sq                                 # noqa: E402
+from pagano_exact import ExactCyl                                     # noqa: E402
+from recovery_bench import (plate_dofs_theory, harmonic_ops,          # noqa: E402
+                            clt_blocks, fsdt_inplane, _grid)
 
-OUTDIRS = {"garg_caseA": "garg_caseA", "garg_caseC": "garg_caseC",
-           "yu2003_case1": "yu2003_case1", "yu2003_case2": "yu2003_case2"}
+GARG_DB = {"pagano": {"E": [25.0e9, 1.0e9, 1.0e9], "G": [0.5e9, 0.5e9, 0.2e9],
+                      "nu": [0.25, 0.25, 0.25], "rho": 1.0},
+           "face": {"E": [131.0e9, 10.34e9, 10.34e9],
+                    "G": [6.205e9, 6.205e9, 3.0e9],
+                    "nu": [0.22, 0.22, 0.22], "rho": 1.0},
+           "core": {"E": [0.5776e9] * 3, "G": [0.1079e9] * 3,
+                    "nu": [0.0025] * 3, "rho": 1.0}}
+YU_DB = {"yu": {"E": [25.0e6, 1.0e6, 1.0e6], "G": [0.5e6, 0.5e6, 0.2e6],
+                "nu": [0.25, 0.25, 0.25], "rho": 1.0}}
+
+# fr = ply thickness FRACTIONS of h (bottom first); qt/qb = face-pressure
+# fractions of q0 (garg = top-loaded, yu = the split face load)
+CASES_LOCAL = {
+    "garg_caseA": dict(fr=(1 / 3,) * 3, ang=(0.0, 90.0, 0.0),
+                       mats=("pagano",) * 3, db=GARG_DB, a=1.0, q0=1.0e4,
+                       qt=1.0, qb=0.0, unit=" [Pa]", ulab="m",
+                       label="garg caseA [0/90/0]"),
+    "garg_caseC": dict(fr=(0.1, 0.8, 0.1), ang=(0.0, 0.0, 0.0),
+                       mats=("face", "core", "face"), db=GARG_DB, a=1.0,
+                       q0=1.0e4, qt=1.0, qb=0.0, unit=" [Pa]", ulab="m",
+                       label="garg caseC [0/core/0] sandwich"),
+    "yu2003_case1": dict(fr=(0.5, 0.5), ang=(15.0, -15.0), mats=("yu",) * 2,
+                         db=YU_DB, a=4.0, q0=1.0, qt=0.5, qb=-0.5,
+                         unit="$/p_0$", ulab="in",
+                         label="yu2003 case1 [15/-15]"),
+    "yu2003_case2": dict(fr=(0.25,) * 4, ang=(30.0, -30.0, -30.0, 30.0),
+                         mats=("yu",) * 4, db=YU_DB, a=4.0, q0=1.0, qt=0.5,
+                         qb=-0.5, unit="$/p_0$", ulab="in",
+                         label="yu2003 case2 [30/-30/-30/30]"),
+}
+S_LIST = (4.0, 10.0)
+
+
+def build(name, S):
+    """Assemble one (case, L/h) configuration: laminate scaled to h = a/S,
+    the exact solver with the case's face loads, and the OpenSG-RM law."""
+    c = dict(CASES_LOCAL[name])
+    a = c["a"]; h = a / S
+    thk = [f * h for f in c["fr"]]
+    ang = list(c["ang"]); mats = list(c["mats"]); db = c["db"]
+    ex = ExactCyl(thk, ang, mats, db, a, q0=c["qt"] * c["q0"],
+                  q_bot=c["qb"] * c["q0"])
+    r = rm_plate_msg(thk, ang, mats, db, fraction=0.5)
+    ABDG = np.asarray(r["ABDG"])
+    c.update(name=name, S=S, h=h, thk=thk, ang=ang, mats=mats, p=np.pi / a,
+             ex=ex, r=r, A6=np.asarray(r["A6"]), G2=ABDG[6:8, 6:8])
+    return c
 
 
 def fsdt_chain(cf, zc):
-    """The standalone FSDT solution of the case's strip at both stations.
-
-    Variables
-    ---------
-    A6c, G2w    classical lamination 6x6 and the Whitney-corrected shear 2x2
-                (k1^2 x the ply-integrated shear block, from clt_blocks)
-    y, Es       the FSDT harmonic plate solve of the strip (same 5-DOF solve,
-                FSDT section law) -- supplies [Q1, Q2] and the plate strains
-    Q12         the transverse-shear resultants of the FSDT solution
-    gam         the (constant) transverse shear strains G2w^-1 [Q1, Q2]
-    s_in        (n, 3) in-plane CLT staircase Qbar(z) (e0 + z k)
-    s_sh        (n, 2) constitutive staircase [[C55, C45], [C45, C44]](z) gam
-    Ufs         (n, 3) FSDT plate-kinematics displacements: U1 = u + z phi1,
-                U2 = v + z phi2 (cos family at x = 0), U3 = w (sin, x = a/2)
-    """
+    """The standalone Whitney-1973 FSDT solution at both stations (classical
+    ABD + Whitney-corrected shear, its own harmonic plate solve, CLT in-plane
+    staircase, constitutive shear staircase, plate-kinematics displacements)."""
     thk, ang, mats, db = cf["thk"], cf["ang"], cf["mats"], cf["db"]
     p, q0 = cf["p"], cf["q0"]
     A6c, G2w, Qlist, zpl, k1sq = clt_blocks(thk, ang, mats, db)
     y, Es = plate_dofs_theory(A6c, G2w, p, q0)
     _, Bg = harmonic_ops(p)
     Q12 = G2w @ (Bg @ y)
-    gam = np.linalg.solve(G2w, Q12) * k1sq / k1sq          # = Bg @ y
     s_in = fsdt_inplane(zc, Qlist, zpl, Es)
     ply = np.clip(np.searchsorted(zpl[1:-1], zc, side="left"), 0,
                   len(thk) - 1)
@@ -91,18 +115,15 @@ def fsdt_chain(cf, zc):
         C = np.asarray(rotated_stiffness_6x6(db[m]["E"], db[m]["G"],
                                              db[m]["nu"], x))
         Csh.append(np.array([[C[4, 4], C[3, 4]], [C[3, 4], C[3, 3]]]))
-    gam_avg = np.linalg.solve(G2w, Q12)                    # k-corrected strain
+    gam_avg = np.linalg.solve(G2w, Q12)
     s_sh = np.array([Csh[k] @ gam_avg for k in ply])
-    Ufs = np.column_stack([y[0] + zc * y[3],               # u + z phi1
-                           y[1] + zc * y[4],               # v + z phi2
-                           np.full_like(zc, y[2])])        # w (constant in z)
+    Ufs = np.column_stack([y[0] + zc * y[3], y[1] + zc * y[4],
+                           np.full_like(zc, y[2])])
     return dict(s_in=s_in, s_sh=s_sh, U=Ufs, k1sq=k1sq)
 
 
 def rm_chain(cf, zc):
-    """The OpenSG-RM chain (identical composition to the tutorials): stress at
-    both stations with the face load ladders, sigma_33 by equilibrium from the
-    loaded bottom face, Kirchhoff displacement with mean-zero warping."""
+    """The OpenSG-RM chain (identical composition to the tutorials)."""
     p, q0 = cf["p"], cf["q0"]
     y, Es = plate_dofs_theory(cf["A6"], cf["G2"], p, q0)
     z6 = np.zeros(6)
@@ -128,9 +149,10 @@ def rm_chain(cf, zc):
     return dict(S_end=S_end, S_mid=S_mid, s33=s33, U=U)
 
 
-def run_case(name):
-    """Compute the three chains and write the nine individual figures + .dat."""
-    cf = case_setup(name)
+def run_case(name, S):
+    """One (case, L/h): compute the three chains, write the nine individual
+    figures and three_method.dat into <case>/L_h_<S>/."""
+    cf = build(name, S)
     h = cf["h"]
     zc = _grid(cf["thk"])
     rm = rm_chain(cf, zc)
@@ -160,11 +182,8 @@ def run_case(name):
         "U3": (rm["U"][:, 2], fs["U"][:, 2], exu[:, 2],
                r"$U_3$%s  at  $x=a/2$" % ul),
     }
-    # reference scale per panel family, used to RECOGNIZE identically-zero
-    # fields (cross-ply sigma_12/sigma_23/U2): without this the axis
-    # auto-scales to the ~1e-14-relative numerical noise and machine-zero
-    # looks like a wild curve.  Zero fields are drawn on an axis scaled to
-    # the family's dominant component so all methods collapse onto zero.
+    # family scales, used only to RECOGNIZE numerically-zero fields; those are
+    # plotted at their ACTUAL values with the magnitude annotated in-figure
     fam_scale = {"s11": np.max(np.abs(exs[:, 0])),
                  "s22": np.max(np.abs(exs[:, 0])),
                  "s12": np.max(np.abs(exs[:, 0])),
@@ -173,22 +192,28 @@ def run_case(name):
                  "s33": np.max(np.abs(exs[:, 2])),
                  "U1": np.max(np.abs(exu)), "U2": np.max(np.abs(exu)),
                  "U3": np.max(np.abs(exu))}
-    outdir = os.path.join(HERE, OUTDIRS[name])
+    outdir = os.path.join(HERE, name, "L_h_%g" % S)
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir)
     for key, (m_rm, m_fs, m_ex, xlabel) in panels.items():
         scale = fam_scale[key]
-        zero_field = (max(np.max(np.abs(m_ex)), np.max(np.abs(m_rm)))
-                      < 1e-6 * scale)
+        vmax = max(np.max(np.abs(m_ex)), np.max(np.abs(m_rm)))
+        zero_field = vmax < 1e-6 * scale
         fig, ax = plt.subplots(figsize=(5.4, 4.8))
         ax.plot(m_ex, zc / h, "-", color="k", lw=2.0, label="Pagano exact 3-D")
         ax.plot(m_rm, zc / h, ":s", color="#ff7f0e", ms=4, mfc="none",
                 mew=1.2, lw=1.6, markevery=10, label="OpenSG-RM")
         ax.plot(m_fs, zc / h, "--", color="#1f77b4", lw=1.5,
                 label="Whitney-1973")
+        ax.ticklabel_format(axis="x", style="sci", scilimits=(-3, 4))
         if zero_field:
-            ax.set_xlim(-0.05 * scale, 0.05 * scale)
-            ax.text(0.5, 0.06, "identically zero field\n(all methods $=0$ "
-                    "at plot scale)", transform=ax.transAxes, ha="center",
-                    fontsize=9, color="0.35")
+            ax.text(0.5, 0.03,
+                    "max |value| = %.1e  (numerical zero: ~1e%d of the "
+                    "dominant field)"
+                    % (vmax,
+                       int(np.floor(np.log10(max(vmax / scale, 1e-300))))),
+                    transform=ax.transAxes, ha="center", fontsize=8.5,
+                    color="0.35")
         ax.set_xlabel(xlabel, fontsize=11)
         ax.set_ylabel("$z/h$", fontsize=11)
         ax.grid(alpha=0.3)
@@ -199,8 +224,8 @@ def run_case(name):
                     bbox_inches="tight")
         plt.close(fig)
 
-    hdr = ["%s -- three-method comparison (OpenSG-RM / FSDT (Whitney) / "
-           "Pagano exact 3-D)" % cf["label"],
+    hdr = ["%s, L/h = %g -- three-method comparison (OpenSG-RM / "
+           "Whitney-1973 FSDT / Pagano exact 3-D)" % (cf["label"], S),
            "stations: s11 s22 s12 s33 U3 at x = a/2; s13 s23 U1 U2 at x = 0",
            "Whitney k1^2 = %.6f (used inside the FSDT shear staircase)"
            % fs["k1sq"],
@@ -212,14 +237,15 @@ def run_case(name):
         cols += [m_rm, m_fs, m_ex]
     np.savetxt(os.path.join(outdir, "three_method.dat"),
                np.column_stack(cols), header="\n".join(hdr), fmt="%15.6e")
-    print("  %-14s -> %s/plot_{s11..U3}.png + three_method.dat"
-          % (name, OUTDIRS[name]))
+    print("  %-14s L/h = %-3g -> %s/L_h_%g/plot_*.png + three_method.dat"
+          % (name, S, name, S))
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", default=None, help="one case (default: all)")
     args = ap.parse_args()
-    print("three-method comparison plots (individual files per component)")
-    for nm in ([args.case] if args.case else list(OUTDIRS)):
-        run_case(nm)
+    print("three-method comparison plots, L/h = 4 and 10, individual files")
+    for nm in ([args.case] if args.case else list(CASES_LOCAL)):
+        for S in S_LIST:
+            run_case(nm, S)
