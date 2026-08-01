@@ -1,32 +1,27 @@
-"""make_abaqus_dyn.py -- deck generator for the transient sandwich benchmark
-(README.md: Nayak-class problem, Garg sandwich data, Yu-2003 dynamic-recovery
-protocol).  Reads sandwich_sg.yaml (make_1dsg.py) and writes
+"""make_abaqus_dyn.py -- deck generator for the Nayak-Shenoi-Moy Example-5
+transient sandwich benchmark (README.md).  Reads sandwich_sg.yaml
+(make_1dsg.py) and writes FOUR decks -- {RM shell, 3-D solid} x {step, blast}:
 
-    sandwich_RM.inp     20 x 20 S4 plate carrying the OpenSG-RM 8x8 as a
-                        *SHELL GENERAL SECTION (+ the 2x2 shear, + the section
-                        density), SS-1 edges, suddenly-applied uniform
-                        pressure held constant, implicit dynamics dt = 5e-5 s
-                        for 0.025 s.  Per-increment prints: U at the center
-                        node; SF/SM and COORD at three 2x2 element patches
-                        (center, x-edge middle, y-edge middle) -- the
-                        recovery post-processor patch-fits these into the
-                        resultant fields and their gradients per time step.
-    sandwich_SOLID.inp  the benchmark: 20 x 20 x 12 C3D8I (2 elements per
-                        face sheet, 8 through the core), per-layer material +
-                        density, same BCs / load / time integration.
-                        Prints: center mid-surface U every increment;
-                        centroidal S along the matching element columns every
-                        20th increment (1 ms cadence).
+    sandwich_RM_step.inp / sandwich_RM_blast.inp
+        20 x 20 S4 plate carrying the OpenSG-RM 8x8 as a *SHELL GENERAL
+        SECTION (+ 2x2 shear + section density 40.69 kg/m^2), SS-1 edges,
+        the paper's DOUBLE-SINE spatial load q0 sin(pi x/a) sin(pi y/b) with
+        F(t) = step or the explosive blast e^(-330 t), q0 = 68.9476 MPa,
+        implicit dynamics dt = 50 us for 0.02 s (the paper's step size).
+        Per-increment prints: center U; SF/SM + COORD at three 2x2 patches
+        (center, x-edge middle, y-edge middle) for the recovery.
+    sandwich_SOLID_step.inp / sandwich_SOLID_blast.inp
+        the benchmark: 20 x 20 x 16 C3D8I (one element per face PLY -- eight
+        plies -- and eight through the core), per-ply orientation/material/
+        density, same BCs/load/time.  Center U every increment; centroidal S
+        at the matching columns every 10th increment (0.5 ms cadence).
 
-Variables
----------
-n(i, j) / e(i, j)     shell node (21 per row) and element (20 per row) ids
-n3(i, j, k)/e3(i,j,k) solid ids; k = thickness layer (z-planes non-uniform:
-                      2 x 2.5 mm face, 8 x 5 mm core, 2 x 2.5 mm face)
-NCEN / PATCHC ...     the center node and the three recovery patches
-q0, DT, TTOT          10 kPa step pressure; 5e-5 s; 0.025 s
-SS-1                  x-edges u3 = u2 = 0; y-edges u3 = u1 = 0 (same rule in
-                      both models; drilling ur3 = 0 on the orthotropic shell)
+The double-sine spatial load is the plate's own Navier mode: at the center
+and edge-middle stations the recovery gradients are closed-form, and the
+patch prints provide the same information redundantly for cross-checking.
+
+Variables mirror examples/opensg-rm_dynamic conventions; the blast amplitude
+is tabulated as e^(-330 t) at 0.25 ms spacing (t1 = 6 ms decay per the paper).
 """
 import os
 import sys
@@ -42,11 +37,12 @@ sys.path.insert(0, ROOT)
 from opensg_jax.fe_jax.segment_plate import read_plate_sg_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
 
-A = 0.5                      # plate side [m]
-NX = 20                      # shell/solid in-plane elements per side
-Q0 = 10.0e3                  # step pressure [Pa]
-DT, TTOT = 5.0e-5, 0.025     # time step / total time [s]
-NZF, NZC = 2, 8              # solid elements per face sheet / through the core
+A = 1.524                    # plate side a = b = 10 h [m]
+NX = 20                      # in-plane elements per side
+Q0 = 68.9476e6               # load intensity [Pa] (the paper's q0)
+DT, TTOT = 5.0e-5, 0.02      # the paper's 50 us step; 20 ms window
+CBLAST = 330.0               # blast decay e^(-c t), c = 330 1/s
+NZC = 8                      # solid elements through the core
 
 inp = read_plate_sg_yaml(os.path.join(HERE, "sandwich_sg.yaml"))
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
@@ -54,7 +50,7 @@ r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
 ABDG = np.asarray(r["ABDG"])
 AB = ABDG[:6, :6]; G2 = ABDG[6:, 6:]
 db = inp["material_db"]
-thick = inp["thick"]; mats = inp["mat_names"]
+thick = inp["thick"]; mats = inp["mat_names"]; angs = inp["angles"]
 H = float(sum(thick))
 rho_h = sum(db[m]["rho"] * t for m, t in zip(mats, thick))
 dx = A / NX
@@ -68,29 +64,39 @@ def e(i, j):
     return 1 + i + NX * j
 
 
-def common_step(L, elements_load, load_kw):
-    """The shared *AMPLITUDE + dynamic step block: suddenly applied constant
-    pressure (step at t = 0, held), fixed-dt implicit dynamics."""
-    L.append("*AMPLITUDE, NAME=STEPL")
-    L.append("0., 1., %g, 1." % TTOT)
-    L.append("**")
-    L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
-    L.append("*DYNAMIC")
-    L.append("%g, %g, %g, %g" % (DT, TTOT, DT * 1e-4, DT))
-    L.append("*DLOAD, AMPLITUDE=STEPL")
-    for eid in elements_load:
-        L.append("%d, %s, %.6e" % (eid, load_kw, Q0))
+def amp_lines(name, kind):
+    """The *AMPLITUDE block: 'step' = 1 from t = 0; 'blast' = e^(-c t)
+    tabulated every 0.25 ms."""
+    L = ["*AMPLITUDE, NAME=%s" % name]
+    if kind == "step":
+        L.append("0., 1., %g, 1." % TTOT)
+    else:
+        ts = np.arange(0.0, TTOT + 1e-12, 2.5e-4)
+        vals = []
+        for t in ts:
+            vals += ["%.6g" % t, "%.6g" % np.exp(-CBLAST * t)]
+        for s in range(0, len(vals), 8):
+            L.append(", ".join(vals[s:s + 8]))
+    return L
 
 
-def write_rm(path):
+def sinsin(i, j):
+    """The double-sine load amplitude at the element center."""
+    xc = (i + 0.5) * dx
+    yc = (j + 0.5) * dx
+    return np.sin(np.pi * xc / A) * np.sin(np.pi * yc / A)
+
+
+def write_rm(path, kind):
     tri = [AB[i, j] for j in range(6) for i in range(j + 1)]
-    L = []
-    L.append("*HEADING")
-    L.append("Transient sandwich plate, OpenSG-RM 8x8 shell (see README.md)")
-    L.append("** a = b = %g m, h = %g m, [0/core/0] 0.1h/0.8h/0.1h" % (A, H))
-    L.append("** step pressure q0 = %g Pa held; dt = %g s, T = %g s"
-             % (Q0, DT, TTOT))
-    L.append("*NODE")
+    L = ["*HEADING",
+         "Nayak-Shenoi-Moy Ex.5 sandwich, OpenSG-RM 8x8 shell, %s pulse"
+         % kind,
+         "** (0/90/0/90/core)s, a = b = %g m, h = %g m, q0 = %g Pa" %
+         (A, H, Q0),
+         "** load q0 F(t) sin(pi x/a) sin(pi y/b); dt = %g s, T = %g s"
+         % (DT, TTOT),
+         "*NODE"]
     for j in range(NX + 1):
         for i in range(NX + 1):
             L.append("%d, %.8f, %.8f, 0.0" % (n(i, j), i * dx, j * dx))
@@ -126,7 +132,7 @@ def write_rm(path):
     L.append("*TRANSVERSE SHEAR STIFFNESS")
     L.append("%.6e, %.6e, %.6e" % (G2[0, 0], G2[1, 1], G2[0, 1]))
     L.append("**")
-    L.append("** SS-1 simple supports + drilling (orthotropic layup)")
+    L.append("** SS-1 simple supports + drilling (cross-ply layup)")
     L.append("*BOUNDARY")
     L.append("NX0, 2, 3")
     L.append("NXA, 2, 3")
@@ -135,7 +141,14 @@ def write_rm(path):
     L.append("NY0, 3, 3")
     L.append("NYB, 3, 3")
     L.append("NALL, 6, 6")
-    common_step(L, [e(i, j) for j in range(NX) for i in range(NX)], "P")
+    L += amp_lines("FT", kind)
+    L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
+    L.append("*DYNAMIC")
+    L.append("%g, %g, %g, %g" % (DT, TTOT, DT * 1e-4, DT))
+    L.append("*DLOAD, AMPLITUDE=FT")
+    for j in range(NX):
+        for i in range(NX):
+            L.append("%d, P, %.6e" % (e(i, j), Q0 * sinsin(i, j)))
     L.append("*OUTPUT, FIELD, FREQUENCY=20")
     L.append("*ELEMENT OUTPUT")
     L.append("SF, SM")
@@ -154,12 +167,18 @@ def write_rm(path):
     return path
 
 
-def write_solid(path):
-    zk = np.concatenate([np.linspace(0, thick[0], NZF + 1)[:-1],
-                         thick[0] + np.linspace(0, thick[1], NZC + 1)[:-1],
-                         thick[0] + thick[1]
-                         + np.linspace(0, thick[2], NZF + 1)])
+def write_solid(path, kind):
+    # one element per face PLY (8) + NZC through the core = 16 layers
+    zk = [0.0]
+    for t in thick[:4]:
+        zk.append(zk[-1] + t)
+    for s in range(NZC):
+        zk.append(zk[-1] + thick[4] / NZC)
+    for t in thick[5:]:
+        zk.append(zk[-1] + t)
+    zk = np.array(zk)
     nzt = len(zk) - 1
+    lay_of = [0, 1, 2, 3] + [4] * NZC + [5, 6, 7, 8]
     NPL = (NX + 1) * (NX + 1)
 
     def n3(i, j, k):
@@ -168,13 +187,12 @@ def write_solid(path):
     def e3(i, j, k):
         return 1 + i + NX * j + NX * NX * k
 
-    lay_of = lambda k: 0 if k < NZF else (1 if k < NZF + NZC else 2)
-    L = []
-    L.append("*HEADING")
-    L.append("Transient sandwich plate, 3-D SOLID benchmark (see README.md)")
-    L.append("** %d x %d x %d C3D8I; same BCs/load/time as sandwich_RM"
-             % (NX, NX, nzt))
-    L.append("*NODE")
+    L = ["*HEADING",
+         "Nayak-Shenoi-Moy Ex.5 sandwich, 3-D SOLID benchmark, %s pulse"
+         % kind,
+         "** %d x %d x %d C3D8I; one element per face ply, %d through core"
+         % (NX, NX, nzt, NZC),
+         "*NODE"]
     for k in range(nzt + 1):
         for j in range(NX + 1):
             for i in range(NX + 1):
@@ -190,9 +208,9 @@ def write_solid(path):
                             n3(i, j + 1, k), n3(i, j, k + 1),
                             n3(i + 1, j, k + 1), n3(i + 1, j + 1, k + 1),
                             n3(i, j + 1, k + 1)))
-    for m in range(3):
-        L.append("*ELSET, ELSET=LAY%d" % (m + 1))
-        ids = [str(e3(i, j, k)) for k in range(nzt) if lay_of(k) == m
+    for m in range(9):
+        L.append("*ELSET, ELSET=PLY%d" % (m + 1))
+        ids = [str(e3(i, j, k)) for k in range(nzt) if lay_of[k] == m
                for j in range(NX) for i in range(NX)]
         for s in range(0, len(ids), 12):
             L.append(", ".join(ids[s:s + 12]))
@@ -207,18 +225,17 @@ def write_solid(path):
         ids = [str(e3(ii, jj, k)) for k in range(nzt) for (ii, jj) in cols]
         for s in range(0, len(ids), 12):
             L.append(", ".join(ids[s:s + 12]))
-    for name, sel in (("NX0F", lambda i, j, k: i == 0),
-                      ("NXAF", lambda i, j, k: i == NX),
-                      ("NY0F", lambda i, j, k: j == 0),
-                      ("NYBF", lambda i, j, k: j == NX)):
+    for name, sel in (("NX0F", lambda i, j: i == 0),
+                      ("NXAF", lambda i, j: i == NX),
+                      ("NY0F", lambda i, j: j == 0),
+                      ("NYBF", lambda i, j: j == NX)):
         L.append("*NSET, NSET=%s" % name)
         ids = [str(n3(i, j, k)) for k in range(nzt + 1)
-               for j in range(NX + 1) for i in range(NX + 1)
-               if sel(i, j, k)]
+               for j in range(NX + 1) for i in range(NX + 1) if sel(i, j)]
         for s in range(0, len(ids), 12):
             L.append(", ".join(ids[s:s + 12]))
     L.append("**")
-    for name in ("face", "core"):
+    for name in ("ge", "herex"):
         m = db[name]
         L.append("*MATERIAL, NAME=%s" % name.upper())
         L.append("*ELASTIC, TYPE=ENGINEERING CONSTANTS")
@@ -228,11 +245,11 @@ def write_solid(path):
         L.append("%.6e" % m["G"][2])
         L.append("*DENSITY")
         L.append("%g," % m["rho"])
-    for m in range(3):
+    for m in range(9):
         L.append("*ORIENTATION, NAME=OR%d, SYSTEM=RECTANGULAR" % (m + 1))
         L.append("1.0, 0.0, 0.0, 0.0, 1.0, 0.0")
-        L.append("3, %g" % inp["angles"][m])
-        L.append("*SOLID SECTION, ELSET=LAY%d, MATERIAL=%s, ORIENTATION=OR%d"
+        L.append("3, %g" % angs[m])
+        L.append("*SOLID SECTION, ELSET=PLY%d, MATERIAL=%s, ORIENTATION=OR%d"
                  % (m + 1, mats[m].upper(), m + 1))
     L.append("**")
     L.append("** SS-1 simple supports (same rule as the shell)")
@@ -243,8 +260,14 @@ def write_solid(path):
     L.append("NYBF, 1, 1")
     L.append("NY0F, 3, 3")
     L.append("NYBF, 3, 3")
-    common_step(L, [e3(i, j, nzt - 1) for j in range(NX) for i in range(NX)],
-                "P2")
+    L += amp_lines("FT", kind)
+    L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
+    L.append("*DYNAMIC")
+    L.append("%g, %g, %g, %g" % (DT, TTOT, DT * 1e-4, DT))
+    L.append("*DLOAD, AMPLITUDE=FT")
+    for j in range(NX):
+        for i in range(NX):
+            L.append("%d, P2, %.6e" % (e3(i, j, nzt - 1), Q0 * sinsin(i, j)))
     L.append("*OUTPUT, FIELD, FREQUENCY=50")
     L.append("*ELEMENT OUTPUT")
     L.append("S")
@@ -253,7 +276,7 @@ def write_solid(path):
     L.append("*NODE PRINT, NSET=NCEN3D, FREQUENCY=1")
     L.append("U")
     for es in ("COLC", "COLX", "COLY"):
-        L.append("*EL PRINT, ELSET=%s, POSITION=CENTROIDAL, FREQUENCY=20" % es)
+        L.append("*EL PRINT, ELSET=%s, POSITION=CENTROIDAL, FREQUENCY=10" % es)
         L.append("S")
     L.append("*END STEP")
     with open(path, "w") as f:
@@ -262,8 +285,10 @@ def write_solid(path):
 
 
 if __name__ == "__main__":
-    p1 = write_rm(os.path.join(HERE, "sandwich_RM.inp"))
-    p2 = write_solid(os.path.join(HERE, "sandwich_SOLID.inp"))
-    print("wrote %s and %s" % (os.path.basename(p1), os.path.basename(p2)))
-    print("section mass rho*h = %.4f kg/m^2; D11 = %.4e; G11 = %.4e"
+    for kind in ("step", "blast"):
+        p1 = write_rm(os.path.join(HERE, "sandwich_RM_%s.inp" % kind), kind)
+        p2 = write_solid(os.path.join(HERE, "sandwich_SOLID_%s.inp" % kind),
+                         kind)
+        print("wrote %s, %s" % (os.path.basename(p1), os.path.basename(p2)))
+    print("rho*h = %.4f kg/m^2; D11 = %.4e; G11 = %.4e"
           % (rho_h, AB[3, 3], G2[0, 0]))
