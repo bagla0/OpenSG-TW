@@ -87,12 +87,16 @@ def read_elprint_tables(dat_path):
             elset, labels, key, pend = m.group(1), None, None, False
             continue
         if pend:
-            m = re.match(r"\s*SET\s+(\S+)\s*$", ln)
+            m = re.match(r"\s*SET\s+(\S+)\s*$", ln) or \
+                re.match(r"\s*([A-Z][A-Z0-9_]*)\s*$", ln)
             pend = False
             if m:
                 elset, labels, key = m.group(1), None, None
                 continue
-        if re.search(r"AND ELEMENT\s*$", ln):
+        if re.search(r"AND ELEMENT\s*$", ln) or \
+                re.search(r"ELEMENT SET\s*$", ln):
+            # Abaqus wraps the preamble at either point: "...AND ELEMENT" /
+            # "SET COL0" (solids) or "...AND ELEMENT SET" / "PATCHC" (shells)
             pend = True
             continue
         if "TABLE IS PRINTED" in ln:
@@ -103,7 +107,8 @@ def read_elprint_tables(dat_path):
             continue
         toks = ln.split()
         if elset and not labels and toks and any(
-                re.fullmatch(r"(S|SF|SM|TSHR|E|SE|COOR)\d+", t) for t in toks):
+                re.fullmatch(r"(S|SF|SM|TSHR|E|SE|COOR|COORD)\d+", t)
+                for t in toks):
             labels = [t for t in toks if re.fullmatch(r"[A-Z]+\d+", t)]
             key = (elset, tuple(labels))
             tables.setdefault(key, [])

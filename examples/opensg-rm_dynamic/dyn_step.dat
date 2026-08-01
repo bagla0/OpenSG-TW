@@ -1,0 +1,7 @@
+Nayak Ex.5 sandwich, step pulse -- OpenSG-RM vs Abaqus 3-D solid
+peak center w: RM 2.728485e+00 m at t=19.850 ms | solid 2.690246e+00 m at t=14.070 ms
+  peak-w difference RM vs solid: +1.42 %
+profiles at RM increment 397 (t=19.850 ms), solid dump at t=20.000 ms
+sigma_33 top-face closure (dynamic momentum integral / applied q): 1.0092 (target 1)
+dynamic shear amplification Q_meas/Q_quasistatic: sc13(X)=1.392 sc23(Y)=1.397
+cost: RM 37.0 s vs solid 324.0 s wallclock; RM 400 S4 (2646 dof) vs solid 6400 C3D8I (~22.5k nodal dof + incompatible modes)

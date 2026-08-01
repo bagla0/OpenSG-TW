@@ -67,8 +67,15 @@ abaqus job=sandwich_RM_blast    interactive
 abaqus job=sandwich_SOLID_blast interactive
 ```
 
-Copy the four job `.dat` files back here for the recovery post-processor
-(next step of this folder).
+Copy the four job `.dat` files back to `Abaqus_results/` (exact commands:
+`ABAQUS_RUN_COMMANDS.md`), then run the post-processing chain — **all
+results and the full narrative are in [RESULTS.md](RESULTS.md)**:
+
+| script | output |
+|---|---|
+| `recover_dyn.py` | `dyn_{step,blast}_{w,profiles,iface}.png` + `dyn_*.dat` — per-increment RM recovery vs the 3-D solid |
+| `reddy_hsdt_navier.py` | the ANALYTICAL Reddy-TSDT (= Nayak's theory) + RM Navier responses, `reddy_wt_*.dat`, `reddy_fig13.png`, and the Ex.2 Table-3 anchor check |
+| `ex4_free_vibration.py` | `ex4_freq_table.dat` — Nayak Ex.4 (Crawley cantilever) frequencies: experiment / Nayak HSDT FE / OpenSG-RM Ritz |
 
 ## Supporting literature (downloaded alongside the benchmark)
 
