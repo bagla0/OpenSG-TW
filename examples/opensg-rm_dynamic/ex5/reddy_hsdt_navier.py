@@ -245,16 +245,20 @@ def navier_KM(theory):
     return K, M
 
 
-def modal_response(K, M, pulse, tgrid):
+def modal_response(K, M, pulse, tgrid, full=False):
     """w_center(t): eigen-decompose the 5x5, then the CLOSED-FORM response of
     each SDOF eta_dd + om^2 eta = g*F(t) with eta(0) = eta_d(0) = 0, F(t)
     per the paper: 'step' (pure, the Abaqus decks), 'step_t1'/'sine'/'tri'
     (cut off at T1), 'blast' e^(-c t).  Piecewise closed forms; t > T1
-    continues as free vibration from the exact state at T1."""
+    continues as free vibration from the exact state at T1.
+    full=True additionally returns the modal machinery (lam, V, eta) so the
+    FULL amplitude-vector history d(t) = V @ eta can drive the TSDT stress
+    profiles (d = (U, V, W, X, Y) per time)."""
     from scipy.linalg import eigh
     lam, V = eigh(K, M)         # generalized SYMMETRIC problem: om^2, modes
     # scipy returns V with V^T M V = I -- the modal equations decouple as-is
     w = np.zeros_like(tgrid)
+    etas = np.zeros((5, len(tgrid)))
     for i in range(5):
         om = np.sqrt(lam[i])
         g = V[2, i] * Q0                # load enters the W equation only
@@ -293,7 +297,42 @@ def modal_response(K, M, pulse, tgrid):
         else:
             raise ValueError(pulse)
         w += V[2, i] * eta              # w amplitude = W-row of the mode
+        etas[i] = eta
+    if full:
+        return w, lam, V, etas
     return w
+
+
+def tsdt_profiles(d, zpts):
+    """CONSTITUTIVE TSDT stresses of the Navier mode through the thickness
+    for the amplitude vector d = (U, V, W, X, Y), evaluated at the same
+    three stations the Abaqus comparison uses:
+      s11/s22 at the center (a/2, b/2)  -- the sinsin strain rows at value 1,
+                                           the coscos (12) rows vanish there;
+      s13 at (0, b/2), s23 at (a/2, 0)  -- gamma(z) = (1 - 3 c1 z^2) g0,
+                                           the theory's own transverse shear.
+    Returns (s11C, s22C, s13X, s23Y) arrays over zpts.  NOTE the constitutive
+    shear is DISCONTINUOUS at ply interfaces (Q_s jumps 30-90x between GE and
+    foam) -- that is the theory, shown as-is; and the TSDT has no sigma_33."""
+    p, q = PP, QQ
+    c1 = C1
+    g0 = np.array([[0, 0, p, 1, 0], [0, 0, q, 0, 1.0]]) @ d   # (g13, g23)
+    s11 = np.empty(len(zpts)); s22 = np.empty(len(zpts))
+    s13 = np.empty(len(zpts)); s23 = np.empty(len(zpts))
+    for iz, z in enumerate(zpts):
+        lay = int(np.clip(np.searchsorted(ZK[1:-1], z), 0, len(THICK) - 1))
+        Q, Qs = qbar(ANGLES[lay], ISCORE[lay])
+        # center: only the sinsin rows (11, 22) are nonzero at (a/2, b/2)
+        e11 = -p * d[0] + z * (-p * d[3]) - c1 * z ** 3 * (-p * d[3]
+                                                           - p * p * d[2])
+        e22 = -q * d[1] + z * (-q * d[4]) - c1 * z ** 3 * (-q * d[4]
+                                                           - q * q * d[2])
+        s = Q @ np.array([e11, e22, 0.0])
+        s11[iz], s22[iz] = s[0], s[1]
+        fac = 1.0 - 3.0 * c1 * z * z          # the TSDT shear shape
+        s13[iz] = Qs[0, 0] * fac * g0[0]
+        s23[iz] = Qs[1, 1] * fac * g0[1]
+    return s11, s22, s13, s23
 
 
 def main():
@@ -307,7 +346,7 @@ def main():
     print("  Reddy TSDT :", " ".join("%9.2f" % v for v in ft))
     print("  OpenSG-RM  :", " ".join("%9.2f" % v for v in ff))
     for kind in ("step", "blast"):
-        wt = modal_response(Kt, Mt, kind, tgrid)
+        wt, lam, V, etas = modal_response(Kt, Mt, kind, tgrid, full=True)
         wf = modal_response(Kf, Mf, kind, tgrid)
         np.savetxt(os.path.join(HERE, "reddy_wt_%s.dat" % kind),
                    np.column_stack([tgrid, wt, wf]),
@@ -318,6 +357,30 @@ def main():
               " ms (%+.2f %%)" % (kind, wt[ipk_t], 1e3 * tgrid[ipk_t],
                                   wf[ipk_f], 1e3 * tgrid[ipk_f],
                                   100 * (wf[ipk_f] - wt[ipk_t]) / wt[ipk_t]))
+        # ---- the TSDT's own through-thickness stresses, at ITS peak -------
+        d_hist = V @ etas                       # amplitude vector history
+        zg = np.concatenate([np.linspace(ZK[m] + 1e-9, ZK[m + 1] - 1e-9, 15)
+                             for m in range(len(THICK))])
+        s11, s22, s13, s23 = tsdt_profiles(d_hist[:, ipk_t], zg)
+        np.savetxt(os.path.join(HERE, "reddy_profiles_%s.dat" % kind),
+                   np.column_stack([zg, s11, s22, s13, s23]),
+                   header="z[m](mid-plane origin)  s11(a/2,b/2)  s22(a/2,b/2)"
+                          "  s13(0,b/2)  s23(a/2,0)  [Pa] -- constitutive"
+                          " TSDT at ITS peak t=%.4f ms (%s pulse); no s33 in"
+                          " the theory" % (1e3 * tgrid[ipk_t], kind))
+        # face-core interface s13 history: both constitutive branches of the
+        # discontinuity (face side = the 90-deg GE ply, core side = foam)
+        z_if = ZK[4]                            # bottom face-core interface
+        fac = 1.0 - 3.0 * C1 * z_if * z_if
+        g13_t = np.array([0, 0, PP, 1, 0.0]) @ d_hist
+        qs_face = qbar(ANGLES[3], False)[1][0, 0]     # 90-deg ply: G23
+        qs_core = qbar(0.0, True)[1][0, 0]            # foam: Gc
+        np.savetxt(os.path.join(HERE, "reddy_iface_%s.dat" % kind),
+                   np.column_stack([tgrid, qs_core * fac * g13_t,
+                                    qs_face * fac * g13_t]),
+                   header="t[s]  s13_iface_CORE_side[Pa]  s13_iface_FACE_side"
+                          "[Pa] -- constitutive TSDT is discontinuous at the"
+                          " interface (%s pulse)" % kind)
     # the Nayak Fig.-13 reproduction: all four pulses, his w/0.0254 scaling
     fig, ax = plt.subplots(figsize=(7.6, 4.8))
     for pulse, lab, sty in (("sine", "sine", "-"), ("step_t1", "step", "--"),

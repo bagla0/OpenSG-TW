@@ -18,6 +18,10 @@ import sys
 
 import numpy as np
 from numpy.polynomial.legendre import leggauss, Legendre
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = HERE
@@ -26,6 +30,7 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
 sys.path.insert(0, ROOT)
 
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
+from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, plot_plate_sg
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES (Nayak Example 4 digits, from Crawley's specimens)
@@ -156,12 +161,23 @@ def ritz_modes(angles, mats, thick):
     return np.sqrt(lam[:NMODES]) / (2 * np.pi)
 
 
+SLUGS = {"(0_4/Al)s": "04_Al", "(0/+-45/90/Al)s": "0_pm45_90_Al",
+         "((+-45)_2/Al)s": "pm45x2_Al"}
+
+
 def main():
     lines = ["Nayak Ex.4 (Crawley cantilever sandwich): frequencies [Hz]",
              "%-18s %-6s %10s %10s %12s %12s %8s" %
              ("layup", "mode", "Expt[18]", "FEM[18]", "Nayak P9-8x4",
               "OpenSG-RM", "%vsExpt")]
     for name, (angles, mats, thick) in LAYUPS.items():
+        slug = SLUGS[name]
+        # the through-thickness 1-D SG of this layup (the OpenSG-RM input)
+        yml = os.path.join(HERE, "ex4_%s_sg.yaml" % slug)
+        plate_sg_yaml(yml, {"mat_names": mats, "thick": thick,
+                            "angles": list(map(float, angles))},
+                      MATERIAL_DB, fraction=0.5)
+        plot_plate_sg(yml)
         f_rm = ritz_modes(angles, mats, thick)
         expt, fem, p9 = TABLE5[name]
         for m in range(NMODES):
@@ -169,6 +185,25 @@ def main():
                          (name if m == 0 else "", m + 1, expt[m], fem[m],
                           p9[m], f_rm[m],
                           100 * (f_rm[m] - expt[m]) / expt[m]))
+        # individual comparison figure with its own legend
+        modes = np.arange(1, NMODES + 1)
+        fig, ax = plt.subplots(figsize=(7.0, 4.4))
+        ax.plot(modes, expt, "--o", color="k", lw=1.6, ms=6, mfc="none",
+                mew=1.3, label="Experiment (Crawley)")
+        ax.plot(modes, p9, "-^", color="#4878a8", lw=1.4, ms=6, mfc="none",
+                mew=1.2, label="Nayak HSDT FE (9-node, 8x4)")
+        ax.plot(modes, f_rm, "-s", color="#ff7f0e", lw=1.4, ms=6,
+                mfc="none", mew=1.2, label="OpenSG-RM (Ritz + MSG 8x8)")
+        ax.set_xlabel("mode", fontsize=11)
+        ax.set_ylabel("frequency [Hz]", fontsize=11)
+        ax.set_xticks(modes)
+        ax.grid(alpha=0.3)
+        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
+                  frameon=False)
+        fig.tight_layout()
+        fig.savefig(os.path.join(HERE, "ex4_freq_%s.png" % slug), dpi=150,
+                    bbox_inches="tight")
+        plt.close(fig)
     out = "\n".join(lines)
     print(out)
     with open(os.path.join(HERE, "ex4_freq_table.dat"), "w") as f:

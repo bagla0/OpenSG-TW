@@ -307,57 +307,86 @@ def run(kind):
     t_dump = t_so_all[9::10]                  # element dumps every 10th inc
     kd = int(np.argmin(np.abs(t_dump - tpk)))
 
-    # ---------------------------------------------------------------- w(t)
-    fig, ax = plt.subplots(figsize=(7.4, 4.6))
-    ax.plot(1e3 * np.concatenate([[0], t_so]),
-            1e3 * np.concatenate([[0], w_so]), "--", color="k", lw=1.8,
-            label="Abaqus 3-D solid")
-    ax.plot(1e3 * np.concatenate([[0], t_rm[:n_inc]]),
-            1e3 * np.concatenate([[0], w_rm[:n_inc]]), "-s", color="#ff7f0e",
-            lw=1.4, ms=4, mfc="none", mew=1.1, markevery=12,
-            label="OpenSG-RM shell")
-    frd = os.path.join(HERE, "reddy_wt_%s.dat" % kind)
-    if os.path.isfile(frd):
-        rd = np.loadtxt(frd)
-        ax.plot(1e3 * rd[:, 0], 1e3 * rd[:, 1], "-", color="#4878a8",
-                lw=1.3, label="Reddy HSDT (Navier,\nNayak's theory)")
-    ax.set_xlabel("time [ms]", fontsize=11)
-    ax.set_ylabel("center deflection $w$ [mm]", fontsize=11)
-    ax.grid(alpha=0.3)
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
-    fig.tight_layout()
-    fig.savefig(os.path.join(HERE, "dyn_%s_w.png" % kind), dpi=150,
-                bbox_inches="tight")
-    plt.close(fig)
+    # ------------------------------------------------------- plot styling
+    # user conventions: Abaqus = dashed black, OpenSG-RM = orange + markers,
+    # Reddy = thin steel-blue; EVERY figure individual with its own legend
+    STY_SOL = dict(ls="--", color="k", lw=1.8)
+    STY_RM = dict(ls="-", marker="s", color="#ff7f0e", lw=1.4, ms=4,
+                  mfc="none", mew=1.1)
+    STY_RD = dict(ls="-", color="#4878a8", lw=1.3)
 
-    # ---------------------------------------------------------- profiles
-    panels = [("s13", prof["X"][:, 4], "COLX", 4,
-               r"$\sigma_{13}$ [MPa]  at  $(0,\,b/2)$"),
-              ("s23", prof["Y"][:, 3], "COLY", 3,
-               r"$\sigma_{23}$ [MPa]  at  $(a/2,\,0)$"),
-              ("s33", s33, "COLC", 2,
-               r"$\sigma_{33}$ [MPa]  at  $(a/2,\,b/2)$"),
-              ("s11", prof["C"][:, 0], "COLC", 0,
-               r"$\sigma_{11}$ [MPa]  at  $(a/2,\,b/2)$")]
-    fig, axes = plt.subplots(1, 4, figsize=(16.6, 4.8))
-    for ax, (kkey, rmv, col, jc, lbl) in zip(axes, panels):
-        zc_s, gs = sol[col]
-        ax.plot(1e-6 * gs[kd, :, jc], zc_s / H, "--", color="k", lw=1.7,
-                label="Abaqus 3-D solid" if kkey == "s13" else None)
-        ax.plot(1e-6 * rmv, zg / H, "-s", color="#ff7f0e", lw=1.4, ms=4,
-                mfc="none", mew=1.1, markevery=5,
-                label="OpenSG-RM recovery" if kkey == "s13" else None)
-        ax.set_xlabel(lbl, fontsize=10)
+    def one_plot(fname, curves, xlabel, ylabel, note=None, xlim=None):
+        fig, ax = plt.subplots(figsize=(7.4, 4.6))
+        for x, y, sty, lab in curves:
+            ax.plot(x, y, label=lab, **sty)
+        ax.set_xlabel(xlabel, fontsize=11)
+        ax.set_ylabel(ylabel, fontsize=11)
         ax.grid(alpha=0.3)
-        ax.set_ylim(-0.52, 0.52)
-    axes[0].set_ylabel("$z/h$", fontsize=11)
-    h_, l_ = axes[0].get_legend_handles_labels()
-    fig.legend(h_, l_, loc="center left", bbox_to_anchor=(0.92, 0.5),
-               frameon=False, fontsize=10)
-    fig.tight_layout(rect=(0, 0, 0.92, 1))
-    fig.savefig(os.path.join(HERE, "dyn_%s_profiles.png" % kind), dpi=150,
-                bbox_inches="tight")
-    plt.close(fig)
+        if xlim is not None:
+            ax.set_xlim(*xlim)
+        if note:
+            ax.text(0.02, 0.02, note, transform=ax.transAxes, fontsize=8,
+                    color="0.35")
+        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
+                  frameon=False)
+        fig.tight_layout()
+        fig.savefig(os.path.join(HERE, fname), dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+    def reddy(name):
+        f = os.path.join(HERE, "reddy_%s_%s.dat" % (name, kind))
+        return np.loadtxt(f) if os.path.isfile(f) else None
+
+    rd_w, rd_p, rd_i = reddy("wt"), reddy("profiles"), reddy("iface")
+
+    # ---------------------------------------------------------------- w(t)
+    curves = [(1e3 * np.concatenate([[0], t_so]),
+               1e3 * np.concatenate([[0], w_so]), STY_SOL,
+               "Abaqus 3-D solid"),
+              (1e3 * np.concatenate([[0], t_rm[:n_inc]]),
+               1e3 * np.concatenate([[0], w_rm[:n_inc]]),
+               dict(STY_RM, markevery=12), "OpenSG-RM shell"),]
+    if rd_w is not None:
+        curves.append((1e3 * rd_w[:, 0], 1e3 * rd_w[:, 1], STY_RD,
+                       "Reddy HSDT (Navier,\nNayak's theory)"))
+    one_plot("w_history_%s.png" % kind, curves, "time [ms]",
+             "center deflection $w$ [mm]")
+
+    # ------------------------------------- through-thickness path profiles
+    # one figure per component; Reddy shown AT ITS OWN peak instant (its
+    # response is out of phase with the 3-D solution -- peak-to-peak is the
+    # fair envelope comparison); the constitutive TSDT shear explodes in the
+    # stiff faces, so the shear axes are clamped to the physical range
+    panels = [("s13", prof["X"][:, 4], "COLX", 4, 3,
+               r"$\sigma_{13}$ [MPa]  at  $(0,\,b/2)$", True),
+              ("s23", prof["Y"][:, 3], "COLY", 3, 4,
+               r"$\sigma_{23}$ [MPa]  at  $(a/2,\,0)$", True),
+              ("s33", s33, "COLC", 2, None,
+               r"$\sigma_{33}$ [MPa]  at  $(a/2,\,b/2)$", False),
+              ("s11", prof["C"][:, 0], "COLC", 0, 1,
+               r"$\sigma_{11}$ [MPa]  at  $(a/2,\,b/2)$", False)]
+    for kkey, rmv, col, jc, jrd, lbl, clamp in panels:
+        zc_s, gs = sol[col]
+        curves = [(1e-6 * gs[kd, :, jc], zc_s / H, STY_SOL,
+                   "Abaqus 3-D solid"),
+                  (1e-6 * rmv, zg / H, dict(STY_RM, markevery=5),
+                   "OpenSG-RM recovery")]
+        note, xlim = None, None
+        if jrd is not None and rd_p is not None:
+            curves.append((1e-6 * rd_p[:, jrd], rd_p[:, 0] / H, STY_RD,
+                           "Reddy HSDT (constitutive,\nat its own peak)"))
+            if clamp:
+                base = 1e-6 * max(np.abs(gs[kd, :, jc]).max(),
+                                  np.abs(rmv).max())
+                lo = min(0.0, 1e-6 * min(gs[kd, :, jc].min(), rmv.min()))
+                if np.abs(rd_p[:, jrd]).max() * 1e-6 > 1.35 * base:
+                    note = ("Reddy face-side values run off scale "
+                            "(constitutive interface jump)")
+                xlim = (1.15 * lo - 0.05 * base, 1.35 * base)
+        elif kkey == "s33":
+            note = "Reddy TSDT provides no $\\sigma_{33}$"
+        one_plot("profile_%s_%s.png" % (kkey, kind), curves, lbl, "$z/h$",
+                 note=note, xlim=xlim)
 
     # ------------------------------------------------ interface s13 history
     # distribution shape frozen at the peak instant (its integral = Q1),
@@ -369,21 +398,19 @@ def run(kind):
     s13_rm_t = shp_if * fits["X"][:n_inc, 3, 0]
     zc_s, gs = sol["COLX"]
     kz_if = int(np.argmin(np.abs(zc_s - z_if)))
-    fig, ax = plt.subplots(figsize=(7.4, 4.6))
-    ax.plot(1e3 * t_dump, 1e-6 * gs[:, kz_if, 4], "--", color="k", lw=1.7,
-            label="Abaqus 3-D solid")
-    ax.plot(1e3 * t_rm[:n_inc], 1e-6 * s13_rm_t, "-s", color="#ff7f0e",
-            lw=1.4, ms=4, mfc="none", mew=1.1, markevery=12,
-            label="OpenSG-RM recovery")
-    ax.set_xlabel("time [ms]", fontsize=11)
-    ax.set_ylabel(r"face--core interface $\sigma_{13}$ [MPa]  at  $(0,\,b/2)$",
-                  fontsize=11)
-    ax.grid(alpha=0.3)
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
-    fig.tight_layout()
-    fig.savefig(os.path.join(HERE, "dyn_%s_iface.png" % kind), dpi=150,
-                bbox_inches="tight")
-    plt.close(fig)
+    curves = [(1e3 * t_dump, 1e-6 * gs[:, kz_if, 4], STY_SOL,
+               "Abaqus 3-D solid"),
+              (1e3 * t_rm[:n_inc], 1e-6 * s13_rm_t,
+               dict(STY_RM, markevery=12), "OpenSG-RM recovery")]
+    note = None
+    if rd_i is not None:
+        curves.append((1e3 * rd_i[:, 0], 1e-6 * rd_i[:, 1], STY_RD,
+                       "Reddy HSDT (constitutive,\ncore side)"))
+        note = ("constitutive TSDT is discontinuous here: face side "
+                "$\\approx$ 31x the core side")
+    one_plot("iface_s13_%s.png" % kind, curves, "time [ms]",
+             r"face--core interface $\sigma_{13}$ [MPa]  at  $(0,\,b/2)$",
+             note=note)
 
     # ------------------------------------------------------------- numbers
     ipk_so = int(np.argmax(np.abs(w_so)))

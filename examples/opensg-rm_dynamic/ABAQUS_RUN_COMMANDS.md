@@ -47,7 +47,7 @@ are in them). Copy straight onto the roger network share, which is the same
 filesystem as the local `Y:` drive and the compute server home:
 
 ```bat
-copy /Y sandwich_*.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\Abaqus_results\"
+copy /Y sandwich_*.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex5\Abaqus_results\"
 ```
 
 (Create `Abaqus_results\` on the share first if it does not exist.)
@@ -74,6 +74,7 @@ copy /Y sandwich_*.dat "C:\Users\bagla0\OneDrive - purdue.edu\202603_PlateRM\070
 With the four `.dat` files in `Abaqus_results/`:
 
 ```bash
-python examples/opensg-rm_dynamic/recover_dyn.py            # both pulses
-python examples/opensg-rm_dynamic/recover_dyn.py --kind step
+python examples/opensg-rm_dynamic/ex5/reddy_hsdt_navier.py   # Reddy curves first
+python examples/opensg-rm_dynamic/ex5/recover_dyn.py         # both pulses
+python examples/opensg-rm_dynamic/ex5/recover_dyn.py --kind step
 ```

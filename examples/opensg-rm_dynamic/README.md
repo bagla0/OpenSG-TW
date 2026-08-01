@@ -51,12 +51,17 @@ histories; (c) DOF/wall-time ratio shell vs solid.
 
 ## Files
 
+Per-case layout: everything for the transient Ex.5 lives in `ex5/`
+(.py, .yaml, .inp, Abaqus `.dat`, Reddy outputs, all figures) and everything
+for the free-vibration Ex.4 in `ex4/`.
+
 | file | content |
 |---|---|
-| `make_1dsg.py` → `sandwich_sg.yaml/.png` | the 9-layer 1-D SG (5-noded elements, one per layer incl. the core); prints the 8×8 (D₁₁ = 5.7340e6, G₁₁ = 7.8086e6) and section mass 40.6908 kg/m² |
-| `make_abaqus_dyn.py` | writes the four decks below from the SG |
-| `sandwich_RM_step.inp`, `sandwich_RM_blast.inp` | OpenSG-RM S4 plate (20×20), SS-1, double-sine load, per-increment center-U + patch SF/SM/COORD prints |
-| `sandwich_SOLID_step.inp`, `sandwich_SOLID_blast.inp` | 3-D benchmark: 20×20×16 C3D8I (one element per face ply, 8 through the core), same everything; center U(t) + column stresses at 0.5 ms cadence |
+| `ex5/make_1dsg.py` → `ex5/sandwich_sg.yaml/.png` | the 9-layer 1-D SG (5-noded elements, one per layer incl. the core); prints the 8×8 (D₁₁ = 5.7340e6, G₁₁ = 7.8086e6) and section mass 40.6908 kg/m² |
+| `ex5/make_abaqus_dyn.py` | writes the four decks below from the SG |
+| `ex5/sandwich_RM_step.inp`, `ex5/sandwich_RM_blast.inp` | OpenSG-RM S4 plate (20×20), SS-1, double-sine load, per-increment center-U + patch SF/SM/COORD prints |
+| `ex5/sandwich_SOLID_step.inp`, `ex5/sandwich_SOLID_blast.inp` | 3-D benchmark: 20×20×16 C3D8I (one element per face ply, 8 through the core), same everything; center U(t) + column stresses at 0.5 ms cadence |
+| `ex5/Abaqus_results/*.dat` | the four job results copied back from the Abaqus machine |
 
 ## Running (on the Abaqus machine)
 
@@ -73,9 +78,9 @@ results and the full narrative are in [RESULTS.md](RESULTS.md)**:
 
 | script | output |
 |---|---|
-| `recover_dyn.py` | `dyn_{step,blast}_{w,profiles,iface}.png` + `dyn_*.dat` — per-increment RM recovery vs the 3-D solid |
-| `reddy_hsdt_navier.py` | the ANALYTICAL Reddy-TSDT (= Nayak's theory) + RM Navier responses, `reddy_wt_*.dat`, `reddy_fig13.png`, and the Ex.2 Table-3 anchor check |
-| `ex4_free_vibration.py` | `ex4_freq_table.dat` — Nayak Ex.4 (Crawley cantilever) frequencies: experiment / Nayak HSDT FE / OpenSG-RM Ritz |
+| `ex5/recover_dyn.py` | individual three-way figures, each with its own legend: `w_history_*`, `profile_{s13,s23,s33,s11}_*`, `iface_s13_*` (+ `dyn_*.dat` numbers) |
+| `ex5/reddy_hsdt_navier.py` | the ANALYTICAL Reddy-TSDT (= Nayak's theory) + RM Navier responses, `reddy_wt_*/profiles_*/iface_*.dat`, `reddy_fig13.png`, and the Ex.2 Table-3 anchor check |
+| `ex4/ex4_free_vibration.py` | `ex4_freq_table.dat` + per-layup comparison figures `ex4_freq_*.png` + the three SG yamls — Nayak Ex.4 (Crawley cantilever): experiment / Nayak HSDT FE / OpenSG-RM Ritz |
 
 ## Supporting literature (downloaded alongside the benchmark)
 
