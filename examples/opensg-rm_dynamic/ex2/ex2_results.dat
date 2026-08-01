@@ -1,0 +1,24 @@
+Nayak Ex.2 / Khdeir-Reddy 1989 (0/90/0) a=5h -- FOUR-WAY:
+  benchmark = Abaqus 3-D solid (KR's 'exact' is exact only WITHIN the HSDT -- unlike Pagano it is NOT 3-D elasticity)
+  vs OpenSG-RM (Abaqus S4 + MSG ABDG), conventional Abaqus FSDT (S4 composite section), and the exact HSDT (KR 1989)
+
+step pulse -- peak |w| [in = w/0.0254 m]:
+  Abaqus 3-D solid (benchmark)     1.1420 in @   2.18 ms    +0.00 % vs solid
+  OpenSG-RM (Abaqus S4+ABDG)       1.2423 in @   0.75 ms    +8.78 % vs solid
+  Abaqus FSDT (composite S4)       1.2470 in @   0.75 ms    +9.19 % vs solid
+  Khdeir-Reddy exact HSDT          1.0810 in @   0.70 ms    -5.34 % vs solid
+  anchor times [ms]:           1.6      3.2      4.8      6.4      8.0
+  w/0.0254 KR-exact:        0.2011   0.6540   1.0225   0.3737  -0.3477
+  w/0.0254 Nayak-P9-FE:     0.1870   0.6180   0.9983   0.4548  -0.2191
+  w/0.0254 OpenSG-RM:       0.0383   0.1479   0.3149  -0.0934  -0.0892
+  w/0.0254 Abaqus solid:    0.1069   0.3848   0.7309   0.3790   0.1870
+  w/0.0254 Abaqus FSDT:     0.0363   0.1400   0.2985  -0.1192  -0.1155
+  sx_bar   KR-exact:         6.059   20.093   31.356   11.405  -10.542
+  sx_bar   Nayak-P9-FE:      5.978   19.841   32.283   14.736   -6.899
+  sx_bar   OpenSG-RM:        1.389    4.823   10.086   -3.040   -2.829
+
+blast pulse -- peak |w| [in = w/0.0254 m]:
+  Abaqus 3-D solid (benchmark)     1.0202 in @   0.68 ms    +0.00 % vs solid
+  OpenSG-RM (Abaqus S4+ABDG)       1.1023 in @   0.70 ms    +8.05 % vs solid
+  Abaqus FSDT (composite S4)       1.1060 in @   0.70 ms    +8.42 % vs solid
+  Khdeir-Reddy exact HSDT          0.9687 in @   0.67 ms    -5.05 % vs solid

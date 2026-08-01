@@ -40,6 +40,14 @@ for %j in (sandwich_RM_step sandwich_RM_blast sandwich_SOLID_step sandwich_SOLID
   jobs ~5.5 min each** (20×20×16 C3D8I, 400 increments) — the shell-vs-solid
   cost ratio quoted in the comparison.
 
+## 2a. The Ex.2 jobs (RM/FSDT shells ~40 s, solids ~5.5 min each)
+
+```bat
+copy /Y "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex2\ex2_*.inp" .
+for %j in (ex2_RM_step ex2_RM_blast ex2_FSDT_step ex2_FSDT_blast ex2_SOLID_step ex2_SOLID_blast) do call abaqus job=%j cpus=4 interactive ask_delete=OFF
+copy /Y ex2_*.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex2\Abaqus_results\"
+```
+
 ## 2b. The Ex.4 frequency jobs (same pattern, ~10 s each)
 
 ```bat

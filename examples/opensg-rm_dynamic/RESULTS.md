@@ -1,11 +1,50 @@
 # RESULTS — Nayak Ex.4/Ex.5 sandwich benchmarks: OpenSG-RM vs Abaqus 3-D solid vs Reddy HSDT
 
 Everything in this folder, spelled out: **what** was computed, **where**, and
-**why**. Layout: [ex5/](ex5/) = the transient sandwich (inputs, decks, Abaqus
-results, Reddy scripts, all comparison figures); [ex4/](ex4/) = the Crawley
-cantilever free-vibration case. Every figure is INDIVIDUAL, carries its own
-legend, and is three-way (Abaqus 3-D solid = dashed black, OpenSG-RM = orange
-with markers, Reddy HSDT = steel blue) wherever the theory provides the field.
+**why**. Layout: [ex2/](ex2/) = the Khdeir–Reddy-anchored (0/90/0) four-way
+benchmark (done FIRST); [ex5/](ex5/) = the transient sandwich (strictly 2-way:
+Abaqus 3-D solid vs OpenSG-RM); [ex4/](ex4/) = the Crawley cantilever
+free-vibration TABLE. Every figure is INDIVIDUAL and carries its own legend;
+styles: Abaqus 3-D solid = dashed black, OpenSG-RM = orange with markers.
+
+## 0. Example 2 FIRST — the (0/90/0) plate with the Khdeir–Reddy exact anchor
+
+**Problem** ([ex2/make_abaqus_ex2.py](ex2/make_abaqus_ex2.py) docstring):
+simply supported square (0/90/0) laminate, equal plies, **a = b = 5h**,
+h = 0.1524 m (a THICK plate — shear-dominated, that is the point);
+E1 = 172.369 GPa, E2 = 6.895 (E1/E2 = 25), G12 = G13 = 3.448, G23 = 1.379
+GPa, nu = 0.25, rho = 1603.03 kg/m3; q = q0 F(t) sin(pi x/a) sin(pi y/b),
+q0 = 68.9476 MPa; F(t) = step cut at t1 = 6 ms and blast e^(-330 t); 20 ms
+window, 50 us fixed shell increments.
+
+**How "exact" is Khdeir–Reddy's solution?** It is exact **within Reddy's
+HSDT**: single Navier mode in space (error-free for this SS cross-ply
+plate + double-sine load) and closed-form/state-space integration in time
+(no Newmark error). Unlike Pagano it is **NOT 3-D elasticity** — so a
+**3-D Abaqus solid (20x20x18 C3D8I, 6 elements per ply) is the benchmark**
+here, and KR-exact is one of the graded theories. Four-way comparison
+([ex2/compare_ex2.py](ex2/compare_ex2.py); the KR curve is evaluated by
+`../ex5/reddy_hsdt_navier.py` `set_case("ex2")`, whose closed forms ARE
+their method, pinned to Nayak's converged Table-3 FE within 2–7 %):
+
+| model | peak w/0.0254, step | % vs solid | peak, blast | % vs solid |
+|---|---|---|---|---|
+| Abaqus 3-D solid (benchmark) | 1.1420 | — | 1.0202 | — |
+| **OpenSG-RM (Abaqus S4 + MSG ABDG)** | 1.2423 | **+8.8 %** | 1.1023 | **+8.1 %** |
+| Abaqus FSDT (composite S4 section) | 1.2470 | +9.2 % | 1.1060 | +8.4 % |
+| Khdeir–Reddy exact HSDT | 1.0810 | −5.3 % | 0.9687 | −5.1 % |
+
+Readings ([ex2/ex2_results.dat](ex2/ex2_results.dat), figures
+`ex2/ex2_w_history_*.png`, `ex2/ex2_sx_history_*.png`):
+- At a/h = 5 **every** plate theory carries several-% error; the HSDT is
+  ~5 % under, RM/FSDT ~8–9 % over — the 3-D solid arbitrates.
+- **OpenSG-RM ≈ conventional FSDT here (0.4 % apart)**: on an ordinary
+  laminate the MSG shear block and Abaqus's built-in composite shear
+  treatment nearly coincide. The dramatic RM-vs-conventional split is
+  soft-core-sandwich physics (Ex.5), not a generic laminate effect.
+- The response oscillates with T ≈ 1.4 ms; point-in-time samples (the
+  Nayak anchor rows in the .dat) dephase across theories within ~2 cycles
+  and are only meaningful for SAME-theory checks (TSDT vs Nayak's FE).
 
 ## 1. The problem being solved (what and why)
 
@@ -93,28 +132,28 @@ the RM-Navier twin built on the same MSG 8x8.
 Peak center deflection ([ex5/dyn_step.dat](ex5/dyn_step.dat) /
 [ex5/dyn_blast.dat](ex5/dyn_blast.dat)):
 
-| pulse | Abaqus 3-D solid | **OpenSG-RM (Abaqus S4)** | RM-Navier (analytic) | Reddy TSDT (analytic, = Nayak's theory) |
-|---|---|---|---|---|
-| step | 2.690 m | **2.728 m (+1.4 %)** | 2.703 m (+0.5 %) | 2.292 m (**-14.8 %**) |
-| blast | 1.834 m @ 2.451 ms | **1.854 m (+1.1 %) @ 2.450 ms** | 1.842 m (+0.4 %) | 1.603 m (**-12.6 %**) |
-| mode-(1,1) frequency | ~178 Hz (from the history) | 178 Hz | 178.08 Hz | 193.35 Hz (**+8.6 % stiff**) |
+The Ex.5 comparison is STRICTLY 2-way: the Abaqus 3-D solid is the
+benchmark, OpenSG-RM the candidate (the analytic RM-Navier twin, 2.703 m
+step / 1.842 m blast, is only the mesh-free cross-check of the S4 route):
 
-- `w_history_step/blast.png` — three-way deflection history: OpenSG-RM
-  overlays the solid through 3.5 cycles; **Reddy HSDT is visibly stiff**
-  (soft-core shear under-compliance) and fully out of phase by 20 ms.
+| pulse | Abaqus 3-D solid | **OpenSG-RM (Abaqus S4)** |
+|---|---|---|
+| step | 2.690 m | **2.728 m (+1.4 %)** |
+| blast | 1.834 m @ 2.451 ms | **1.854 m (+1.1 %) @ 2.450 ms** |
+| mode-(1,1) frequency | ~178 Hz | 178 Hz |
+
+- `w_history_step/blast.png` — deflection history: OpenSG-RM overlays the
+  solid through 3.5 cycles.
 - `profile_s13_*` / `profile_s23_*` — the transverse-shear paths: solid and
-  RM agree on the ~157/230 MPa core plateau and face decays; the
-  constitutive TSDT is a mid-core parabola that collapses to ~1/5 of the
-  truth at the interfaces and explodes (30–90x jumps) inside the stiff faces
-  (axis clamped, annotated). Reddy is drawn at ITS OWN peak instant — the
-  fair envelope comparison, since its response is out of phase.
-- `profile_s11_*` — three-way ply staircase at the center.
-- `profile_s33_*` — solid vs RM equilibrium integral (TSDT has no sigma33).
+  RM agree on the ~157/230 MPa core plateau and the face decays.
+- `profile_s11_*` — ply staircase at the center; `profile_s33_*` — solid vs
+  the RM dynamic-momentum integral.
 - `iface_s13_*` — the design-driving face–core interface shear history:
-  RM tracks the solid within ~5 % at every 50 us; the TSDT core-side value
-  is ~5x low and out of phase.
-- `reddy_fig13.png` — the Nayak Fig.-13 pulse-family reproduction (his
-  w/0.0254 scaling) from the validated TSDT implementation.
+  RM tracks the solid within ~5 % at every 50 us (the solid affords it only
+  at dump instants).
+- (`reddy_hsdt_navier.py` and its outputs stay in ex5/ as the analytic
+  machinery behind the Ex.2 reference and the Ex.2 anchor check; Reddy
+  curves are NOT part of the Ex.5 comparison figures.)
 
 ## 5. Reliability checks (each one printable per time step)
 
@@ -160,8 +199,9 @@ Abaqus**, the same route as Ex.5:
 3. `*FREQUENCY` (Lanczos, 8 modes) on the Abaqus machine (~10 s/job;
    results in `ex4/Abaqus_results/`);
 4. [ex4/collect_freq.py](ex4/collect_freq.py) parses the eigenvalue tables
-   and writes [ex4/ex4_freq_table.dat](ex4/ex4_freq_table.dat) + one
-   four-curve figure per layup (`ex4/ex4_freq_*.png`).
+   and writes the TABLE [ex4/ex4_freq_table.dat](ex4/ex4_freq_table.dat)
+   (no plots): Expt | FEM[18] | Reddy-8x4 | OpenSG-RM plus TWO percent-error
+   columns, both vs Crawley's FEM — %err(Reddy−FEM) and %err(RM−FEM).
 
 Findings (all 15 modes): OpenSG-RM/Abaqus lands within **0.1–0.6 % of
 Nayak's Reddy FE** on most modes (worst 1.2 %) and matches experiment the
@@ -188,13 +228,14 @@ sides with OpenSG-RM.
 ## 9. Reproduce
 
 ```bash
-python examples/opensg-rm_dynamic/ex5/make_1dsg.py          # SG + 8x8 (prints G11)
-python examples/opensg-rm_dynamic/ex5/make_abaqus_dyn.py    # the four decks
-# run the decks on the Abaqus machine (ABAQUS_RUN_COMMANDS.md), copy .dat
-# back into ex5/Abaqus_results/
-python examples/opensg-rm_dynamic/ex5/reddy_hsdt_navier.py  # TSDT + RM analytics + Ex.2 anchor + profiles
-python examples/opensg-rm_dynamic/ex5/recover_dyn.py        # all individual 3-way figures
+python examples/opensg-rm_dynamic/ex2/make_abaqus_ex2.py    # Ex.2 SG + 6 decks (RM/FSDT/SOLID x step/blast)
+python examples/opensg-rm_dynamic/ex5/make_1dsg.py          # Ex.5 SG + 8x8 (prints G11)
+python examples/opensg-rm_dynamic/ex5/make_abaqus_dyn.py    # the four Ex.5 decks
 python examples/opensg-rm_dynamic/ex4/make_abaqus_freq.py   # Ex.4 SG yamls + the 3 *FREQUENCY decks
-# run the ex4_*_freq jobs on the Abaqus machine, copy .dat to ex4/Abaqus_results/
-python examples/opensg-rm_dynamic/ex4/collect_freq.py       # Ex.4 table + figures
+# run all jobs on the Abaqus machine (ABAQUS_RUN_COMMANDS.md), copy the
+# .dat files into ex2/ex4/ex5 Abaqus_results/
+python examples/opensg-rm_dynamic/ex5/reddy_hsdt_navier.py  # the exact-HSDT machinery + Ex.2 anchor
+python examples/opensg-rm_dynamic/ex2/compare_ex2.py        # Ex.2 four-way figures + table
+python examples/opensg-rm_dynamic/ex5/recover_dyn.py        # Ex.5 two-way figures
+python examples/opensg-rm_dynamic/ex4/collect_freq.py       # Ex.4 table
 ```

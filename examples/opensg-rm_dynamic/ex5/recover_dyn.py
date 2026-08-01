@@ -308,12 +308,12 @@ def run(kind):
     kd = int(np.argmin(np.abs(t_dump - tpk)))
 
     # ------------------------------------------------------- plot styling
-    # user conventions: Abaqus = dashed black, OpenSG-RM = orange + markers,
-    # Reddy = thin steel-blue; EVERY figure individual with its own legend
+    # user conventions: Abaqus = dashed black, OpenSG-RM = orange + markers;
+    # EVERY figure individual with its own legend; the Ex.5 comparison is
+    # STRICTLY 2-way (the 3-D solid is the benchmark) -- no theory curves
     STY_SOL = dict(ls="--", color="k", lw=1.8)
     STY_RM = dict(ls="-", marker="s", color="#ff7f0e", lw=1.4, ms=4,
                   mfc="none", mew=1.1)
-    STY_RD = dict(ls="-", color="#4878a8", lw=1.3)
 
     def one_plot(fname, curves, xlabel, ylabel, note=None, xlim=None):
         fig, ax = plt.subplots(figsize=(7.4, 4.6))
@@ -333,12 +333,6 @@ def run(kind):
         fig.savefig(os.path.join(HERE, fname), dpi=150, bbox_inches="tight")
         plt.close(fig)
 
-    def reddy(name):
-        f = os.path.join(HERE, "reddy_%s_%s.dat" % (name, kind))
-        return np.loadtxt(f) if os.path.isfile(f) else None
-
-    rd_w, rd_p, rd_i = reddy("wt"), reddy("profiles"), reddy("iface")
-
     # ---------------------------------------------------------------- w(t)
     curves = [(1e3 * np.concatenate([[0], t_so]),
                1e3 * np.concatenate([[0], w_so]), STY_SOL,
@@ -346,47 +340,25 @@ def run(kind):
               (1e3 * np.concatenate([[0], t_rm[:n_inc]]),
                1e3 * np.concatenate([[0], w_rm[:n_inc]]),
                dict(STY_RM, markevery=12), "OpenSG-RM shell"),]
-    if rd_w is not None:
-        curves.append((1e3 * rd_w[:, 0], 1e3 * rd_w[:, 1], STY_RD,
-                       "Reddy HSDT (Navier,\nNayak's theory)"))
     one_plot("w_history_%s.png" % kind, curves, "time [ms]",
              "center deflection $w$ [mm]")
 
     # ------------------------------------- through-thickness path profiles
-    # one figure per component; Reddy shown AT ITS OWN peak instant (its
-    # response is out of phase with the 3-D solution -- peak-to-peak is the
-    # fair envelope comparison); the constitutive TSDT shear explodes in the
-    # stiff faces, so the shear axes are clamped to the physical range
-    panels = [("s13", prof["X"][:, 4], "COLX", 4, 3,
-               r"$\sigma_{13}$ [MPa]  at  $(0,\,b/2)$", True),
-              ("s23", prof["Y"][:, 3], "COLY", 3, 4,
-               r"$\sigma_{23}$ [MPa]  at  $(a/2,\,0)$", True),
-              ("s33", s33, "COLC", 2, None,
-               r"$\sigma_{33}$ [MPa]  at  $(a/2,\,b/2)$", False),
-              ("s11", prof["C"][:, 0], "COLC", 0, 1,
-               r"$\sigma_{11}$ [MPa]  at  $(a/2,\,b/2)$", False)]
-    for kkey, rmv, col, jc, jrd, lbl, clamp in panels:
+    panels = [("s13", prof["X"][:, 4], "COLX", 4,
+               r"$\sigma_{13}$ [MPa]  at  $(0,\,b/2)$"),
+              ("s23", prof["Y"][:, 3], "COLY", 3,
+               r"$\sigma_{23}$ [MPa]  at  $(a/2,\,0)$"),
+              ("s33", s33, "COLC", 2,
+               r"$\sigma_{33}$ [MPa]  at  $(a/2,\,b/2)$"),
+              ("s11", prof["C"][:, 0], "COLC", 0,
+               r"$\sigma_{11}$ [MPa]  at  $(a/2,\,b/2)$")]
+    for kkey, rmv, col, jc, lbl in panels:
         zc_s, gs = sol[col]
         curves = [(1e-6 * gs[kd, :, jc], zc_s / H, STY_SOL,
                    "Abaqus 3-D solid"),
                   (1e-6 * rmv, zg / H, dict(STY_RM, markevery=5),
                    "OpenSG-RM recovery")]
-        note, xlim = None, None
-        if jrd is not None and rd_p is not None:
-            curves.append((1e-6 * rd_p[:, jrd], rd_p[:, 0] / H, STY_RD,
-                           "Reddy HSDT (constitutive,\nat its own peak)"))
-            if clamp:
-                base = 1e-6 * max(np.abs(gs[kd, :, jc]).max(),
-                                  np.abs(rmv).max())
-                lo = min(0.0, 1e-6 * min(gs[kd, :, jc].min(), rmv.min()))
-                if np.abs(rd_p[:, jrd]).max() * 1e-6 > 1.35 * base:
-                    note = ("Reddy face-side values run off scale "
-                            "(constitutive interface jump)")
-                xlim = (1.15 * lo - 0.05 * base, 1.35 * base)
-        elif kkey == "s33":
-            note = "Reddy TSDT provides no $\\sigma_{33}$"
-        one_plot("profile_%s_%s.png" % (kkey, kind), curves, lbl, "$z/h$",
-                 note=note, xlim=xlim)
+        one_plot("profile_%s_%s.png" % (kkey, kind), curves, lbl, "$z/h$")
 
     # ------------------------------------------------ interface s13 history
     # distribution shape frozen at the peak instant (its integral = Q1),
@@ -402,15 +374,8 @@ def run(kind):
                "Abaqus 3-D solid"),
               (1e3 * t_rm[:n_inc], 1e-6 * s13_rm_t,
                dict(STY_RM, markevery=12), "OpenSG-RM recovery")]
-    note = None
-    if rd_i is not None:
-        curves.append((1e3 * rd_i[:, 0], 1e-6 * rd_i[:, 1], STY_RD,
-                       "Reddy HSDT (constitutive,\ncore side)"))
-        note = ("constitutive TSDT is discontinuous here: face side "
-                "$\\approx$ 31x the core side")
     one_plot("iface_s13_%s.png" % kind, curves, "time [ms]",
-             r"face--core interface $\sigma_{13}$ [MPa]  at  $(0,\,b/2)$",
-             note=note)
+             r"face--core interface $\sigma_{13}$ [MPa]  at  $(0,\,b/2)$")
 
     # ------------------------------------------------------------- numbers
     ipk_so = int(np.argmax(np.abs(w_so)))
