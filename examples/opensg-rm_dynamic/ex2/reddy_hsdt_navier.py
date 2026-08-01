@@ -344,20 +344,20 @@ def main():
     navier_KM + modal_response + tsdt_profiles for the Ex.2 reference."""
     set_case("ex2")
     K2, M2 = navier_KM("tsdt")
-    K2f, M2f = navier_KM("fsdt")
     from scipy.linalg import eigh
     ft = np.sqrt(eigh(K2, M2, eigvals_only=True)) / (2 * np.pi)
     print("Ex.2 mode-(1,1) TSDT frequencies [Hz]:",
           " ".join("%9.2f" % v for v in ft))
     tchk = np.array([1.6e-3, 3.2e-3, 4.8e-3, 6.4e-3, 8.0e-3])
     w2 = modal_response(K2, M2, "step_t1", tchk) / 0.0254
-    w2f = modal_response(K2f, M2f, "step_t1", tchk) / 0.0254
+    # the FE comparison row is Nayak's own converged 9-NODE element
+    # (Table 3, 4x4 mesh, dt = 40 us) -- his most accurate printed values
     nay = [0.1870, 0.6180, 0.9983, 0.4548, -0.2191]
     print("Ex.2 anchor (0/90/0, a=5h, step t1=6ms): w/0.0254 m")
-    print("  t [ms]        :", " ".join("%8.1f" % (1e3 * t) for t in tchk))
-    print("  Nayak Tbl3 P9 :", " ".join("%8.4f" % v for v in nay))
-    print("  TSDT Navier   :", " ".join("%8.4f" % v for v in w2))
-    print("  OpenSG-RM Nav.:", " ".join("%8.4f" % v for v in w2f))
+    print("  t [ms]           :", " ".join("%8.1f" % (1e3 * t)
+                                           for t in tchk))
+    print("  Nayak 9-node FE  :", " ".join("%8.4f" % v for v in nay))
+    print("  exact TSDT (this):", " ".join("%8.4f" % v for v in w2))
     set_case("ex5")
 
 

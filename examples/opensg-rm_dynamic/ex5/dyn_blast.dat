@@ -1,6 +1,7 @@
 Nayak Ex.5 sandwich, blast pulse -- OpenSG-RM vs Abaqus 3-D solid
 peak center w: RM 1.853758e+00 m at t=2.450 ms | solid 1.834052e+00 m at t=2.451 ms
   peak-w difference RM vs solid: +1.07 %
+Abaqus FSDT (composite S4) peak w: 1.854127e+00 m at t=2.450 ms (+1.09 % vs solid)
 profiles at RM increment 49 (t=2.450 ms), solid dump at t=2.501 ms
 sigma_33 top-face closure (dynamic momentum integral / applied q): 1.0303 (target 1)
 dynamic shear amplification Q_meas/Q_quasistatic: sc13(X)=1.393 sc23(Y)=1.397

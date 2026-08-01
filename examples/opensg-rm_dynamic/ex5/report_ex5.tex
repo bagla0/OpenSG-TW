@@ -194,21 +194,37 @@ peak center deflection & step & blast\\\midrule
 Abaqus 3-D solid (benchmark) & 2.690 m & 1.834 m @ 2.451 ms\\
 OpenSG-RM (S4 + MSG ABDG) & 2.728 m ($+1.4\,\%$) & 1.854 m ($+1.1\,\%$)
 @ 2.450 ms\\
-Abaqus FSDT (composite S4) & \multicolumn{2}{c}{see
-\code{dyn\_step.dat}/\code{dyn\_blast.dat}}\\
+Abaqus FSDT (composite S4) & 2.729 m ($+1.4\,\%$) & 1.854 m ($+1.1\,\%$)\\
 \bottomrule\end{tabular}\end{center}
 
 \paragraph{Findings.}
 (i)~OpenSG-RM overlays the solid through 3.5 cycles (peak $+1.1$/$+1.4$\%,
-frequency 178 Hz); (ii)~the conventional composite-shell FSDT --- the
-route any commercial user would take --- inherits a face-dominated
-transverse-shear stiffness and misses the sandwich dynamics (its curve and
-peak error are in the deflection figures and the \code{dyn\_*.dat} files);
-(iii)~the recovered $\sigma_{13}/\sigma_{23}$ reproduce the solid's core
+frequency 178 Hz).
+(ii)~Honest observation: Abaqus's composite-S4 FSDT \emph{also} matches
+the global dynamics here ($+1.4/{+}1.1$\,\%) --- its built-in
+transverse-shear stiffness is an energy-based through-thickness
+construction, not the naive parallel integral, and it handles this
+uniform sandwich well.  The OpenSG-RM differentiators on this problem are
+therefore (a)~\emph{generality of input}: the general-section route
+accepts \emph{any} homogenized SG (curved, stiffened, heterogeneous ---
+sections no ply-list can describe), and (b)~the \emph{full 3-D stress
+recovery} below, which no shell resultant output provides.
+(iii)~The recovered $\sigma_{13}/\sigma_{23}$ reproduce the solid's core
 plateau and face decays, and the interface $\sigma_{13}$ history tracks
 the solid within $\sim$5\,\% at every 50 $\mu$s --- the solid affords that
-quantity only at its dump instants; (iv)~cost: 37--39 s vs.\ 323--324 s
+quantity only at its dump instants.  (iv)~Cost: 37--39 s vs.\ 323--324 s
 wallclock (8.7$\times$), 2646 vs.\ $\approx$22\,500 DOF.
+
+\paragraph{Full-field deliverables.}  Beyond the station histories, the
+suite renders whole-field pictures: the applied double-sine pressure over
+the geometry (\code{sandwich\_applied\_load.png}), the benchmark solid's
+nine component contours (\code{sandwich\_SOLID\_step\_\{U1..U3,
+S11..S23\}.png}, clean image + colorbar, global frame, no mesh lines), and
+--- from the 2-D shell \code{.dat} alone --- the standalone
+\code{rm\_field\_vtk.py}, which dehomogenizes ALL 441 plate nodes at 44
+through-thickness stations (linear-operator precompute + \code{jax.vmap}
+over nodes) and writes \code{sandwich\_rm\_field.vtk} with the
+displacement vector and all six stresses for 3-D contouring in ParaView.
 
 \paragraph{Honest caveats.}
 $\sigma_{33}$ through the soft core shows an $\approx$8--10 MPa

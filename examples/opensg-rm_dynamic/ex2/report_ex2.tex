@@ -61,6 +61,18 @@ reported & $w(a/2,b/2)/0.0254$ m (KR plot deflection in inches) and
 $\bar\sigma_x=\sigma_x(a/2,b/2,h/2)/q_0$\\
 \bottomrule\end{tabular}\end{center}
 
+\paragraph{What ``transient analysis'' means here.}
+A \emph{static} analysis asks only for the final equilibrium shape under a
+load.  A \emph{transient} (time-history) analysis solves
+$M\ddot u+Ku=f(t)$ through time: the load is applied suddenly, the plate's
+\emph{inertia} resists, and the structure overshoots its static deflection
+and then \emph{vibrates} about it.  For an undamped plate hit by a
+suddenly applied constant pressure the center swings between $0$ and
+$\approx2\times$ the static deflection, cycle after cycle --- which is why
+the result of this analysis is a \emph{curve} $w(t)$, not a single number,
+and why the peak of that curve (the design quantity) is about twice what a
+static calculation would give.
+
 \paragraph{The two pulses.}  $F(t)$ multiplies the spatial load:
 \begin{equation}
 F_{\rm step}(t)=\begin{cases}1,&0\le t\le t_1\\ 0,&t>t_1\end{cases}
@@ -68,11 +80,15 @@ F_{\rm step}(t)=\begin{cases}1,&0\le t\le t_1\\ 0,&t>t_1\end{cases}
 F_{\rm blast}(t)=e^{-\gamma t},
 \qquad t_1=6\ {\rm ms},\ \ \gamma=330\ {\rm s}^{-1}.
 \end{equation}
-The \emph{step} is a suddenly applied constant pressure that is
-\emph{removed} at $t_1=6$ ms (after removal the plate vibrates freely);
-the \emph{explosive blast} is an impulsive over-pressure decaying
-exponentially, the classic idealization of a far-field detonation.  Both
-have homogeneous initial conditions.
+In words: the \textbf{step} pulse is a pressure switched on
+\emph{instantly} at $t=0$, held constant for 6 ms, then switched off ---
+like slamming a weight onto the plate and lifting it off again; after
+removal the plate keeps vibrating freely on whatever motion it had.  The
+\textbf{explosive blast} pulse is the classic idealization of a far-field
+detonation: the over-pressure jumps to $q_0$ instantly and decays
+exponentially (here to $1/e$ within 3 ms), so the plate receives a hard
+initial kick whose push fades while the plate is still responding.  Both
+start from rest (zero displacement and velocity).
 
 \section{The four models}
 \begin{enumerate}
@@ -95,65 +111,35 @@ have homogeneous initial conditions.
   finite-element run.
 \end{enumerate}
 
-\section{The Khdeir--Reddy formulation and its implementation}
+\section{The Khdeir--Reddy reference, in brief}
 \label{sec:kr}
-Reddy's displacement field with $c_1=4/(3h^2)$:
-\begin{equation}
-u=u_0+z\phi_x-c_1z^3(\phi_x+w_{,x}),\quad
-v=v_0+z\phi_y-c_1z^3(\phi_y+w_{,y}),\quad w=w(x,y,t),
-\end{equation}
-gives in-plane strains $\varepsilon=\varepsilon^0+z\kappa^1+z^3\kappa^3$
-with
-$\kappa^3=-c_1\{\phi_{x,x}{+}w_{,xx};\ \phi_{y,y}{+}w_{,yy};\
-\phi_{x,y}{+}\phi_{y,x}{+}2w_{,xy}\}$
-and the parabolic transverse shear
-$\gamma(z)=(1-3c_1z^2)\,(\phi+\nabla w)$, which vanishes at the free faces
---- the reason the theory needs no shear-correction factor.  The laminate
-enters through the moments
-$(A,B,D,E,F,H)=\int \bar Q(z)\,(1,z,z^2,z^3,z^4,z^6)\,dz$ and the
-collapsed shear matrix $\int \bar Q_s(1-3c_1z^2)^2dz$, and the inertia
-moments $I_k=\int\rho z^k dz$, $k=0\ldots6$ (the consistent mass couples
-$u_0$, $\phi_x$ and $w_{,x}$ through $I_3\ldots I_6$).
+The reference curve is the exact solution of Reddy's third-order plate
+theory for this plate, as published by Khdeir \& Reddy (1989).  In plain
+terms: for a simply supported cross-ply plate under the double-sine load,
+the theory's response is carried by a \emph{single} vibration pattern
+(one Navier mode), so the whole plate reduces to a small 5-unknown
+oscillator system that can be integrated \emph{by formula} --- no mesh, no
+time stepping, hence no numerical error \emph{of the theory's own
+prediction}.  The implementation lives in
+\code{ex2/reddy\_hsdt\_navier.py}; the reader who wants the equations can
+read that file's comments --- they are not needed to use this report.
 
-For SS-1 cross-ply plates the Navier expansion (single mode $m=n=1$,
-$\alpha=\pi/a$, $\beta=\pi/b$)
-\begin{equation}
-(u_0,v_0,w,\phi_x,\phi_y)=
-\big(U\cos\alpha x\sin\beta y,\ V\sin\alpha x\cos\beta y,\
-W\sin\alpha x\sin\beta y,\ X\cos\alpha x\sin\beta y,\
-Y\sin\alpha x\cos\beta y\big)
-\end{equation}
-satisfies all equations and edges exactly, reducing the plate to
-$M\ddot d+Kd=f(t)$ with $d=(U,V,W,X,Y)$, $f=(0,0,q_0F(t),0,0)$ ---
-$5\times5$ matrices assembled from the laminate moments.  Each modal
-coordinate then has the \emph{closed-form} response ($\omega_i$ from the
-generalized eigenproblem $K\phi=\omega^2M\phi$, $g_i=\phi_{w,i}q_0$):
-\begin{align}
-\text{step, }t\le t_1:&\ \ \eta_i=\tfrac{g_i}{\omega_i^2}(1-\cos\omega_it);
-\qquad t>t_1:\ \ \eta_i=\tfrac{g_i}{\omega_i^2}
-\big[\cos\omega_i(t{-}t_1)-\cos\omega_it\big],\\
-\text{blast}:&\ \ \eta_i=\tfrac{g_i}{\omega_i^2+\gamma^2}
-\Big[e^{-\gamma t}-\cos\omega_it+\tfrac{\gamma}{\omega_i}
-\sin\omega_it\Big].
-\end{align}
-This \emph{is} the KR method (their state-space integral evaluates to the
-same expressions).  Our implementation
-(\code{ex2/reddy\_hsdt\_navier.py}, listed in
-Appendix~\ref{app:code}) is \textbf{pinned to Nayak's own converged FE}:
-his Table~3 (9-node element, $4\times4$ mesh, $\Delta t=40\,\mu$s) vs.\ our
-closed form at his sample times, $w/0.0254$~m:
+What matters practically is that the curve agrees with \textbf{Nayak's own
+converged 9-node finite element} (his Table~3, $4\times4$ mesh,
+$\Delta t=40\,\mu$s --- the values used everywhere below as ``their''
+result), at his printed sample times ($w/0.0254$~m, step pulse):
 
 \begin{center}\begin{tabular}{lccccc}\toprule
 $t$ [ms] & 1.6 & 3.2 & 4.8 & 6.4 & 8.0\\\midrule
-Nayak Table 3 (9-node FE) & 0.1870 & 0.6180 & 0.9983 & 0.4548 & $-$0.2191\\
-this code (exact TSDT)    & 0.2011 & 0.6540 & 1.0225 & 0.3737 & $-$0.3477\\
+Nayak 9-node FE (Table 3) & 0.1870 & 0.6180 & 0.9983 & 0.4548 & $-$0.2191\\
+exact HSDT (this suite)   & 0.2011 & 0.6540 & 1.0225 & 0.3737 & $-$0.3477\\
 \bottomrule\end{tabular}\end{center}
 
-\noindent 2--7\,\% at the pre-cut-off times --- his finite $\Delta t$ and
-mesh bias (his own convergence study moves toward our values as
+\noindent 2--7\,\% at the pre-cut-off times, explained by his finite time
+step and mesh (his own convergence study moves toward these values as
 $\Delta t\!\downarrow$); the post-cut-off points are phase-sensitive
-(Sec.~\ref{sec:results}).  His 4-node Table~2 is still shear-locked and
-must not be used as an anchor.
+(Sec.~\ref{sec:results}).  His 4-node Table~2 is shear-locked and must
+not be used as an anchor.
 
 \section{The Abaqus decks, annotated}
 \label{sec:decks}
@@ -266,8 +252,4 @@ two cycles, so \emph{point-in-time} samples (Nayak's anchor times) are
 meaningful only for same-theory comparisons; peaks, periods and the
 overlaid histories are the valid cross-theory metrics.
 
-\appendix
-\section{The exact-HSDT code}
-\label{app:code}
-\lstinputlisting[style=py]{reddy_hsdt_navier.py}
 \end{document}

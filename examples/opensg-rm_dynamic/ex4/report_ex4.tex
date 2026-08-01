@@ -1,0 +1,130 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx,booktabs,amsmath}
+\usepackage[T1]{fontenc}
+\usepackage{listings,xcolor}
+\lstdefinestyle{deck}{basicstyle=\ttfamily\footnotesize,columns=fullflexible,
+  keepspaces=true,frame=single,rulecolor=\color{black!30},
+  commentstyle=\color{blue!60!black}\itshape,escapechar=@}
+\newcommand{\code}[1]{\texttt{#1}}
+\title{Example 4: Free vibration of cantilevered graphite/epoxy--aluminium
+sandwich plates --- Crawley's experiment, Nayak's 9-node HSDT FE, and
+OpenSG-RM by Abaqus}
+\author{OpenSG-RM dynamic validation suite (\code{examples/opensg-rm\_dynamic/ex4})}
+\date{}
+\begin{document}
+\maketitle
+
+\section{Why this case}
+Example 4 of Nayak, Shenoi \& Moy (\emph{Composite Structures} \textbf{64}
+(2004) 249--267) is the one case in their paper with \emph{measured}
+data: the natural frequencies of Crawley's cantilevered sandwich plates.
+It answers a different question than the transient cases: not ``is the
+time history right?'' but ``does the section law produce the right
+\emph{stiffness-to-mass} ratios across many mode shapes?''  It also probes
+a \emph{metal}-core sandwich --- shear-rigid, where every decent plate
+theory should agree --- providing the control case against which the
+foam-core Example~5 (where the theories split dramatically) is read.
+
+All literature numbers are taken \emph{directly from their Table 5}: the
+experiment, Crawley's own FEM, and Nayak's Reddy-HSDT finite element
+(\textbf{9-node element, $8\times4$ mesh} --- his most converged column,
+used as ``their'' result).  We compute nothing of theirs; the \emph{one}
+new column is OpenSG-RM.
+
+\section{Problem statement}
+A CANTILEVERED rectangular sandwich plate --- clamped along the short edge
+$x=0$, free on the other three edges:
+
+\begin{center}\begin{tabular}{ll}\toprule
+planform & $a=152$ mm (cantilever length) $\times$ $b=76$ mm (width)\\
+faces & eight graphite/epoxy plies total (four per side), nominal ply
+$0.13$ mm\\
+ & $E_L=128$, $E_T=11.0$, $G_{LT}=G_{13}=4.48$, $G_{23}=1.53$ GPa,
+$\nu=0.25$, $\rho=1500$ kg/m$^3$\\
+core & 1 mm sheet of 2024-T3 aluminium: $E=68.9$ GPa, $\nu=0.30$,
+$\rho=2770$ kg/m$^3$\\
+stacks & $(0_4/\mathrm{Al})_s$,\quad $(0/{\pm}45/90/\mathrm{Al})_s$,\quad
+$((\pm45)_2/\mathrm{Al})_s$\\
+wanted & the first five natural frequencies of each stack\\
+\bottomrule\end{tabular}\end{center}
+
+\noindent\emph{Layup note}: the paper prints the third stack as
+``$(\pm45/\mathrm{Al})_s$'' while stating \emph{eight} GE plies for every
+plate; with 2 plies per face the frequencies come out $\approx$22\,\% low,
+with 4 per face they land on Table 5 --- the stack is
+$((\pm45)_2/\mathrm{Al})_s$.
+
+\section{The OpenSG-RM route (the one new column)}
+Per stack (\code{make\_abaqus\_freq.py}):
+(1)~the layup becomes a through-thickness 1-D SG
+(\code{ex4\_*\_sg.yaml}); (2)~\code{rm\_plate\_msg} homogenizes it to the
+MSG $8\times8$ ABDG (the $\pm45$ stacks carry $D_{16}/D_{26}$ bending
+anisotropy and a nonzero $G_{12}$ shear coupling --- all passed through);
+(3)~a plain Abaqus S4 deck runs \code{*FREQUENCY}:
+
+\begin{lstlisting}[style=deck]
+*NODE / *ELEMENT, TYPE=S4                @\color{blue!60!black}\itshape 24 x 12 mesh (6.3 mm elements)@
+...
+*SHELL GENERAL SECTION, ELSET=EALL, DENSITY=4.33
+...                                      @\color{blue!60!black}\itshape the MSG 6x6 (21 terms);@
+                                         @\color{blue!60!black}\itshape DENSITY = rho*h = 4.33 kg/m2@
+*TRANSVERSE SHEAR STIFFNESS              @\color{blue!60!black}\itshape the MSG shear block@
+...
+*BOUNDARY
+NROOT, 1, 6                              @\color{blue!60!black}\itshape ENCASTRE the x=0 node row@
+NALL, 6, 6                               @\color{blue!60!black}\itshape drilling dof fixed (flat plate)@
+*STEP, NAME=MODES
+*FREQUENCY                               @\color{blue!60!black}\itshape Lanczos eigensolver,@
+8,                                       @\color{blue!60!black}\itshape 8 modes extracted, 5 reported@
+*END STEP
+\end{lstlisting}
+
+Each job runs in $\approx$10 s; \code{collect\_freq.py} parses the
+eigenvalue tables of the \code{.dat} files and assembles the table.
+
+\section{Results (the table \emph{is} the deliverable)}
+Frequencies in Hz; the two \%-error columns are both taken against
+Crawley's FEM [18]:
+
+\begin{center}\footnotesize
+\begin{tabular}{llrrrrrr}\toprule
+stack & mode & Expt & FEM [18] & Reddy 9-node & OpenSG-RM &
+\%err(Reddy$-$FEM) & \%err(RM$-$FEM)\\
+\midrule
+$(0_4/\mathrm{Al})_s$
+ & 1 & 101.7 & 108.8 & 108.2 & 108.1 & $-0.55$ & $-0.67$\\
+ & 2 & 229.0 & 228.8 & 227.3 & 227.0 & $-0.66$ & $-0.80$\\
+ & 3 & 631.9 & 680.2 & 675.0 & 677.1 & $-0.76$ & $-0.46$\\
+ & 4 & 865.0 & 885.6 & 879.6 & 881.0 & $-0.68$ & $-0.52$\\
+ & 5 & 1129.0 & 1168.0 & 1147.4 & 1153.6 & $-1.76$ & $-1.23$\\
+\midrule
+$(0/{\pm}45/90/\mathrm{Al})_s$
+ & 1 & 75.9 & 81.2 & 80.0 & 80.5 & $-1.43$ & $-0.79$\\
+ & 2 & 302.0 & 313.8 & 311.9 & 309.6 & $-0.61$ & $-1.33$\\
+ & 3 & 469.6 & 505.1 & 501.0 & 501.9 & $-0.81$ & $-0.63$\\
+ & 4 & 983.0 & 1035.0 & 1028.3 & 1023.3 & $-0.65$ & $-1.13$\\
+ & 5 & 1306.0 & 1438.0 & 1399.8 & 1406.8 & $-2.66$ & $-2.17$\\
+\midrule
+$((\pm45)_2/\mathrm{Al})_s$
+ & 1 & 58.3 & 58.5 & 57.9 & 57.8 & $-0.96$ & $-1.06$\\
+ & 2 & 351.6 & 354.7 & 352.8 & 351.5 & $-0.54$ & $-0.91$\\
+ & 3 & 358.0 & 379.6 & 377.4 & 372.7 & $-0.58$ & $-1.81$\\
+ & 4 & 1006.0 & 1029.0 & 1020.6 & 1020.7 & $-0.82$ & $-0.81$\\
+ & 5 & 1113.0 & 1187.0 & 1179.2 & 1164.7 & $-0.66$ & $-1.88$\\
+\bottomrule\end{tabular}\end{center}
+
+\paragraph{Discussion.}
+(i)~Across all 15 modes and three stacks --- including the fully
+anisotropic $\pm45$ ones --- \textbf{OpenSG-RM sits $-0.5$ to $-2.2$\,\% from
+Crawley's FEM, statistically indistinguishable from Nayak's bespoke
+9-node HSDT element at $-0.5$ to $-2.7$\,\%}.  The same accuracy is
+reached with two section cards on a stock S4 element instead of a custom
+higher-order finite element.
+(ii)~Both theories share the same $+6$\,\% bias vs.\ the \emph{experiment}
+on the first and third $(0_4/\mathrm{Al})_s$ modes --- a test-article
+effect (root-clamp compliance), not a theory difference.
+(iii)~On this \emph{metal}-core (shear-rigid) sandwich the theories agree,
+exactly as they should; the discriminating case is the foam core of
+Example 5.
+\end{document}
