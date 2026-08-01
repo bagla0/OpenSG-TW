@@ -336,79 +336,24 @@ def tsdt_profiles(d, zpts):
 
 
 def main():
-    tgrid = np.arange(0.0, TTOT + 1e-12, DT_OUT)
-    Kt, Mt = navier_KM("tsdt")
-    Kf, Mf = navier_KM("fsdt")
-    from scipy.linalg import eigh
-    ft = np.sqrt(eigh(Kt, Mt, eigvals_only=True)) / (2 * np.pi)
-    ff = np.sqrt(eigh(Kf, Mf, eigvals_only=True)) / (2 * np.pi)
-    print("mode-(1,1) natural frequencies [Hz]:")
-    print("  Reddy TSDT :", " ".join("%9.2f" % v for v in ft))
-    print("  OpenSG-RM  :", " ".join("%9.2f" % v for v in ff))
-    for kind in ("step", "blast"):
-        wt, lam, V, etas = modal_response(Kt, Mt, kind, tgrid, full=True)
-        wf = modal_response(Kf, Mf, kind, tgrid)
-        np.savetxt(os.path.join(HERE, "reddy_wt_%s.dat" % kind),
-                   np.column_stack([tgrid, wt, wf]),
-                   header="t[s]  w_center_TSDT[m]  w_center_RM_navier[m]  "
-                          "(Nayak Ex.5, %s pulse, q0 F(t) sinsin)" % kind)
-        ipk_t, ipk_f = np.argmax(np.abs(wt)), np.argmax(np.abs(wf))
-        print("%6s: peak w TSDT %.5e m @ %.3f ms | RM-Navier %.5e m @ %.3f"
-              " ms (%+.2f %%)" % (kind, wt[ipk_t], 1e3 * tgrid[ipk_t],
-                                  wf[ipk_f], 1e3 * tgrid[ipk_f],
-                                  100 * (wf[ipk_f] - wt[ipk_t]) / wt[ipk_t]))
-        # ---- the TSDT's own through-thickness stresses, at ITS peak -------
-        d_hist = V @ etas                       # amplitude vector history
-        zg = np.concatenate([np.linspace(ZK[m] + 1e-9, ZK[m + 1] - 1e-9, 15)
-                             for m in range(len(THICK))])
-        s11, s22, s13, s23 = tsdt_profiles(d_hist[:, ipk_t], zg)
-        np.savetxt(os.path.join(HERE, "reddy_profiles_%s.dat" % kind),
-                   np.column_stack([zg, s11, s22, s13, s23]),
-                   header="z[m](mid-plane origin)  s11(a/2,b/2)  s22(a/2,b/2)"
-                          "  s13(0,b/2)  s23(a/2,0)  [Pa] -- constitutive"
-                          " TSDT at ITS peak t=%.4f ms (%s pulse); no s33 in"
-                          " the theory" % (1e3 * tgrid[ipk_t], kind))
-        # face-core interface s13 history: both constitutive branches of the
-        # discontinuity (face side = the 90-deg GE ply, core side = foam)
-        z_if = ZK[4]                            # bottom face-core interface
-        fac = 1.0 - 3.0 * C1 * z_if * z_if
-        g13_t = np.array([0, 0, PP, 1, 0.0]) @ d_hist
-        qs_face = qbar(ANGLES[3], False)[1][0, 0]     # 90-deg ply: G23
-        qs_core = qbar(0.0, True)[1][0, 0]            # foam: Gc
-        np.savetxt(os.path.join(HERE, "reddy_iface_%s.dat" % kind),
-                   np.column_stack([tgrid, qs_core * fac * g13_t,
-                                    qs_face * fac * g13_t]),
-                   header="t[s]  s13_iface_CORE_side[Pa]  s13_iface_FACE_side"
-                          "[Pa] -- constitutive TSDT is discontinuous at the"
-                          " interface (%s pulse)" % kind)
-    # the Nayak Fig.-13 reproduction: all four pulses, his w/0.0254 scaling
-    fig, ax = plt.subplots(figsize=(7.6, 4.8))
-    for pulse, lab, sty in (("sine", "sine", "-"), ("step_t1", "step", "--"),
-                            ("tri", "triangular", "-."),
-                            ("blast", "blast", ":")):
-        wt = modal_response(Kt, Mt, pulse, tgrid)
-        ax.plot(1e3 * tgrid, wt / 0.0254, sty, lw=1.6, label=lab)
-    ax.set_xlabel("time [ms]", fontsize=11)
-    ax.set_ylabel(r"$w_{\rm center}/0.0254$ m  (Nayak's scaling)",
-                  fontsize=11)
-    ax.grid(alpha=0.3)
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
-    fig.tight_layout()
-    fig.savefig(os.path.join(HERE, "reddy_fig13.png"), dpi=150,
-                bbox_inches="tight")
-    plt.close(fig)
-    print("wrote reddy_wt_step/blast.dat + reddy_fig13.png")
-    # ---- Ex.2 anchor: pin THIS TSDT to Nayak's own tabulated numbers -----
+    """The Ex.2 ANCHOR CHECK only: pin this implementation of the exact
+    Khdeir-Reddy HSDT solution to Nayak's own converged FE values (his
+    Table 3, 9-node element, 4x4 mesh, dt = 40 us -- the 4-node Table 2 is
+    still shear-locked, do not anchor against it).  This module otherwise
+    serves as a LIBRARY: compare_ex2.py drives set_case("ex2") +
+    navier_KM + modal_response + tsdt_profiles for the Ex.2 reference."""
     set_case("ex2")
     K2, M2 = navier_KM("tsdt")
     K2f, M2f = navier_KM("fsdt")
+    from scipy.linalg import eigh
+    ft = np.sqrt(eigh(K2, M2, eigvals_only=True)) / (2 * np.pi)
+    print("Ex.2 mode-(1,1) TSDT frequencies [Hz]:",
+          " ".join("%9.2f" % v for v in ft))
     tchk = np.array([1.6e-3, 3.2e-3, 4.8e-3, 6.4e-3, 8.0e-3])
     w2 = modal_response(K2, M2, "step_t1", tchk) / 0.0254
     w2f = modal_response(K2f, M2f, "step_t1", tchk) / 0.0254
-    # Nayak Table 3 (the 9-NODE element, 4x4 mesh, dt = 40 us -- his most
-    # converged printed values; the 4-node Table 2 is still shear-locked)
     nay = [0.1870, 0.6180, 0.9983, 0.4548, -0.2191]
-    print("\nEx.2 anchor (0/90/0, a=5h, step t1=6ms): w/0.0254 m")
+    print("Ex.2 anchor (0/90/0, a=5h, step t1=6ms): w/0.0254 m")
     print("  t [ms]        :", " ".join("%8.1f" % (1e3 * t) for t in tchk))
     print("  Nayak Tbl3 P9 :", " ".join("%8.4f" % v for v in nay))
     print("  TSDT Navier   :", " ".join("%8.4f" % v for v in w2))

@@ -308,11 +308,14 @@ def run(kind):
     kd = int(np.argmin(np.abs(t_dump - tpk)))
 
     # ------------------------------------------------------- plot styling
-    # user conventions: Abaqus = dashed black, OpenSG-RM = orange + markers;
-    # EVERY figure individual with its own legend; the Ex.5 comparison is
-    # STRICTLY 2-way (the 3-D solid is the benchmark) -- no theory curves
-    STY_SOL = dict(ls="--", color="k", lw=1.8)
+    # every model gets a DISTINCT staggered open marker: solid = black o
+    # (dashed), OpenSG-RM = orange s, Abaqus-FSDT = green ^ (dash-dot);
+    # EVERY figure individual with its own legend; benchmark = 3-D solid
+    STY_SOL = dict(ls="--", marker="o", color="k", lw=1.6, ms=5,
+                   mfc="none", mew=1.2)
     STY_RM = dict(ls="-", marker="s", color="#ff7f0e", lw=1.4, ms=4,
+                  mfc="none", mew=1.1)
+    STY_FS = dict(ls="-.", marker="^", color="#2ca02c", lw=1.3, ms=5,
                   mfc="none", mew=1.1)
 
     def one_plot(fname, curves, xlabel, ylabel, note=None, xlim=None):
@@ -335,11 +338,25 @@ def run(kind):
 
     # ---------------------------------------------------------------- w(t)
     curves = [(1e3 * np.concatenate([[0], t_so]),
-               1e3 * np.concatenate([[0], w_so]), STY_SOL,
-               "Abaqus 3-D solid"),
+               1e3 * np.concatenate([[0], w_so]),
+               dict(STY_SOL, markevery=(0, 32)), "Abaqus 3-D solid\n"
+               "(benchmark)"),
               (1e3 * np.concatenate([[0], t_rm[:n_inc]]),
                1e3 * np.concatenate([[0], w_rm[:n_inc]]),
-               dict(STY_RM, markevery=12), "OpenSG-RM shell"),]
+               dict(STY_RM, markevery=(10, 30)), "OpenSG-RM shell"),]
+    ffs = os.path.join(HERE, "Abaqus_results",
+                       "sandwich_FSDT_%s.dat" % kind)
+    w_fs_pk = None
+    if os.path.isfile(ffs):
+        t_fs_all = step_times(ffs)
+        uf = node_history(ffs, "NCEN")
+        t_fs = t_fs_all[len(t_fs_all) - len(uf):]
+        w_fs = uf[:, 2]
+        w_fs_pk = (t_fs, w_fs)
+        curves.append((1e3 * np.concatenate([[0], t_fs]),
+                       1e3 * np.concatenate([[0], w_fs]),
+                       dict(STY_FS, markevery=(20, 30)),
+                       "Abaqus FSDT\n(composite S4)"))
     one_plot("w_history_%s.png" % kind, curves, "time [ms]",
              "center deflection $w$ [mm]")
 
@@ -380,6 +397,13 @@ def run(kind):
     # ------------------------------------------------------------- numbers
     ipk_so = int(np.argmax(np.abs(w_so)))
     wpk_rm = w_rm[kpk]; wpk_so = w_so[ipk_so]
+    fs_line = "  (Abaqus FSDT job not present)"
+    if w_fs_pk is not None:
+        ifs = int(np.argmax(np.abs(w_fs_pk[1])))
+        fs_line = ("Abaqus FSDT (composite S4) peak w: %.6e m at t=%.3f ms"
+                   " (%+.2f %% vs solid)"
+                   % (w_fs_pk[1][ifs], 1e3 * w_fs_pk[0][ifs],
+                      100 * (w_fs_pk[1][ifs] - wpk_so) / wpk_so))
     clos = s33[-1] / (ampl(tpk) * np.sin(P * A / 2) ** 2)
     wc_rm, wc_so = wallclock(frm), wallclock(fso)
     lines = [
@@ -388,6 +412,7 @@ def run(kind):
         % (wpk_rm, 1e3 * tpk, wpk_so, 1e3 * t_so[ipk_so]),
         "  peak-w difference RM vs solid: %+.2f %%"
         % (100 * (wpk_rm - wpk_so) / wpk_so),
+        fs_line,
         "profiles at RM increment %d (t=%.3f ms), solid dump at t=%.3f ms"
         % (kpk + 1, 1e3 * tpk, 1e3 * t_dump[kd]),
         "sigma_33 top-face closure (dynamic momentum integral / applied q):"

@@ -43,7 +43,7 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
     ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "examples", "yu2003"))
-sys.path.insert(0, os.path.join(os.path.dirname(HERE), "ex5"))
+sys.path.insert(0, HERE)          # reddy_hsdt_navier.py lives in ex2/
 
 from opensg_jax.fe_jax.segment_plate import read_plate_sg_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth

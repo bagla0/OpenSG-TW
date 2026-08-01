@@ -284,11 +284,86 @@ def write_solid(path, kind):
     return path
 
 
+def write_fsdt(path, kind):
+    """The CONVENTIONAL Abaqus 2-D shell route (FSDT): *SHELL SECTION,
+    COMPOSITE with all NINE physical layers (4 GE plies / foam core / 4 GE
+    plies) -- Abaqus builds A/B/D and ITS OWN transverse-shear stiffness
+    (the standard industry first-order treatment).  Identical mesh, BCs,
+    load and center-U print to the OpenSG-RM deck; the ONLY difference is
+    who supplies the section law."""
+    ge, hx = db["ge"], db["herex"]
+    L = ["*HEADING",
+         "Nayak-Shenoi-Moy Ex.5 sandwich, CONVENTIONAL Abaqus composite S4"
+         " (FSDT), %s pulse" % kind,
+         "*NODE"]
+    for j in range(NX + 1):
+        for i in range(NX + 1):
+            L.append("%d, %.8f, %.8f, 0.0" % (n(i, j), i * dx, j * dx))
+    L.append("*ELEMENT, TYPE=S4, ELSET=EALL")
+    for j in range(NX):
+        for i in range(NX):
+            L.append("%d, %d, %d, %d, %d" % (e(i, j), n(i, j), n(i + 1, j),
+                                             n(i + 1, j + 1), n(i, j + 1)))
+    c = NX // 2
+    L.append("*NSET, NSET=NCEN")
+    L.append("%d" % n(c, c))
+    for name, ids in (("NX0", [n(0, j) for j in range(NX + 1)]),
+                      ("NXA", [n(NX, j) for j in range(NX + 1)]),
+                      ("NY0", [n(i, 0) for i in range(NX + 1)]),
+                      ("NYB", [n(i, NX) for i in range(NX + 1)])):
+        L.append("*NSET, NSET=%s" % name)
+        for s in range(0, len(ids), 12):
+            L.append(", ".join(str(v) for v in ids[s:s + 12]))
+    L.append("*NSET, NSET=NALL, GENERATE")
+    L.append("1, %d, 1" % n(NX, NX))
+    L.append("*MATERIAL, NAME=GE")
+    L.append("*ELASTIC, TYPE=LAMINA")
+    L.append("%.6e, %.6e, %.4g, %.6e, %.6e, %.6e"
+             % (ge["E"][0], ge["E"][1], ge["nu"][0],
+                ge["G"][0], ge["G"][1], ge["G"][2]))
+    L.append("*DENSITY")
+    L.append("%g," % ge["rho"])
+    L.append("*MATERIAL, NAME=HEREX")
+    L.append("*ELASTIC, TYPE=LAMINA")
+    L.append("%.6e, %.6e, %.4g, %.6e, %.6e, %.6e"
+             % (hx["E"][0], hx["E"][1], hx["nu"][0],
+                hx["G"][0], hx["G"][1], hx["G"][2]))
+    L.append("*DENSITY")
+    L.append("%g," % hx["rho"])
+    L.append("*SHELL SECTION, ELSET=EALL, COMPOSITE")
+    for t, mname, ang in zip(thick,
+                             [x.upper() for x in mats], angs):
+        L.append("%.8g, 3, %s, %g" % (t, mname, ang))
+    L.append("** SS-1 + drilling (same rule as the RM deck)")
+    L.append("*BOUNDARY")
+    for b in ("NX0, 2, 3", "NXA, 2, 3", "NY0, 1, 1", "NYB, 1, 1",
+              "NY0, 3, 3", "NYB, 3, 3", "NALL, 6, 6"):
+        L.append(b)
+    L += amp_lines("FT", kind)
+    L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
+    L.append("*DYNAMIC")
+    L.append("%g, %g, %g, %g" % (DT, TTOT, DT * 1e-4, DT))
+    L.append("*DLOAD, AMPLITUDE=FT")
+    for j in range(NX):
+        for i in range(NX):
+            L.append("%d, P, %.6e" % (e(i, j), Q0 * sinsin(i, j)))
+    L.append("*NODE PRINT, NSET=NCEN, FREQUENCY=1")
+    L.append("U")
+    L.append("*END STEP")
+    with open(path, "w") as f:
+        f.write("\n".join(L) + "\n")
+    return path
+
+
 if __name__ == "__main__":
     for kind in ("step", "blast"):
         p1 = write_rm(os.path.join(HERE, "sandwich_RM_%s.inp" % kind), kind)
         p2 = write_solid(os.path.join(HERE, "sandwich_SOLID_%s.inp" % kind),
                          kind)
-        print("wrote %s, %s" % (os.path.basename(p1), os.path.basename(p2)))
+        p3 = write_fsdt(os.path.join(HERE, "sandwich_FSDT_%s.inp" % kind),
+                        kind)
+        print("wrote %s, %s, %s" % (os.path.basename(p1),
+                                    os.path.basename(p2),
+                                    os.path.basename(p3)))
     print("rho*h = %.4f kg/m^2; D11 = %.4e; G11 = %.4e"
           % (rho_h, AB[3, 3], G2[0, 0]))

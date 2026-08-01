@@ -56,6 +56,14 @@ for %j in (ex4_04_Al_freq ex4_0_pm45_90_Al_freq ex4_pm45x2_Al_freq) do call abaq
 copy /Y ex4_*_freq.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex4\Abaqus_results\"
 ```
 
+## 2c. The Ex.5 FSDT jobs (conventional composite S4, ~40 s each)
+
+```bat
+copy /Y "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex5\sandwich_FSDT_*.inp" .
+for %j in (sandwich_FSDT_step sandwich_FSDT_blast) do call abaqus job=%j cpus=4 interactive ask_delete=OFF
+copy /Y sandwich_FSDT_*.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex5\Abaqus_results\"
+```
+
 ## 3. Copy the results back to the local drive
 
 The recovery post-processor only needs the `.dat` files (all history prints
