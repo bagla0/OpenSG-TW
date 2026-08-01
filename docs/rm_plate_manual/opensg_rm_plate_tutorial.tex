@@ -213,8 +213,28 @@ All four cases fall at second order in thickness: halving $h/a$ divides
 every error by $\approx4$.  The $L/h=4$ numbers of Tutorials 3--4 are the
 deliberately thick limit; at $S=10$ they drop to a few percent and by
 $S=50$--64 to the 0.05--0.2\,\% level (the machine-generated check-value
-table in the User Manual freezes the anchors).  The failure indices printed
-by every script use \emph{example} allowables --- replace the
-\code{Xt/Xc/Yt/Yc/S12a/S13a/S23a} block with your material system before
-drawing conclusions.
+table in the User Manual freezes the anchors).
+
+\paragraph{The $U_2$/$U_3$ offsets of the thick cases.}
+In Tutorials 3--4 the displacement \emph{shapes} follow the exact
+solution while the curves sit at a small constant offset.  That offset
+is the \emph{plate solution}, not the recovery: the plate displacement
+is by definition the thickness average of the 3-D field, and at
+$L/h{=}4$ the plate model's amplitudes differ from the exact averages
+by their second-order remainder --- measured directly,
+$v_{\text{plate}}$ vs $\langle U_2\rangle_{\text{exact}}$ is $-4.8\,\%$
+at $L/h{=}4$ and $-0.8\,\%$ at $S{=}10$ (Tutorial 3), and
+$w_{\text{plate}}$ vs $\langle U_3\rangle_{\text{exact}}$ is
+$+4.5\,\%\rightarrow+2.9\,\%$ (Tutorial 3) and
+$+3.5\,\%\rightarrow+0.4\,\%$ (Tutorial 4).  The recovered
+through-thickness variation added on top is zero-mean by construction
+and matches the exact shape.  (Tutorial 4's $U_2$ is special: the
+symmetric layup has $\langle U_2\rangle=0$ identically, so its whole
+profile is thickness warping --- the $9\,\%$ there is the thick-plate
+shape error of the same field that gives $\sigma_{23}$ its $16\,\%$,
+and it falls at the same second-order rate.)
+
+The failure indices printed by every script use \emph{example}
+allowables --- replace the \code{Xt/Xc/Yt/Yc/S12a/S13a/S23a} block with
+your material system before drawing conclusions.
 \end{document}

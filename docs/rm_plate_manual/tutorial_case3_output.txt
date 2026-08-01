@@ -16,7 +16,7 @@ check M11 amplitude = 1.62114  (statics q0/p^2 = 1.62114)
 recovery errors vs exact 3-D (rel L2 %):
   s13   4.42   s23   5.52   s33   4.02
   s11  12.00   s22  11.44   s12  14.12
-  U1    6.56   U2    9.77   U3    4.47
+  U1    6.56   U2    4.76   U3    4.47
 
 wrote tutorial_case3_{sg,outofplane,inplane,disp}.png
 

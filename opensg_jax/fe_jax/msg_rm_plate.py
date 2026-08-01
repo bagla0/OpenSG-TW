@@ -663,11 +663,21 @@ def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None,
     Returns w (3,).
 
     COMPOSITION RULE (settled by the controlled caseA sweep, S = 4..64): use
-    the RAW columns here and compose with the KIRCHHOFF z-linear term,
+    the MEAN-ZERO first-order columns V11/V12 here and compose with the
+    KIRCHHOFF z-linear term,
         U_alpha = u_alpha^2d - x3 w,alpha + w_alpha ,   U3 = w + w3 ,
-    NOT with x3*phi_alpha.  The raw V1bar tilt is exactly the mean-shear
-    content the Kirchhoff term lacks (U1 error 1.41%/0.016% at S = 10/64;
-    composing with x3*phi double-counts it: 85%/2.1% raw/detilted)."""
+    NOT with x3*phi_alpha.  Two distinct gauge rules meet here:
+    (a) TILT: the raw first-order tilt is exactly the mean-shear content the
+        Kirchhoff term lacks (U1 error 1.41%/0.016% at S = 10/64; composing
+        with x3*phi double-counts it: 85%/2.1%);
+    (b) CONSTANTS: the plate displacement u^2d is DEFINED as the thickness
+        average of the 3-D field, so the warping added to it must average to
+        zero.  The relaxed columns V11bar/V12bar carry arbitrary constants
+        from the shear-energy fit (legitimate in the Gamma_l STRAIN terms,
+        where they are genuine contributors) -- in a displacement value they
+        shift U_alpha bodily (observed: a constant ~9% offset on the
+        angle-ply U2 vs the exact solution).  V11/V12 = the same columns
+        minus those constants (identical tilt, exact zero mean)."""
     zeros = np.zeros(6)
     dE1 = zeros if dE1 is None else np.asarray(dE1, float)
     dE2 = zeros if dE2 is None else np.asarray(dE2, float)
@@ -676,7 +686,7 @@ def msgrm_warping_at_depth(obj, z, E6, dE1=None, dE2=None, dE11=None, dE12=None,
     dE22 = zeros if dE22 is None else np.asarray(dE22, float)
     e, xi, he, nodes_xi, dofs, x_q = _locate(obj, z)
     w_loc = (obj["V0"][dofs] @ E6
-             + obj["V11bar"][dofs] @ dE1 + obj["V12bar"][dofs] @ dE2
+             + obj["V11"][dofs] @ dE1 + obj["V12"][dofs] @ dE2
              + obj["V21"][dofs] @ dE11 + obj["V22"][dofs] @ dE12
              + obj["V23"][dofs] @ dE22)
     for q6, v1, v2 in ((qt6, "V1Lt", "V2Lt"), (qb6, "V1Lb", "V2Lb")):
