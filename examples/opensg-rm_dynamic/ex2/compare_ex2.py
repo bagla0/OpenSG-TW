@@ -158,12 +158,14 @@ def rm_sx_top(fits, t_rm, kind):
     return out / Q0
 
 
-def one_plot(fname, curves, xlabel, ylabel):
+def one_plot(fname, curves, xlabel, ylabel, xlim=None):
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
     for x, y, sty, lab in curves:
         ax.plot(x, y, label=lab, **sty)
     ax.set_xlabel(xlabel, fontsize=11)
     ax.set_ylabel(ylabel, fontsize=11)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
     ax.grid(alpha=0.3)
     ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
     fig.tight_layout()
@@ -171,11 +173,16 @@ def one_plot(fname, curves, xlabel, ylabel):
     plt.close(fig)
 
 
-STY_SOL = dict(ls="--", color="k", lw=1.8)                # 3-D benchmark
-STY_RM = dict(ls="-", marker="s", color="#ff7f0e", lw=1.4, ms=4,
-              mfc="none", mew=1.1, markevery=12)          # OpenSG-RM
-STY_KR = dict(ls="-", color="#4878a8", lw=1.4)            # exact HSDT
-STY_FS = dict(ls="-.", color="#2ca02c", lw=1.4)           # Abaqus FSDT
+# four processes -> four DISTINCT markers, staggered so they never overlap;
+# histories are windowed to 0-8 ms (the KR-1989 figure window) for clarity
+STY_SOL = dict(ls="--", marker="o", color="k", lw=1.6, ms=5, mfc="none",
+               mew=1.2, markevery=(0, 14))                # 3-D benchmark
+STY_RM = dict(ls="-", marker="s", color="#ff7f0e", lw=1.3, ms=5,
+              mfc="none", mew=1.2, markevery=(4, 12))     # OpenSG-RM
+STY_KR = dict(ls="-", marker="v", color="#4878a8", lw=1.2, ms=5,
+              mfc="none", mew=1.1, markevery=(30, 60))    # exact HSDT
+STY_FS = dict(ls="-.", marker="^", color="#2ca02c", lw=1.2, ms=5,
+              mfc="none", mew=1.1, markevery=(8, 12))     # Abaqus FSDT
 NZP = 6                        # solid elements per ply (18 through h)
 
 
@@ -263,7 +270,7 @@ def main():
         curves.append((1e3 * tg, w_ex / 0.0254, STY_KR,
                        "Khdeir-Reddy 1989\nexact HSDT"))
         one_plot("ex2_w_history_%s.png" % kind, curves, "time [ms]",
-                 r"center deflection $w/0.0254$ m")
+                 r"center deflection $w/0.0254$ m", xlim=(0.0, 8.0))
         sx_curves = []
         if os.path.isfile(f_so):
             t_sd, sx_so = solid_sx_top(f_so)
@@ -275,7 +282,8 @@ def main():
                       (1e3 * tg, sx_ex, STY_KR,
                        "Khdeir-Reddy exact\nHSDT (z = h/2)")]
         one_plot("ex2_sx_history_%s.png" % kind, sx_curves, "time [ms]",
-                 r"$\bar\sigma_x = \sigma_x(a/2,b/2,z)/q_0$")
+                 r"$\bar\sigma_x = \sigma_x(a/2,b/2,z)/q_0$",
+                 xlim=(0.0, 8.0))
         # ---- numbers --------------------------------------------------
         lines += ["", "%s pulse -- peak |w| [in = w/0.0254 m]:" % kind]
 
