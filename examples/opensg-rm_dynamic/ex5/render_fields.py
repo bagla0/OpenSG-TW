@@ -58,7 +58,9 @@ def set_view(mode):
     ResetCamera(view)
 
 
-VIEWS = {"S13": "sidex", "S33": "sidex", "S23": "sidey"}
+VIEWS = {"S13": "sidex", "S33": "sidex", "S23": "sidey", "S22": "sidex"}
+# filename tag: the case and the snapshot instant, e.g. ex5_step_t2p85ms
+TAG = sys.argv[4] if len(sys.argv) > 4 else ""
 
 
 def shot(arrname, comp, fname, title):
@@ -79,7 +81,8 @@ def shot(arrname, comp, fname, title):
     disp.SetScalarBarVisibility(view, True)
     set_view(VIEWS.get(fname, 'front'))
     Render(view)
-    SaveScreenshot(out + '/%s.png' % fname, view)
+    stem = fname + ('_' + TAG if TAG else '')
+    SaveScreenshot(out + '/%s.png' % stem, view)
     disp.SetScalarBarVisibility(view, False)
 
 

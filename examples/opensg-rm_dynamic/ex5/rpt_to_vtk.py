@@ -77,7 +77,9 @@ def main():
     # 16 columns: El, IntPt, Mises, MaxPrin, MaxPrin(a), MidPrin, MinPrin,
     # Tresca, Pressure, ThirdInv, S11, S22, S33, S12, S13, S23 (GLOBAL)
     S = read_rpt(os.path.join(d, "sandwich_solid_step_S.rpt"), 16)
-    U = read_rpt(os.path.join(d, "sandwich_solid_step_U.rpt"), 4)
+    # U rpt: Node Label, U.Magnitude, U.U1, U.U2, U.U3 (5 columns -- the
+    # MAGNITUDE column shifted the earlier 4-column parse by one)
+    U = read_rpt(os.path.join(d, "sandwich_solid_step_U.rpt"), 5)
     print("parsed %d Gauss rows, %d node rows" % (len(S), len(U)))
     # ---- Gauss lattice (2 per element per direction) --------------------
     ngx, ngz = 2 * NX, 2 * NZT
@@ -97,7 +99,7 @@ def main():
     for row in U:
         n = int(row[0]) - 1
         k, j, i = n // npl, (n % npl) // (NX + 1), n % (NX + 1)
-        UN[k, j, i] = -row[1:4]                # same sign flip
+        UN[k, j, i] = -row[2:5]                # skip Magnitude; sign flip
     # physical Gauss coordinates: in-plane uniform, THROUGH-THICKNESS at
     # the true ply-resolved layer Gauss depths
     xg = (np.repeat(np.arange(NX), 2) + 0.5
