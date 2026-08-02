@@ -1,16 +1,21 @@
 # render_fields.py -- pvpython: render the OpenSG-RM vtk AND the Abaqus
-# solid vtk through the IDENTICAL pipeline: Abaqus-style 12-band rainbow
-# colorbar, true isometric view (camera along (1,1,1), y up), white
-# background.  Usage: pvpython render_fields.py <vtk> <outdir> <prefix>
+# solid vtk through the IDENTICAL pipeline: front view, Abaqus-style
+# 12-band rainbow colorbar, white background, mesh edges, and the model
+# TITLE on every image.  One PNG per component (6 stresses + 3 disp) into
+# the given output folder.
+# Usage: pvpython render_fields.py <vtk> <outdir> <title>
+import os
 import sys
 from paraview.simple import (LegacyVTKReader, GetActiveViewOrCreate, Show,
                              ColorBy, GetColorTransferFunction,
                              GetScalarBar, Render, SaveScreenshot,
                              GetActiveCamera, ResetCamera,
-                             CellDatatoPointData)
+                             CellDatatoPointData, Text)
 
 src = LegacyVTKReader(FileNames=[sys.argv[1]])
-out, pref = sys.argv[2], sys.argv[3]
+out, model_title = sys.argv[2], sys.argv[3]
+if not os.path.isdir(out):
+    os.makedirs(out)
 view = GetActiveViewOrCreate('RenderView')
 view.ViewSize = [1400, 1000]
 view.UseColorPaletteForBackground = 0
@@ -23,6 +28,14 @@ conv.ProcessAllArrays = 1
 disp = Show(conv, view)
 disp.Representation = 'Surface With Edges'
 disp.EdgeColor = [0.25, 0.25, 0.25]
+# the model title on every image
+txt = Text()
+txt.Text = model_title
+tdisp = Show(txt, view)
+tdisp.WindowLocation = 'Upper Center'
+tdisp.FontSize = 22
+tdisp.Color = [0, 0, 0]
+tdisp.Bold = 1
 
 
 def iso_view():
@@ -54,7 +67,7 @@ def shot(arrname, comp, fname, title):
     disp.SetScalarBarVisibility(view, True)
     iso_view()
     Render(view)
-    SaveScreenshot(out + '/%s_%s.png' % (pref, fname), view)
+    SaveScreenshot(out + '/%s.png' % fname, view)
     disp.SetScalarBarVisibility(view, False)
 
 
