@@ -215,16 +215,95 @@ the solid within $\sim$5\,\% at every 50 $\mu$s --- the solid affords that
 quantity only at its dump instants.  (iv)~Cost: 37--39 s vs.\ 323--324 s
 wallclock (8.7$\times$), 2646 vs.\ $\approx$22\,500 DOF.
 
-\paragraph{Full-field deliverables.}  Beyond the station histories, the
-suite renders whole-field pictures: the applied double-sine pressure over
-the geometry (\code{sandwich\_applied\_load.png}), the benchmark solid's
-nine component contours (\code{sandwich\_SOLID\_step\_\{U1..U3,
-S11..S23\}.png}, clean image + colorbar, global frame, no mesh lines), and
---- from the 2-D shell \code{.dat} alone --- the standalone
-\code{rm\_field\_vtk.py}, which dehomogenizes ALL 441 plate nodes at 44
-through-thickness stations (linear-operator precompute + \code{jax.vmap}
-over nodes) and writes \code{sandwich\_rm\_field.vtk} with the
-displacement vector and all six stresses for 3-D contouring in ParaView.
+\section{Full-field comparison: OpenSG-RM vs.\ 3-D FEA, all nine
+components}
+\label{sec:field}
+
+\paragraph{Exactly what is being compared.}
+\begin{center}\begin{tabular}{ll}\toprule
+case / pulse & Example 5, \textbf{step} load ($F(t)=1$ held; $q_0 =
+68.9476$ MPa double-sine)\\
+instant & $t = \mathbf{2.85}$ \textbf{ms} $=$ increment 57 at $\Delta t =
+50\,\mu$s --- the FIRST response peak\\
+ & (center $w = 2.728$ m); both models use FIXED 50-$\mu$s increments\\
+ & (\code{sandwich\_SOLID\_field.inp} runs \code{*DYNAMIC,DIRECT}), so\\
+ & the two snapshots are at the \emph{identical} instant by construction\\
+sampling & the \emph{identical} $40{\times}40{\times}32$ Gauss lattice
+(2 points per element\\
+ & per direction; through-thickness at the PLY-RESOLVED layer depths)\\
+sign frame & both fields in the $+z$-load convention (the solid deck loads
+$-z$;\\
+ & its linear response is flipped)\\
+Abaqus side & \code{odb\_rpt.py}: S over all 51\,200 integration points +
+nodal U as .rpt\\
+ & (GLOBAL frame), \code{rpt\_to\_vtk.py} $\to$
+\code{sandwich\_solid\_field.vtk}\\
+OpenSG-RM side & \code{rm\_field\_vtk.py}: the shell \code{.dat} resultants
+$\to$ per-node drivers $\to$\\
+ & linear-operator dehomogenization (\code{jax.vmap} over nodes) $\to$\\
+ & \code{sandwich\_rm\_field.vtk}\\
+rendering & one pipeline for both (\code{render\_fields.py}): 12-band
+blue$\to$red\\
+ & rainbow, white background, mesh edges, model title on the image\\
+views & front (plate face): S11, S22, S12, U1--U3; side $x{=}0$ face:
+S13, S33;\\
+ & side $y{=}0$ face: S23 (interlaminar fields live through the
+thickness)\\
+\bottomrule\end{tabular}\end{center}
+
+\newcommand{\cmp}[2]{\begin{figure}[h!]\centering
+\includegraphics[width=\textwidth]{field_images/compare/compare_#1_ex5_step_t2p85ms.png}
+\caption{#2}\end{figure}}
+
+\cmp{U3}{Transverse deflection $U_3$: the double-sine bowl, 2.8 m
+(OpenSG-RM) vs.\ 2.7 m (solid) at the center --- the 1.4\,\% peak
+difference of the history table, seen field-wide.}
+\cmp{U1}{In-plane $U_1$: the antisymmetric $\cos\!\times\!\sin$ pattern of
+bending rotation times thickness; both models show the same quadrants and
+$\approx$0.4 m extremes.}
+\cmp{U2}{In-plane $U_2$: the mirror pattern of $U_1$ about the diagonal,
+as the square plate demands.}
+\cmp{S11}{$\sigma_{11}$ on the top face (front view): the fiber-direction
+bending stress of the outer $0^\circ$ ply, maximal at the center.  The RM
+recovery is pointwise while the solid shows its element-averaged Gauss
+values; the solid also carries support-edge concentrations (rim bands)
+that plate kinematics does not represent.}
+\cmp{S22}{$\sigma_{22}$ on the top face (front view): the
+transverse-direction stress, an order softer than $\sigma_{11}$ in the
+$0^\circ$ ply, same distribution in both models.}
+\cmp{S12}{$\sigma_{12}$ on the top face: the $\cos\!\times\!\cos$
+corner-quadrant shear pattern, matching in sign layout and magnitude.}
+\cmp{S13}{$\sigma_{13}$ on the $x=0$ edge face (side view, thickness
+vertical): the core shear plateau --- the sandwich's design-driving field.
+Maxima 234.7 (RM) vs.\ 232.8 MPa (solid): \textbf{0.8\,\%}.}
+\cmp{S23}{$\sigma_{23}$ on the $y=0$ edge face: the twin plateau, 230.0
+vs.\ 228.0 MPa: \textbf{0.9\,\%}.}
+\cmp{S33}{$\sigma_{33}$ on the $x=0$ edge face: through-thickness
+build-up from the free bottom face toward the loaded top.  The RM field is
+the dynamic momentum integral ($\rho\ddot w$ + shear divergence; top-face
+closure 1.01); the solid additionally develops support boundary-layer
+concentrations along the SS edge, which no plate theory carries.}
+
+\paragraph{Why earlier renders looked ``completely different'', and what
+remains different now.}
+The first field comparison suffered three plumbing defects, all fixed and
+documented in the scripts: (i)~\emph{snapshot-time mismatch} --- the
+original solid ran automatic increments, so its nearest field frame was at
+3.52 ms while the RM dump was at 2.85 ms (different amplitude \emph{and}
+phase in every component); (ii)~\emph{depth mismatch} --- the RM field was
+sampled at layer surfaces (where $\sigma_{a3}=0$ exactly) against solid
+Gauss depths, and an initial uniform-$h/16$ lattice even placed the outer
+station in the wrong ply ($\sigma_{11}$: 3.2 vs.\ 27 GPa);
+(iii)~\emph{report-column traps} --- the Abaqus S-report carries ten
+invariant columns before the six components, and the U-report a Magnitude
+column before $U_1$, which mis-shifted the first parses.  What remains
+different now is \emph{physics and discretization, not bugs}: the solid's
+support-edge and corner stress concentrations (true 3-D boundary layers a
+plate cannot represent), its Gauss-cluster banding vs.\ the smooth
+operator-evaluated RM field, the $\approx$1--2\,\% global amplitude
+difference of the deflection histories, and the early-time
+($<0.3$ ms) through-thickness wave transients excluded by any
+plate-level model.
 
 \paragraph{Honest caveats.}
 $\sigma_{33}$ through the soft core shows an $\approx$8--10 MPa
