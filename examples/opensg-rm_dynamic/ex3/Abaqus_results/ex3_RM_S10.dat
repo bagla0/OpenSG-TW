@@ -1,0 +1,462 @@
+1
+
+   Abaqus 2024                                  Date 02-Aug-2026   Time 17:28:40
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+
+
+                         The Abaqus Software is a product of:
+
+                           Dassault Systemes SIMULIA Corp.
+                           1301 Atwood Avenue, Suite 101W
+                              Johnston, RI 02919, USA
+ 
+
+
+                   The Abaqus Software is available only under license
+                   from Dassault Systemes or its subsidiary and may be
+                   used or reproduced only in accordance with the terms
+                   of such license.
+ 
+                          On machine arms2142pc3 
+                          you are authorized to run
+                          Abaqus/Standard until 31-Jan-2027
+
+                          Your site id is: 100000000002199 
+
+
+ 
+                    For assistance or any other information you may
+                    obtain contact information for your local office
+                    from the world wide web at:
+
+                      https://www.3ds.com/products-services/simulia/services-support/
+
+ 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+                *                                                         * 
+                *                   *****************                     * 
+                *                   *  N O T I C E  *                     * 
+                *                   *****************                     * 
+                *                                                         * 
+                *                                                         * 
+                *                       Abaqus 2024                       * 
+                *                                                         * 
+                *       BUILD ID: 2023_09_21-08.55.25 RELr426 190762      * 
+                *                                                         * 
+                *                                                         * 
+                *  Please make sure you are using                         * 
+                *  release Abaqus 2024 manuals                            * 
+                *  plus the notes accompanying this release.              * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+
+
+ 
+
+
+
+     PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   *******************************************************
+
+
+     END PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   ***********************************************************
+
+
+
+
+     OPTIONS BEING PROCESSED
+   ***************************
+
+
+  *HEADING
+          Nayak Ex.3 / Pagano sandwich (0/core/0), a/h=10, OpenSG-RM S4 STATIC                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+  *ELEMENT, TYPE=S4, ELSET=EALL
+  *ELSET, ELSET=PATCHC
+  *ELSET, ELSET=PATCHO
+  *ELSET, ELSET=PATCHX
+  *ELSET, ELSET=PATCHY
+  *SHELL GENERAL SECTION, ELSET=EALL, DENSITY=1.0
+  *SHELL GENERAL SECTION, ELSET=EALL, DENSITY=1.0
+  *TRANSVERSE SHEAR STIFFNESS
+  *BOUNDARY
+  *BOUNDARY
+  *STEP, NAME=BEND
+  *STEP, NAME=BEND
+  *STEP, NAME=BEND
+  *STATIC
+  *DLOAD
+  *NODE PRINT, NSET=NCEN
+  *EL PRINT, ELSET=PATCHC
+  *EL PRINT, ELSET=PATCHC
+  *EL PRINT, ELSET=PATCHO
+  *EL PRINT, ELSET=PATCHO
+  *EL PRINT, ELSET=PATCHX
+  *EL PRINT, ELSET=PATCHX
+  *EL PRINT, ELSET=PATCHY
+  *EL PRINT, ELSET=PATCHY
+  *END STEP
+  *BOUNDARY
+  *STEP, NAME=BEND
+  *STATIC
+  *END STEP
+
+
+
+                            P R O B L E M   S I Z E
+
+
+          NUMBER OF ELEMENTS IS                                   400
+          NUMBER OF NODES IS                                      441
+          NUMBER OF NODES DEFINED BY THE USER                     441
+          TOTAL NUMBER OF VARIABLES IN THE MODEL                 2646
+          (DEGREES OF FREEDOM PLUS MAX NO. OF ANY LAGRANGE MULTIPLIER
+           VARIABLES. INCLUDE *PRINT,SOLVE=YES TO GET THE ACTUAL NUMBER.)
+
+
+
+                              END OF USER INPUT PROCESSING
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =     0.20    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =     0.30    
+       WALLCLOCK TIME (SEC) =            0
+1
+
+   Abaqus 2024                                  Date 02-Aug-2026   Time 17:28:44
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+     Nayak Ex.3 / Pagano sandwich (0/core/0), a/h=10, OpenSG-RM S4 STATIC                      STEP    1  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       1     S T A T I C   A N A L Y S I S
+
+
+                                                                                          
+
+     AUTOMATIC TIME CONTROL WITH -
+          A SUGGESTED INITIAL TIME INCREMENT OF                 1.00    
+          AND A TOTAL TIME PERIOD OF                            1.00    
+          THE MINIMUM TIME INCREMENT ALLOWED IS                1.000E-05
+          THE MAXIMUM TIME INCREMENT ALLOWED IS                 1.00    
+
+     LINEAR EQUATION SOLVER TYPE         DIRECT SPARSE
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          3.08E+07               17                 27
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+
+
+                                INCREMENT     1 SUMMARY
+
+
+ TIME INCREMENT COMPLETED   1.00    ,  FRACTION OF STEP COMPLETED   1.00    
+ STEP TIME COMPLETED        1.00    ,  TOTAL TIME COMPLETED         1.00    
+
+
+
+                                                  E L E M E N T   O U T P U T
+
+
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHC
+
+    ELEMENT  PT FOOT-       SF1         SF2         SF3         SF4         SF5         SF6         SM1         SM2         SM3         
+                NOTE 
+
+         190   1        -7.8890E-13 -8.7833E-13 -4.9864E-15   212.7       35.51       0.000       816.4       90.62     -0.5521
+         190   2        -8.7226E-13 -8.7908E-13 -5.0782E-15   212.7       35.51       0.000       816.5       91.20     -0.4357
+         190   3        -7.9012E-13 -8.8491E-13 -5.2134E-15   212.7       35.51       0.000       822.0       90.68     -0.2644
+         190   4        -8.7348E-13 -8.8566E-13 -5.3052E-15   212.7       35.51       0.000       822.2       91.26     -0.1479
+         191   1        -8.7226E-13 -8.7908E-13  5.0782E-15  -212.7       35.51       0.000       816.5       91.20      0.4357
+         191   2        -7.8890E-13 -8.7833E-13  4.9864E-15  -212.7       35.51       0.000       816.4       90.62      0.5521
+         191   3        -8.7348E-13 -8.8566E-13  5.3052E-15  -212.7       35.51       0.000       822.2       91.26      0.1479
+         191   4        -7.9012E-13 -8.8491E-13  5.2134E-15  -212.7       35.51       0.000       822.0       90.68      0.2644
+         210   1        -7.9012E-13 -8.8491E-13  5.2134E-15   212.7      -35.51       0.000       822.0       90.68      0.2644
+         210   2        -8.7348E-13 -8.8566E-13  5.3052E-15   212.7      -35.51       0.000       822.2       91.26      0.1479
+         210   3        -7.8890E-13 -8.7833E-13  4.9864E-15   212.7      -35.51       0.000       816.4       90.62      0.5521
+         210   4        -8.7226E-13 -8.7908E-13  5.0782E-15   212.7      -35.51       0.000       816.5       91.20      0.4357
+         211   1        -8.7348E-13 -8.8566E-13 -5.3052E-15  -212.7      -35.51       0.000       822.2       91.26     -0.1479
+         211   2        -7.9012E-13 -8.8491E-13 -5.2134E-15  -212.7      -35.51       0.000       822.0       90.68     -0.2644
+         211   3        -8.7226E-13 -8.7908E-13 -5.0782E-15  -212.7      -35.51       0.000       816.5       91.20     -0.4357
+         211   4        -7.8890E-13 -8.7833E-13 -4.9864E-15  -212.7      -35.51       0.000       816.4       90.62     -0.5521
+
+ MAXIMUM               -7.8890E-13 -8.7833E-13  5.3052E-15   212.7       35.51       0.000       822.2       91.26      0.5521    
+ ELEMENT                      210         190         191         190         190         190         190         190         191 
+
+ MINIMUM               -8.7348E-13 -8.8566E-13 -5.3052E-15  -212.7      -35.51       0.000       816.4       90.62     -0.5521    
+ ELEMENT                      191         211         211         211         211         190         211         210         190 
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHC
+
+    ELEMENT  PT FOOT-       COORD1      COORD2      COORD3      
+                NOTE 
+
+         190   1         0.4606      0.4606       0.000
+         190   2         0.4894      0.4606       0.000
+         190   3         0.4606      0.4894       0.000
+         190   4         0.4894      0.4894       0.000
+         191   1         0.5106      0.4606       0.000
+         191   2         0.5394      0.4606       0.000
+         191   3         0.5106      0.4894       0.000
+         191   4         0.5394      0.4894       0.000
+         210   1         0.4606      0.5106       0.000
+         210   2         0.4894      0.5106       0.000
+         210   3         0.4606      0.5394       0.000
+         210   4         0.4894      0.5394       0.000
+         211   1         0.5106      0.5106       0.000
+         211   2         0.5394      0.5106       0.000
+         211   3         0.5106      0.5394       0.000
+         211   4         0.5394      0.5394       0.000
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHO
+
+    ELEMENT  PT FOOT-       SF1         SF2         SF3         SF4         SF5         SF6         SM1         SM2         SM3         
+                NOTE 
+
+           1   1         8.0255E-14  1.5620E-13 -8.9132E-13  -65.70      -456.5       0.000     -0.3238      -7.429      -7.327
+           1   2         5.9546E-15  2.9103E-14 -8.9150E-13  -65.70      -456.5       0.000       1.155      -1.512      -7.088
+           1   3         1.9703E-14  1.4277E-13 -8.9362E-13  -65.70      -456.5       0.000       11.31      -7.308      -4.408
+           1   4        -5.4598E-14  1.5678E-14 -8.9381E-13  -65.70      -456.5       0.000       12.79      -1.391      -4.168
+           2   1         9.1195E-14 -2.5327E-14 -8.9392E-13  -60.80      -103.9       0.000       17.57       1.081      -19.33
+           2   2        -1.4573E-13 -5.4573E-15 -8.9426E-13  -60.80      -103.9       0.000       17.75       1.800      -18.90
+           2   3         8.9433E-14 -4.9521E-14 -8.9420E-13  -60.80      -103.9       0.000       38.37       1.298      -18.98
+           2   4        -1.4749E-13 -2.9651E-14 -8.9454E-13  -60.80      -103.9       0.000       38.55       2.017      -18.55
+          21   1         8.6877E-14  1.8177E-13 -8.7783E-13   591.4      -492.8       0.000       15.55      -9.031      -20.94
+          21   2        -1.1919E-13  1.9048E-14 -8.7785E-13   591.4      -492.8       0.000       17.62     -0.7220      -20.92
+          21   3         1.1990E-13  1.8038E-13 -8.8106E-13   591.4      -492.8       0.000       16.69      -9.019      -16.84
+          21   4        -8.6166E-14  1.7658E-14 -8.8108E-13   591.4      -492.8       0.000       18.77     -0.7101      -16.82
+          22   1         1.4726E-13 -6.8210E-14 -8.4001E-13   589.2      -104.7       0.000       48.93       3.556      -37.90
+          22   2        -2.5473E-13 -6.4882E-14 -8.4012E-13   589.2      -104.7       0.000       49.56       6.073      -37.76
+          22   3         1.6032E-13 -7.5895E-14 -8.4099E-13   589.2      -104.7       0.000       55.51       3.625      -36.66
+          22   4        -2.4167E-13 -7.2568E-14 -8.4110E-13   589.2      -104.7       0.000       56.14       6.141      -36.52
+
+ MAXIMUM                1.6032E-13  1.8177E-13 -8.4001E-13   591.4      -103.9       0.000       56.14       6.141      -4.168    
+ ELEMENT                       22          21          22          21           2           1          22          22           1 
+
+ MINIMUM               -2.5473E-13 -7.5895E-14 -8.9454E-13  -65.70      -492.8       0.000     -0.3238      -9.031      -37.90    
+ ELEMENT                       22          22           2           1          21           1           1          21          22 
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHO
+
+    ELEMENT  PT FOOT-       COORD1      COORD2      COORD3      
+                NOTE 
+
+           1   1         1.0566E-02  1.0566E-02   0.000
+           1   2         3.9434E-02  1.0566E-02   0.000
+           1   3         1.0566E-02  3.9434E-02   0.000
+           1   4         3.9434E-02  3.9434E-02   0.000
+           2   1         6.0566E-02  1.0566E-02   0.000
+           2   2         8.9434E-02  1.0566E-02   0.000
+           2   3         6.0566E-02  3.9434E-02   0.000
+           2   4         8.9434E-02  3.9434E-02   0.000
+          21   1         1.0566E-02  6.0566E-02   0.000
+          21   2         3.9434E-02  6.0566E-02   0.000
+          21   3         1.0566E-02  8.9434E-02   0.000
+          21   4         3.9434E-02  8.9434E-02   0.000
+          22   1         6.0566E-02  6.0566E-02   0.000
+          22   2         8.9434E-02  6.0566E-02   0.000
+          22   3         6.0566E-02  8.9434E-02   0.000
+          22   4         8.9434E-02  8.9434E-02   0.000
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHX
+
+    ELEMENT  PT FOOT-       SF1         SF2         SF3         SF4         SF5         SF6         SM1         SM2         SM3         
+                NOTE 
+
+         181   1         4.3452E-13 -4.5264E-13 -7.1048E-14   2812.      -48.15       0.000       68.56       21.77      -1.508
+         181   2        -5.7543E-13 -3.0350E-13 -7.1056E-14   2812.      -48.15       0.000       68.64       22.08      -1.499
+         181   3         4.3589E-13 -4.5317E-13 -7.1170E-14   2812.      -48.15       0.000       69.01       21.77      -1.355
+         181   4        -5.7406E-13 -3.0402E-13 -7.1177E-14   2812.      -48.15       0.000       69.09       22.09      -1.345
+         182   1         3.0735E-13 -3.5963E-13 -6.5716E-14   2677.      -11.39       0.000       200.1       25.20      -4.296
+         182   2        -7.1535E-13 -3.0618E-13 -6.5739E-14   2677.      -11.39       0.000       201.2       29.68      -4.267
+         182   3         3.0774E-13 -3.6125E-13 -6.7460E-14   2677.      -11.39       0.000       201.4       25.21      -2.084
+         182   4        -7.1496E-13 -3.0780E-13 -6.7483E-14   2677.      -11.39       0.000       202.6       29.70      -2.056
+         201   1         4.3589E-13 -4.5317E-13  7.1170E-14   2812.       48.15       0.000       69.01       21.77       1.355
+         201   2        -5.7406E-13 -3.0402E-13  7.1177E-14   2812.       48.15       0.000       69.09       22.09       1.345
+         201   3         4.3452E-13 -4.5264E-13  7.1048E-14   2812.       48.15       0.000       68.56       21.77       1.508
+         201   4        -5.7543E-13 -3.0350E-13  7.1056E-14   2812.       48.15       0.000       68.64       22.08       1.499
+         202   1         3.0774E-13 -3.6125E-13  6.7460E-14   2677.       11.39       0.000       201.4       25.21       2.084
+         202   2        -7.1496E-13 -3.0780E-13  6.7483E-14   2677.       11.39       0.000       202.6       29.70       2.056
+         202   3         3.0735E-13 -3.5963E-13  6.5716E-14   2677.       11.39       0.000       200.1       25.20       4.296
+         202   4        -7.1535E-13 -3.0618E-13  6.5739E-14   2677.       11.39       0.000       201.2       29.68       4.267
+
+ MAXIMUM                4.3589E-13 -3.0350E-13  7.1177E-14   2812.       48.15       0.000       202.6       29.70       4.296    
+ ELEMENT                      201         181         201         201         201         181         182         202         202 
+
+ MINIMUM               -7.1535E-13 -4.5317E-13 -7.1177E-14   2677.      -48.15       0.000       68.56       21.77      -4.296    
+ ELEMENT                      182         181         181         182         181         181         201         201         182 
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHX
+
+    ELEMENT  PT FOOT-       COORD1      COORD2      COORD3      
+                NOTE 
+
+         181   1         1.0566E-02  0.4606       0.000
+         181   2         3.9434E-02  0.4606       0.000
+         181   3         1.0566E-02  0.4894       0.000
+         181   4         3.9434E-02  0.4894       0.000
+         182   1         6.0566E-02  0.4606       0.000
+         182   2         8.9434E-02  0.4606       0.000
+         182   3         6.0566E-02  0.4894       0.000
+         182   4         8.9434E-02  0.4894       0.000
+         201   1         1.0566E-02  0.5106       0.000
+         201   2         3.9434E-02  0.5106       0.000
+         201   3         1.0566E-02  0.5394       0.000
+         201   4         3.9434E-02  0.5394       0.000
+         202   1         6.0566E-02  0.5106       0.000
+         202   2         8.9434E-02  0.5106       0.000
+         202   3         6.0566E-02  0.5394       0.000
+         202   4         8.9434E-02  0.5394       0.000
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHY
+
+    ELEMENT  PT FOOT-       SF1         SF2         SF3         SF4         SF5         SF6         SM1         SM2         SM3         
+                NOTE 
+
+          10   1        -4.3396E-13 -1.1136E-13 -7.1045E-14  -7.623       466.8       0.000       264.4       9.851      -1.543
+          10   2        -4.5196E-13 -1.0981E-13 -7.0028E-14  -7.623       466.8       0.000       264.4       9.903      -2.833
+          10   3        -2.1471E-13 -3.8851E-14 -7.1066E-14  -7.623       466.8       0.000       201.7       9.197      -1.517
+          10   4        -2.3271E-13 -3.7300E-14 -7.0048E-14  -7.623       466.8       0.000       201.7       9.250      -2.807
+          11   1        -4.5196E-13 -1.0981E-13  7.0028E-14   7.623       466.8       0.000       264.4       9.903       2.833
+          11   2        -4.3396E-13 -1.1136E-13  7.1045E-14   7.623       466.8       0.000       264.4       9.851       1.543
+          11   3        -2.3271E-13 -3.7300E-14  7.0048E-14   7.623       466.8       0.000       201.7       9.250       2.807
+          11   4        -2.1471E-13 -3.8851E-14  7.1066E-14   7.623       466.8       0.000       201.7       9.197       1.517
+          30   1        -2.9158E-13 -1.8783E-13 -6.5986E-14   46.82       430.8       0.000       200.0       25.52      -4.554
+          30   2        -3.1846E-13 -1.8783E-13 -6.6746E-14   46.82       430.8       0.000       200.1       25.70      -3.591
+          30   3        -2.5781E-13 -2.4236E-13 -6.6055E-14   46.82       430.8       0.000       246.8       26.01      -4.467
+          30   4        -2.8470E-13 -2.4236E-13 -6.6815E-14   46.82       430.8       0.000       246.9       26.19      -3.503
+          31   1        -3.1846E-13 -1.8783E-13  6.6746E-14  -46.82       430.8       0.000       200.1       25.70       3.591
+          31   2        -2.9158E-13 -1.8783E-13  6.5986E-14  -46.82       430.8       0.000       200.0       25.52       4.554
+          31   3        -2.8470E-13 -2.4236E-13  6.6815E-14  -46.82       430.8       0.000       246.9       26.19       3.503
+          31   4        -2.5781E-13 -2.4236E-13  6.6055E-14  -46.82       430.8       0.000       246.8       26.01       4.467
+
+ MAXIMUM               -2.1471E-13 -3.7300E-14  7.1066E-14   46.82       466.8       0.000       264.4       26.19       4.554    
+ ELEMENT                       10          10          11          30          11          10          10          30          31 
+
+ MINIMUM               -4.5196E-13 -2.4236E-13 -7.1066E-14  -46.82       430.8       0.000       200.0       9.197      -4.554    
+ ELEMENT                       10          30          10          31          30          10          30          11          30 
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET 
+   PATCHY
+
+    ELEMENT  PT FOOT-       COORD1      COORD2      COORD3      
+                NOTE 
+
+          10   1         0.4606      1.0566E-02   0.000
+          10   2         0.4894      1.0566E-02   0.000
+          10   3         0.4606      3.9434E-02   0.000
+          10   4         0.4894      3.9434E-02   0.000
+          11   1         0.5106      1.0566E-02   0.000
+          11   2         0.5394      1.0566E-02   0.000
+          11   3         0.5106      3.9434E-02   0.000
+          11   4         0.5394      3.9434E-02   0.000
+          30   1         0.4606      6.0566E-02   0.000
+          30   2         0.4894      6.0566E-02   0.000
+          30   3         0.4606      8.9434E-02   0.000
+          30   4         0.4894      8.9434E-02   0.000
+          31   1         0.5106      6.0566E-02   0.000
+          31   2         0.5394      6.0566E-02   0.000
+          31   3         0.5106      8.9434E-02   0.000
+          31   4         0.5394      8.9434E-02   0.000
+  
+  
+  
+  
+                                       N O D E   O U T P U T
+  
+  
+  
+  
+   THE FOLLOWING TABLE IS PRINTED FOR NODES BELONGING TO NODE SET NCEN
+  
+       NODE FOOT-  U1             U2             U3             UR1            UR2            UR3          
+            NOTE
+  
+       221      0.0000000E+00  0.0000000E+00  3.2669338E-05  0.0000000E+00  0.0000000E+00  0.0000000E+00 
+
+ MAXIMUM          0.000       0.000      3.2669E-05   0.000       0.000       0.000    
+ AT NODE               221         221         221         221         221         221
+
+ MINIMUM          0.000       0.000      3.2669E-05   0.000       0.000       0.000    
+ AT NODE               221         221         221         221         221         221
+
+
+          THE ANALYSIS HAS BEEN COMPLETED
+
+
+
+                              ANALYSIS COMPLETE
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =     0.10    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =     0.20    
+       WALLCLOCK TIME (SEC) =            1

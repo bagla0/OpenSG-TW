@@ -1,0 +1,289 @@
+1
+
+   Abaqus 2024                                  Date 02-Aug-2026   Time 18:10:06
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+
+
+                         The Abaqus Software is a product of:
+
+                           Dassault Systemes SIMULIA Corp.
+                           1301 Atwood Avenue, Suite 101W
+                              Johnston, RI 02919, USA
+ 
+
+
+                   The Abaqus Software is available only under license
+                   from Dassault Systemes or its subsidiary and may be
+                   used or reproduced only in accordance with the terms
+                   of such license.
+ 
+                          On machine arms2142pc3 
+                          you are authorized to run
+                          Abaqus/Foundation until 31-Jan-2027
+
+                          Your site id is: 100000000002199 
+
+
+ 
+                    For assistance or any other information you may
+                    obtain contact information for your local office
+                    from the world wide web at:
+
+                      https://www.3ds.com/products-services/simulia/services-support/
+
+ 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+                *                                                         * 
+                *                   *****************                     * 
+                *                   *  N O T I C E  *                     * 
+                *                   *****************                     * 
+                *                                                         * 
+                *                                                         * 
+                *                       Abaqus 2024                       * 
+                *                                                         * 
+                *       BUILD ID: 2023_09_21-08.55.25 RELr426 190762      * 
+                *                                                         * 
+                *                                                         * 
+                *  Please make sure you are using                         * 
+                *  release Abaqus 2024 manuals                            * 
+                *  plus the notes accompanying this release.              * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+
+
+ 
+
+
+
+     PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   *******************************************************
+
+
+     END PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   ***********************************************************
+
+
+
+
+     OPTIONS BEING PROCESSED
+   ***************************
+
+
+  *HEADING
+          Nayak Ex.4 cantilever pm45x2_Al -- conventional Abaqus composite S4 (FSDT) frequency                                                                                                                                                                                                                                                                                                                                                                                                                                            
+  *ELEMENT, TYPE=S4, ELSET=EALL
+  *MATERIAL, NAME=GE
+  *ELASTIC, TYPE=LAMINA
+  *DENSITY
+  *MATERIAL, NAME=AL
+  *ELASTIC, TYPE=LAMINA
+  *DENSITY
+  *SHELL SECTION, ELSET=EALL, COMPOSITE
+  *SHELL SECTION, ELSET=EALL, COMPOSITE
+  *BOUNDARY
+  *BOUNDARY
+  *STEP, NAME=MODES
+  *FREQUENCY
+  *STEP, NAME=MODES
+  *STEP, NAME=MODES
+  *FREQUENCY
+  *FREQUENCY
+  *END STEP
+  *BOUNDARY
+  *STEP, NAME=MODES
+  *FREQUENCY
+  *FREQUENCY
+  *END STEP
+
+
+
+                            P R O B L E M   S I Z E
+
+
+          NUMBER OF ELEMENTS IS                                   288
+          NUMBER OF NODES IS                                      325
+          NUMBER OF NODES DEFINED BY THE USER                     325
+          TOTAL NUMBER OF VARIABLES IN THE MODEL                 1950
+          (DEGREES OF FREEDOM PLUS MAX NO. OF ANY LAGRANGE MULTIPLIER
+           VARIABLES. INCLUDE *PRINT,SOLVE=YES TO GET THE ACTUAL NUMBER.)
+
+
+
+                              END OF USER INPUT PROCESSING
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =     0.20    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =     0.30    
+       WALLCLOCK TIME (SEC) =            1
+1
+
+   Abaqus 2024                                  Date 02-Aug-2026   Time 18:10:10
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+     Nayak Ex.4 cantilever pm45x2_Al -- conventional Abaqus composite S4 (FSDT) frequ          STEP    1  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       1     C A L C U L A T I O N   O F   E I G E N V A L U E S
+
+                                            F O R   N A T U R A L   F R E Q U E N C I E S
+
+
+
+                                                                                          
+
+     THE LANCZOS EIGENSOLVER IS USED FOR THIS ANALYSIS
+     SYSTEM DATA WILL BE WRITTEN TO THE .SIM FILE
+
+     Abaqus WILL COMPUTE UNCOUPLED
+      STRUCTURAL AND ACOUSTIC MODES
+     NUMBER OF EIGENVALUES                      8
+     HIGHEST FREQUENCY OF INTEREST                  1.00000E+18
+     MAXIMUM NUMBER OF STEPS WITHIN RUN               35
+     BLOCK SIZE FOR LANCZOS PROCEDURE                  7
+     THE EIGENVECTORS ARE SCALED SO THAT 
+      THE GENERALIZED MASS IN EACH VECTOR IS UNITY
+
+     THIS IS A LINEAR PERTURBATION STEP.
+     ALL LOADS ARE DEFINED AS CHANGE IN LOAD TO THE REFERENCE STATE
+
+
+
+                    TOTAL MASS OF MODEL
+
+                      5.0020160E-02
+
+
+                    LOCATION OF THE CENTER OF MASS OF THE MODEL
+
+                      7.6000000E-02      3.8000000E-02       0.000000    
+
+
+                    MOMENTS OF INERTIA ABOUT THE ORIGIN
+                           I(XX)               I(YY)               I(ZZ)
+
+                      9.6653357E-05      3.8556980E-04      4.8220968E-04
+
+
+                    PRODUCTS OF INERTIA ABOUT THE ORIGIN
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -1.4445822E-04       0.000000           0.000000    
+
+
+                    MOMENTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XX)               I(YY)               I(ZZ)
+
+                      2.4424246E-05      9.6653357E-05      1.2106412E-04
+
+
+                    PRODUCTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -1.0842022E-19       0.000000           0.000000    
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          1.74E+07               20                 38
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+
+
+                              E I G E N V A L U E    O U T P U T     
+
+ MODE NO      EIGENVALUE              FREQUENCY         GENERALIZED MASS   COMPOSITE MODAL DAMPING            
+                             (RAD/TIME)   (CYCLES/TIME)
+
+
+       1      1.32316E+05     363.75         57.893         1.0000         0.0000    
+       2      4.88629E+06     2210.5         351.81         1.0000         0.0000    
+       3      5.50794E+06     2346.9         373.52         1.0000         0.0000    
+       4      4.12507E+07     6422.7         1022.2         1.0000         0.0000    
+       5      5.38100E+07     7335.5         1167.5         1.0000         0.0000    
+       6      1.18329E+08     10878.         1731.3         1.0000         0.0000    
+       7      1.72007E+08     13115.         2087.3         1.0000         0.0000    
+       8      1.91492E+08     13838.         2202.4         1.0000         0.0000    
+
+
+          P A R T I C I P A T I O N   F A C T O R S
+
+ MODE NO    X-COMPONENT    Y-COMPONENT    Z-COMPONENT    X-ROTATION     Y-ROTATION     Z-ROTATION 
+
+       1      1.23692E-17    4.37506E-17    0.17261        6.51692E-03   -1.92524E-02    4.12379E-18
+       2     -2.87216E-16   -1.84116E-17    9.79363E-02    4.34960E-03   -3.50937E-03    5.07466E-18
+       3      8.07999E-17   -2.66087E-16   -1.32089E-02    3.71644E-03    3.54936E-04   -3.26206E-17
+       4     -1.47861E-15    7.73772E-16    5.89772E-02    2.34303E-03   -1.21745E-03    1.00507E-16
+       5     -1.47524E-14    2.47497E-14    3.50427E-03   -1.36017E-03   -3.56041E-05    1.25958E-15
+       6      1.14398E-12   -2.12680E-12   -1.88395E-02   -6.50475E-04    3.26158E-04   -9.47057E-14
+       7     -7.39214E-11    3.88727E-11    1.64562E-02    1.50856E-03   -2.48165E-04    3.85431E-12
+       8      1.45527E-10   -1.90953E-10    3.53752E-02    9.52483E-04   -4.82203E-04   -1.02770E-11
+
+
+                    E F F E C T I V E   M A S S
+
+ MODE NO    X-COMPONENT    Y-COMPONENT    Z-COMPONENT    X-ROTATION     Y-ROTATION     Z-ROTATION 
+
+       1      1.52997E-34    1.91412E-33    2.97942E-02    4.24703E-05    3.70654E-04    1.70057E-35
+       2      8.24933E-32    3.38985E-34    9.59151E-03    1.89190E-05    1.23157E-05    2.57522E-35
+       3      6.52863E-33    7.08024E-32    1.74474E-04    1.38119E-05    1.25980E-07    1.06410E-33
+       4      2.18629E-30    5.98723E-31    3.47831E-03    5.48977E-06    1.48218E-06    1.01017E-32
+       5      2.17634E-28    6.12547E-28    1.22799E-05    1.85007E-06    1.26765E-09    1.58654E-30
+       6      1.30869E-24    4.52328E-24    3.54928E-04    4.23117E-07    1.06379E-07    8.96918E-27
+       7      5.46437E-21    1.51108E-21    2.70806E-04    2.27576E-06    6.15861E-08    1.48557E-23
+       8      2.11782E-20    3.64630E-20    1.25140E-03    9.07224E-07    2.32520E-07    1.05617E-22
+
+ TOTAL        2.66439E-20    3.79786E-20    4.49279E-02    8.61472E-05    3.84979E-04    1.20481E-22
+
+
+          THE ANALYSIS HAS BEEN COMPLETED
+
+
+
+                              ANALYSIS COMPLETE
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =      2.0    
+       SYSTEM TIME (SEC)    =     0.30    
+       TOTAL CPU TIME (SEC) =      2.3    
+       WALLCLOCK TIME (SEC) =            2
