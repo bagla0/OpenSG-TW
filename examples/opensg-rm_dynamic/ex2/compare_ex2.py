@@ -48,7 +48,6 @@ sys.path.insert(0, HERE)          # reddy_hsdt_navier.py lives in ex2/
 from opensg_jax.fe_jax.segment_plate import read_plate_sg_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
 from recover_6p2 import read_elprint_tables                     # noqa: E402
-import reddy_hsdt_navier as rd                                  # noqa: E402
 
 H = 0.1524
 A = 5.0 * H
@@ -179,10 +178,10 @@ STY_SOL = dict(ls="--", marker="o", color="k", lw=1.6, ms=5, mfc="none",
                mew=1.2, markevery=(0, 14))                # 3-D benchmark
 STY_RM = dict(ls="-", marker="s", color="#ff7f0e", lw=1.3, ms=5,
               mfc="none", mew=1.2, markevery=(4, 12))     # OpenSG-RM
-STY_KR = dict(ls="-", marker="v", color="#4878a8", lw=1.2, ms=5,
-              mfc="none", mew=1.1, markevery=(30, 60))    # exact HSDT
 STY_FS = dict(ls="-.", marker="^", color="#2ca02c", lw=1.2, ms=5,
               mfc="none", mew=1.1, markevery=(8, 12))     # Abaqus FSDT
+STY_NAY = dict(ls="none", marker="*", color="#4878a8", ms=13, mfc="none",
+               mew=1.6)          # Nayak's tabulated 9-node FE values
 NZP = 6                        # solid elements per ply (18 through h)
 
 
@@ -213,15 +212,11 @@ def solid_sx_top(dat):
 
 
 def main():
-    rd.set_case("ex2")
-    Kt, Mt = rd.navier_KM("tsdt")
-    tg = np.arange(0.0, 0.02 + 1e-12, 1.0e-5)
-    z_ctr = H / 2 - H / (2 * 3 * NZP)      # solid top-element centroid z
-    lines = ["Nayak Ex.2 / Khdeir-Reddy 1989 (0/90/0) a=5h -- FOUR-WAY:",
-             "  benchmark = Abaqus 3-D solid (KR's 'exact' is exact only"
-             " WITHIN the HSDT -- unlike Pagano it is NOT 3-D elasticity)",
-             "  vs OpenSG-RM (Abaqus S4 + MSG ABDG), conventional Abaqus"
-             " FSDT (S4 composite section), and the exact HSDT (KR 1989)"]
+    lines = ["Nayak Ex.2 (0/90/0) a=5h -- benchmark = Abaqus 3-D solid;",
+             "  candidates: OpenSG-RM (Abaqus S4 + MSG ABDG) and the"
+             " conventional Abaqus FSDT (composite S4);",
+             "  literature reference: Nayak's converged 9-node FE (Table 3,"
+             " 4x4 mesh, dt = 40 us) at his five sample times"]
     for kind, pulse in (("step", "step_t1"), ("blast", "blast")):
         f_rm = os.path.join(HERE, "Abaqus_results", "ex2_RM_%s.dat" % kind)
         f_fs = os.path.join(HERE, "Abaqus_results", "ex2_FSDT_%s.dat" % kind)
@@ -229,12 +224,6 @@ def main():
         if not os.path.isfile(f_rm):
             print("missing %s -- run the Abaqus job first" % f_rm)
             continue
-        # ---- exact Khdeir-Reddy HSDT (closed-form modal, = their method)
-        w_ex, lam, V, etas = rd.modal_response(Kt, Mt, pulse, tg, full=True)
-        d_hist = V @ etas
-        sx_ex = np.array([rd.tsdt_profiles(d_hist[:, k],
-                                           [H / 2 - 1e-9])[0][0]
-                          for k in range(len(tg))]) / Q0
         # ---- Abaqus OpenSG-RM -----------------------------------------
         t_all = step_times(f_rm)
         uc = node_history(f_rm, "NCEN")
@@ -267,8 +256,11 @@ def main():
             curves.append((1e3 * np.concatenate([[0], t_fs]),
                            np.concatenate([[0], w_fs]) / 0.0254, STY_FS,
                            "Abaqus FSDT\n(composite S4)"))
-        curves.append((1e3 * tg, w_ex / 0.0254, STY_KR,
-                       "Khdeir-Reddy 1989\nexact HSDT"))
+        if kind == "step":
+            # the literature reference: Nayak's converged 9-node FE values
+            # (Table 3, 4x4 mesh, dt = 40 us) at his five sample times
+            curves.append((1e3 * T_ANCH, np.array(NAYAK_W), STY_NAY,
+                           "Nayak 9-node FE\n(dt = 40 $\\mu$s, Table 3)"))
         one_plot("ex2_w_history_%s.png" % kind, curves, "time [ms]",
                  r"center deflection $w/0.0254$ m", xlim=(0.0, 8.0))
         sx_curves = []
@@ -277,10 +269,11 @@ def main():
             if t_sd is not None:
                 sx_curves.append((1e3 * t_sd, sx_so, STY_SOL,
                                   "Abaqus 3-D solid\n(top element centroid)"))
-        sx_curves += [(1e3 * t_rm[:n], sx_rm, STY_RM,
-                       "OpenSG-RM recovery\n(z = h/2)"),
-                      (1e3 * tg, sx_ex, STY_KR,
-                       "Khdeir-Reddy exact\nHSDT (z = h/2)")]
+        sx_curves.append((1e3 * t_rm[:n], sx_rm, STY_RM,
+                          "OpenSG-RM recovery\n(z = h/2)"))
+        if kind == "step":
+            sx_curves.append((1e3 * T_ANCH, np.array(NAYAK_SX), STY_NAY,
+                              "Nayak 9-node FE\n(dt = 40 $\\mu$s, Table 3)"))
         one_plot("ex2_sx_history_%s.png" % kind, sx_curves, "time [ms]",
                  r"$\bar\sigma_x = \sigma_x(a/2,b/2,z)/q_0$",
                  xlim=(0.0, 8.0))
@@ -299,7 +292,6 @@ def main():
                                                           w_rm[:n])))
         if w_curves[0] is not None:
             entries.append(("Abaqus FSDT (composite S4)", *pk(*w_curves[0])))
-        entries.append(("Khdeir-Reddy exact HSDT", *pk(tg, w_ex)))
         wref = entries[0][1] if w_curves[1] is not None else None
         for nam, wpk, tpk in entries:
             err = ("  %+7.2f %% vs solid" % (100 * (wpk - wref) / wref)
@@ -308,13 +300,9 @@ def main():
                          % (nam, wpk, tpk, err))
         if kind == "step":
             wi = np.interp(T_ANCH, t_rm[:n], w_rm[:n]) / 0.0254
-            we = np.interp(T_ANCH, tg, w_ex) / 0.0254
             si = np.interp(T_ANCH, t_rm[:n], sx_rm)
-            se = np.interp(T_ANCH, tg, sx_ex)
             lines += ["  anchor times [ms]:      "
                       + " ".join("%8.1f" % (1e3 * t) for t in T_ANCH),
-                      "  w/0.0254 KR-exact:      "
-                      + " ".join("%8.4f" % v for v in we),
                       "  w/0.0254 Nayak-P9-FE:   "
                       + " ".join("%8.4f" % v for v in NAYAK_W),
                       "  w/0.0254 OpenSG-RM:     "
@@ -327,18 +315,17 @@ def main():
                 wf = np.interp(T_ANCH, *w_curves[0]) / 0.0254
                 lines.append("  w/0.0254 Abaqus FSDT:   "
                              + " ".join("%8.4f" % v for v in wf))
-            lines += ["  sx_bar   KR-exact:      "
-                      + " ".join("%8.3f" % v for v in se),
-                      "  sx_bar   Nayak-P9-FE:   "
+            lines += ["  sx_bar   Nayak-P9-FE:   "
                       + " ".join("%8.3f" % v for v in NAYAK_SX),
                       "  sx_bar   OpenSG-RM:     "
-                      + " ".join("%8.3f" % v for v in si)]
+                      + " ".join("%8.3f" % v for v in si),
+                      "  NOTE: point-in-time rows are phase-sensitive"
+                      " (T ~ 1.4 ms); judge by peaks and the histories"]
         print("wrote ex2_*_%s figures" % kind)
     out = "\n".join(lines)
     print(out)
     with open(os.path.join(HERE, "ex2_results.dat"), "w") as f:
         f.write(out + "\n")
-    rd.set_case("ex5")
 
 
 if __name__ == "__main__":

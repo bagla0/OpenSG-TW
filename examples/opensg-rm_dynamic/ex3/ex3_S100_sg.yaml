@@ -1,0 +1,45 @@
+sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 0.01,
+  n_ply: 3}
+nodes:
+- [-0.005]
+- [-0.00475]
+- [-0.0045000000000000005]
+- [-0.00425]
+- [-0.004]
+- [-0.002]
+- [0.0]
+- [0.002]
+- [0.004000000000000001]
+- [0.004250000000000001]
+- [0.004500000000000001]
+- [0.004750000000000002]
+- [0.005000000000000002]
+elements:
+- [1, 2, 3, 4, 5]
+- [5, 6, 7, 8, 9]
+- [9, 10, 11, 12, 13]
+materials:
+- name: face
+  density: 1.0
+  elastic:
+    E: [172250000000.0, 6890000000.0, 6890000000.0]
+    G: [3445000000.0, 3445000000.0, 1378000000.0]
+    nu: [0.25, 0.25, 0.25]
+- name: core
+  density: 1.0
+  elastic:
+    E: [275600000.0, 275600000.0, 3445000000.0]
+    G: [110240000.0, 413400000.0, 413400000.0]
+    nu: [0.25, 0.25, 0.25]
+sets:
+  element:
+  - name: ply_1
+    labels: [1]
+  - name: ply_2
+    labels: [2]
+  - name: ply_3
+    labels: [3]
+sections:
+- {elementSet: ply_1, material: face, angle: 0.0, thickness: 0.001}
+- {elementSet: ply_2, material: core, angle: 0.0, thickness: 0.008}
+- {elementSet: ply_3, material: face, angle: 0.0, thickness: 0.001}

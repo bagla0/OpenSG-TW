@@ -1,0 +1,23 @@
+sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 0.2,
+  n_ply: 1}
+nodes:
+- [-0.1]
+- [-0.05]
+- [0.0]
+- [0.05000000000000002]
+- [0.1]
+elements:
+- [1, 2, 3, 4, 5]
+materials:
+- name: iso
+  density: 1.0
+  elastic:
+    E: [1.0, 1.0, 1.0]
+    G: [0.3846153846153846, 0.3846153846153846, 0.3846153846153846]
+    nu: [0.3, 0.3, 0.3]
+sets:
+  element:
+  - name: ply_1
+    labels: [1]
+sections:
+- {elementSet: ply_1, material: iso, angle: 0.0, thickness: 0.2}
