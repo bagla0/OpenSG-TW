@@ -18,9 +18,12 @@ Chain (all in this one file):
   5. the sigma_a3 columns are rescaled per node to carry the plate's own
      Q1/Q2 (the dynamic-consistency rule of recover_dyn.py), and the 3-D
      displacement is composed as U_a = u_a - z w,_a + warp_a, U3 = w + w3;
-  6. write sandwich_rm_field.vtk: STRUCTURED_GRID 21x21xNZ with the
-     displacement vector + all six stress components as point data --
-     contour it over the 3-D geometry in ParaView (no mesh lines).
+  6. write sandwich_rm_field.vtk on the SAME 40x40x32 Gauss lattice as the
+     Abaqus rpt vtk (rpt_to_vtk.py) -- point-for-point comparable: same
+     in-plane stations (bilinear driver interpolation), same Gauss depths
+     (comparing layer surfaces against Gauss depths is what makes the
+     transverse-shear front views look "different": s13 = 0 exactly ON a
+     face but ~50 MPa a quarter-ply below it).
 
 Run:  python examples/opensg-rm_dynamic/ex5/rm_field_vtk.py
 """
@@ -106,6 +109,41 @@ def parse_field_dat(path):
     return U, SF
 
 
+def center_w_history(dat_path):
+    """The per-increment center-node w from the *NODE PRINT NCEN tables of
+    the same field .dat (needed for the inertia term of sigma33)."""
+    rows = []
+    with open(dat_path, errors="replace") as f:
+        lines = f.read().splitlines()
+    active, labels_seen = False, False
+    for ln in lines:
+        if "NODE SET NCEN" in ln and "NALL" not in ln \
+                and "TABLE IS PRINTED" in ln:
+            active, labels_seen = True, False
+            continue
+        toks = ln.split()
+        if not toks:
+            continue
+        if active and not labels_seen:
+            if toks[0] == "NODE":
+                labels_seen = True
+            continue
+        if active and labels_seen and re.fullmatch(r"\d+", toks[0]):
+            vals = []
+            for t in toks[1:]:
+                try:
+                    vals.append(float(t))
+                except ValueError:
+                    pass
+            if len(vals) >= 3:
+                rows.append(vals[2])
+            active = False
+    return np.array(rows)
+
+
+DT = 5.0e-5
+
+
 def nodal_from_elements(F):
     """(400, k) element-centroid fields -> (21, 21, k) nodal grids by
     averaging the (up to four) adjacent cells."""
@@ -138,26 +176,63 @@ def main():
 
     E6 = np.einsum("ab,ijb->ija", S6, Rg[:, :, [0, 1, 2, 5, 6, 7]])
     dE1, dE2 = grad(E6)
-    dE11, _ = grad(dE1)
-    dE12a, dE22 = grad(dE2)
+    # second gradients MODE-CONSISTENT (every resultant field of the
+    # double-sine solution is a product of sines/cosines, so E,11 = E,22
+    # = -p^2 E pointwise -- exact, and free of the double-FD edge spikes
+    # that polluted sigma33 near the boundary); the mixed term from FD
+    dE11 = -P * P * E6
+    dE22 = -P * P * E6
+    dE12a, _ = grad(dE2)
     Q1, Q2 = Rg[:, :, 3], Rg[:, :, 4]
     wx, wy = grad(ug[:, :, 2:3])
     wx, wy = wx[:, :, 0], wy[:, :, 0]
-    # the closed-form load ladder of q = Q0 sin sin at the snapshot (F=1)
-    xi = np.arange(NX + 1) * dx
-    Xg, Yg = np.meshgrid(xi, xi)               # [j, i]: X varies along i
+    # ---- resample everything onto the SOLID's Gauss lattice so both vtk
+    # files are point-for-point comparable (same 40x40 in-plane positions,
+    # same 32 Gauss depths) -- comparing layer SURFACES against Gauss
+    # depths is what made the s13/s23/s33 front views look "different"
+    NZT = 16
+    GA = 0.5 / np.sqrt(3.0)
+    xg = (np.repeat(np.arange(NX), 2) + 0.5
+          + np.tile([-GA, +GA], NX)) * dx        # 40 in-plane stations
+    ngx = len(xg)
+
+    def bilerp(F):
+        """nodal [j, i, k] grid -> values at the Gauss in-plane lattice."""
+        f = xg / dx
+        i0 = np.clip(f.astype(int), 0, NX - 1)
+        t = f - i0
+        Fi = ((1 - t)[None, :, None] * F[:, i0]
+              + t[None, :, None] * F[:, i0 + 1])       # along i (x)
+        Fo = ((1 - t)[:, None, None] * Fi[i0]
+              + t[:, None, None] * Fi[i0 + 1])         # along j (y)
+        return Fo                                       # [jy, ix, k]
+
+    E6, dE1, dE2 = bilerp(E6), bilerp(dE1), bilerp(dE2)
+    dE11, dE12a, dE22 = bilerp(dE11), bilerp(dE12a), bilerp(dE22)
+    Q1 = bilerp(Q1[:, :, None])[:, :, 0]
+    Q2 = bilerp(Q2[:, :, None])[:, :, 0]
+    u0g = bilerp(ug)
+    wx = bilerp(wx[:, :, None])[:, :, 0]
+    wy = bilerp(wy[:, :, None])[:, :, 0]
+    # the closed-form load ladder of q = Q0 sin sin, EXACT at the lattice
+    Xg, Yg = np.meshgrid(xg, xg)               # [jy, ix]: X varies along ix
     s1, c1 = np.sin(P * Xg), np.cos(P * Xg)
     s2, c2 = np.sin(P * Yg), np.cos(P * Yg)
     qt6 = Q0 * np.stack([s1 * s2, P * c1 * s2, P * s1 * c2,
                          -P * P * s1 * s2, P * P * c1 * c2,
                          -P * P * s1 * s2], axis=-1)
-    # driver vector per node: 42 = 6 blocks of E-drivers + the ladder
+    # driver vector per lattice point: 42 = 6 E-driver blocks + the ladder
     D = np.concatenate([E6, dE1, dE2, dE11, dE12a, dE22, qt6],
                        axis=-1).reshape(-1, 42)
-    # ---- through-thickness operators: recovery is LINEAR in the drivers
-    zk = np.concatenate([[0.0], np.cumsum(thick)]) - H / 2
-    zg = np.concatenate([np.linspace(zk[m] + 1e-9, zk[m + 1] - 1e-9, npz)
-                         for m, npz in enumerate(NPZ)])
+    # ---- through-thickness operators AT THE SOLID GAUSS DEPTHS ---------
+    # the solid layers are PLY-RESOLVED (1.905 mm plies, 17.1 mm core
+    # sub-layers), so the Gauss depths follow the true layer thicknesses
+    tlay = list(thick[:4]) + [thick[4] / 8.0] * 8 + list(thick[5:])
+    zkl = np.concatenate([[0.0], np.cumsum(tlay)])
+    zg = np.empty(2 * NZT)
+    for k in range(NZT):
+        zg[2 * k] = zkl[k] + (0.5 - GA) * tlay[k] - H / 2
+        zg[2 * k + 1] = zkl[k] + (0.5 + GA) * tlay[k] - H / 2
     nz = len(zg)
     TS = np.zeros((nz, 6, 42))                 # stress operator
     TW = np.zeros((nz, 3, 42))                 # warping-displacement op.
@@ -191,26 +266,52 @@ def main():
     sc23 = np.where(np.abs(I23) > 1e-3 * np.abs(q2).max(), q2 / I23, 1.0)
     Sig[:, :, 4] *= sc13[:, None]
     Sig[:, :, 3] *= sc23[:, None]
+    # ---- sigma33 by the DYNAMIC MOMENTUM INTEGRAL over the whole field
+    # (the direct constitutive route is edge-noisy at mixed edge drivers):
+    # s33,3 = rho*u3_dd - s13,1 - s23,2, integrated from the free bottom
+    # face; u3_dd = w_dd(center) x the sin sin mode; w_dd by central FD of
+    # the per-increment center-node print of the SAME .dat
+    wc = center_w_history(dat)
+    kk = 57 * (kd + 1) - 1                     # the dump's increment index
+    kk = min(max(kk, 1), len(wc) - 2)
+    wdd = (wc[kk + 1] - 2 * wc[kk] + wc[kk - 1]) / DT ** 2
+    S13g = Sig[:, :, 4].reshape(ngx, ngx, nz)   # [jy, ix, z]
+    S23g = Sig[:, :, 3].reshape(ngx, ngx, nz)
+    d13 = np.gradient(S13g, xg, axis=1)         # d/dx
+    d23 = np.gradient(S23g, xg, axis=0)         # d/dy
+    rho_g = np.repeat([inp["material_db"][m]["rho"]
+                       for m in inp["mat_names"][:4]] +
+                      [inp["material_db"][inp["mat_names"][4]]["rho"]] * 8 +
+                      [inp["material_db"][m]["rho"]
+                       for m in inp["mat_names"][5:]], 2)
+    acc = (s1 * s2) * wdd                       # [jy, ix] modal u3_dd
+    integrand = (rho_g[None, None, :] * acc[:, :, None] - d13 - d23)
+    s33 = np.concatenate(
+        [np.zeros((ngx, ngx, 1)),
+         np.cumsum(0.5 * (integrand[:, :, 1:] + integrand[:, :, :-1])
+                   * np.diff(zg)[None, None, :], axis=2)], axis=2)
+    Sig[:, :, 2] = s33.reshape(-1, nz)
     # ---- 3-D displacement: U_a = u_a - z w,_a + warp_a ; U3 = w + w3
-    u0 = ug.reshape(-1, 3)
+    u0 = u0g.reshape(-1, 3)
     wxf, wyf = wx.reshape(-1), wy.reshape(-1)
     U1 = u0[:, 0:1] - zg[None, :] * wxf[:, None] + Warp[:, :, 0]
     U2 = u0[:, 1:2] - zg[None, :] * wyf[:, None] + Warp[:, :, 1]
     U3 = u0[:, 2:3] + Warp[:, :, 2]
-    # ---- legacy VTK structured grid: 21 x 21 x nz --------------------
+    # ---- legacy VTK structured grid on the SOLID Gauss lattice ---------
     out = os.path.join(HERE, "sandwich_rm_field.vtk")
-    nn = (NX + 1) * (NX + 1)
+    nn = ngx * ngx
     with open(out, "w") as f:
         f.write("# vtk DataFile Version 3.0\n"
                 "OpenSG-RM dehomogenized field, Nayak Ex.5 step pulse,"
-                " t = %.4f s\nASCII\nDATASET STRUCTURED_GRID\n"
+                " t = %.4f s (solid Gauss lattice)\nASCII\n"
+                "DATASET STRUCTURED_GRID\n"
                 "DIMENSIONS %d %d %d\nPOINTS %d float\n"
-                % (tstar, NX + 1, NX + 1, nz, nn * nz))
+                % (tstar, ngx, ngx, nz, nn * nz))
         for iz in range(nz):
-            for jj in range(NX + 1):
-                for ii in range(NX + 1):
+            for jj in range(ngx):
+                for ii in range(ngx):
                     f.write("%.6e %.6e %.6e\n"
-                            % (ii * dx, jj * dx, zg[iz] + H / 2))
+                            % (xg[ii], xg[jj], zg[iz] + H / 2))
         f.write("POINT_DATA %d\nVECTORS disp float\n" % (nn * nz))
         for iz in range(nz):
             for n in range(nn):
@@ -222,7 +323,8 @@ def main():
             for iz in range(nz):
                 for n in range(nn):
                     f.write("%.6e\n" % Sig[n, iz, c])
-    print("wrote %s  (21x21x%d points)" % (os.path.basename(out), nz))
+    print("wrote %s  (%dx%dx%d Gauss-lattice points)"
+          % (os.path.basename(out), ngx, ngx, nz))
     for nm, c in (("S11", 0), ("S13", 4), ("S23", 3), ("S33", 2)):
         print("  max |%s| = %.4e Pa" % (nm, np.abs(Sig[:, :, c]).max()))
 

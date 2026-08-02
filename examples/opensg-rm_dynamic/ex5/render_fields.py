@@ -38,15 +38,27 @@ tdisp.Color = [0, 0, 0]
 tdisp.Bold = 1
 
 
-def iso_view():
-    # FRONT view: face-on to the 2-D plane (looking down z, x right, y up)
+def set_view(mode):
+    # 'front': face-on to the 2-D plane (looking down z, x right, y up);
+    # 'sidex': the x = 0 edge face (thickness vertical) -- where s13/s33
+    #          live; 'sidey': the y = 0 edge face -- where s23 lives
     ResetCamera(view)
     cam = GetActiveCamera()
     fp = cam.GetFocalPoint()
     d = cam.GetDistance()
-    cam.SetPosition(fp[0], fp[1], fp[2] + d)
-    cam.SetViewUp(0, 1, 0)
+    if mode == 'front':
+        cam.SetPosition(fp[0], fp[1], fp[2] + d)
+        cam.SetViewUp(0, 1, 0)
+    elif mode == 'sidex':
+        cam.SetPosition(fp[0] - d, fp[1], fp[2])
+        cam.SetViewUp(0, 0, 1)
+    else:
+        cam.SetPosition(fp[0], fp[1] - d, fp[2])
+        cam.SetViewUp(0, 0, 1)
     ResetCamera(view)
+
+
+VIEWS = {"S13": "sidex", "S33": "sidex", "S23": "sidey"}
 
 
 def shot(arrname, comp, fname, title):
@@ -65,7 +77,7 @@ def shot(arrname, comp, fname, title):
     bar.TitleColor = [0, 0, 0]
     bar.LabelColor = [0, 0, 0]
     disp.SetScalarBarVisibility(view, True)
-    iso_view()
+    set_view(VIEWS.get(fname, 'front'))
     Render(view)
     SaveScreenshot(out + '/%s.png' % fname, view)
     disp.SetScalarBarVisibility(view, False)

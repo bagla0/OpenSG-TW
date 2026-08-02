@@ -25,3 +25,19 @@ txt = txt.replace("*END STEP", extra + "*END STEP")
 open(path, "w").write(txt)
 print("wrote %s (full-field prints every 57 increments = 2.85 ms)"
       % os.path.basename(path))
+
+# ---- the matching SOLID snapshot run: the standard step solid runs with
+# AUTOMATIC increments, so its field frames never land on the RM dump
+# instant (the closest was 3.52 ms vs 2.85 ms -- amplitude AND phase off).
+# This variant forces FIXED 50-us increments (*DYNAMIC,DIRECT) and field
+# output every 57 increments: frame 1 sits EXACTLY at t = 2.85 ms.
+spath = m.write_solid(os.path.join(HERE, "sandwich_SOLID_field.inp"),
+                      "step")
+txt = open(spath).read()
+txt = txt.replace("*DYNAMIC\n5e-05, 0.02, 5e-09, 5e-05",
+                  "*DYNAMIC,DIRECT\n5e-05, 0.02")
+txt = txt.replace("*OUTPUT, FIELD, FREQUENCY=50",
+                  "*OUTPUT, FIELD, FREQUENCY=57")
+open(spath, "w").write(txt)
+print("wrote %s (DIRECT dt=50us, field frames every 57 inc = 2.85 ms)"
+      % os.path.basename(spath))

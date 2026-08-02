@@ -12,7 +12,9 @@ from abaqus import *
 from abaqusConstants import *
 import visualization  # noqa: F401
 
-CASES = [("sandwich_SOLID_step", 0.00285), ("ex2_SOLID_step", 0.00218)]
+# the FIELD variant runs DIRECT dt=50us with frames every 57 increments,
+# so the frame nearest 0.00285 is EXACTLY the RM dump instant
+CASES = [("sandwich_SOLID_field", 0.00285)]
 UCOMPS = ["U1", "U2", "U3"]
 SCOMPS = ["S11", "S22", "S33", "S12", "S13", "S23"]
 
@@ -68,7 +70,7 @@ for name, tstar in CASES:
                                 format=PNG, canvasObjects=(vp,))
         print('IMAGES done for %s (frame %d, t=%.5f)'
               % (name, it, frames[it].frameValue))
-        if name == "sandwich_SOLID_step":
+        if name == "sandwich_SOLID_field":
             stepidx = len(odb.steps) - 1
             session.writeFieldReport(
                 fileName='sandwich_solid_step_S.rpt', append=OFF,

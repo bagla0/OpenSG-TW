@@ -39,8 +39,13 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 NX, NZT = 20, 16
 A, H = 1.524, 0.1524
-DX, DZ = A / NX, H / NZT
+DX = A / NX
 G = 0.5 / np.sqrt(3.0)          # Gauss offset in HALF-element units
+# the solid mesh is PLY-RESOLVED, not uniform: 4 x 1.905 mm plies, 8 core
+# sub-layers of 17.145 mm, 4 x 1.905 mm plies (bottom -> top)
+TPLY, TCORE = 0.0125 * H, 0.9 * H
+TLAY = [TPLY] * 4 + [TCORE / 8.0] * 8 + [TPLY] * 4
+ZK = np.concatenate([[0.0], np.cumsum(TLAY)])   # the 17 node planes
 # bottom->top layer angles of the (0/90/0/90/core/90/0/90/0) stack
 ANGS = [0.0, 90.0, 0.0, 90.0] + [0.0] * 8 + [90.0, 0.0, 90.0, 0.0]
 
@@ -93,21 +98,23 @@ def main():
         n = int(row[0]) - 1
         k, j, i = n // npl, (n % npl) // (NX + 1), n % (NX + 1)
         UN[k, j, i] = -row[1:4]                # same sign flip
-    # physical Gauss coordinates (used for both position and interpolation)
+    # physical Gauss coordinates: in-plane uniform, THROUGH-THICKNESS at
+    # the true ply-resolved layer Gauss depths
     xg = (np.repeat(np.arange(NX), 2) + 0.5
           + np.tile([-G, +G], NX) * 1.0) * DX
-    zg = (np.repeat(np.arange(NZT), 2) + 0.5
-          + np.tile([-G, +G], NZT) * 1.0) * DZ
+    zg = np.empty(2 * NZT)
+    for k in range(NZT):
+        zg[2 * k] = ZK[k] + (0.5 - G) * TLAY[k]
+        zg[2 * k + 1] = ZK[k] + (0.5 + G) * TLAY[k]
 
     def trilerp(P):
         """nodal grid (NZT+1, NX+1, NX+1, 3) -> Gauss lattice values."""
         out = np.empty((ngz, ngx, ngx, 3))
         fx = xg / DX
-        fz = zg / DZ
         i0 = np.clip(fx.astype(int), 0, NX - 1)
-        k0 = np.clip(fz.astype(int), 0, NZT - 1)
         tx = fx - i0
-        tz = fz - k0
+        k0 = np.repeat(np.arange(NZT), 2)          # layer of each station
+        tz = np.tile([0.5 - G, 0.5 + G], NZT)      # weight inside layer
         for kz in range(ngz):
             k, wz = k0[kz], tz[kz]
             Pz = (1 - wz) * P[k] + wz * P[k + 1]      # (NX+1, NX+1, 3)
