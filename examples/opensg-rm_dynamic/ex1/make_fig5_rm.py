@@ -15,9 +15,11 @@ THE OpenSG-RM ROUTE: the single isotropic layer becomes a 1-D SG ->
 MSG 8x8 (its shear block reproduces the exact 5/6-type section shear with
 no correction factor) -> plain S4 general-section deck -> *DYNAMIC with
 fixed dt = 0.045 (200 steps over t_bar = 0 .. 9, finer than Nayak's own
-dt = 0.10).  The x-mesh is chosen so the patch edges fall ON element
-lines (x: 20 elements, patch = elements 7..14 exactly); in y the patch
-edge is captured by centroid testing on a 20-element mesh.
+dt = 0.10).  The patch edges fall ON element lines in BOTH directions:
+x uniform (20 elements, patch = elements 7..14 exactly), y NON-UNIFORM
+(6 + 8 + 6 intervals with lines at b/2 -+ 0.2a), so the applied load is
+exact.  Boundary = HARD simple support (tangential edge rotations fixed),
+the Navier/Reismann-Lee condition.
 
 Run:  python examples/opensg-rm_dynamic/ex1/make_fig5_rm.py
 then on the Abaqus machine:  abaqus job=ex1_RM_fig5 interactive
@@ -60,7 +62,15 @@ r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
 ABDG = np.asarray(r["ABDG"])
 AB, G2 = ABDG[:6, :6], ABDG[6:8, 6:8]
 rho_h = RHO * H
-dx, dy = AX / NEX, BY / NEY
+dx = AX / NEX
+# NON-UNIFORM y-lines so the patch edges fall ON element lines in y too
+# (uniform y put the patch edge inside an element: 12 whole rows loaded =
+# 0.60 m covered vs the true 0.5657 m -> +6 % total load).  6 + 8 + 6
+# intervals: [0, y1], [y1, y2] (the patch), [y2, b].
+y1, y2 = BY / 2 - PATCH / 2, BY / 2 + PATCH / 2
+YL = np.concatenate([np.linspace(0.0, y1, 7)[:-1],
+                     np.linspace(y1, y2, 9)[:-1],
+                     np.linspace(y2, BY, 7)])
 
 
 def n(i, j):
@@ -77,7 +87,7 @@ L = ["*HEADING",
      "*NODE"]
 for j in range(NEY + 1):
     for i in range(NEX + 1):
-        L.append("%d, %.8f, %.8f, 0.0" % (n(i, j), i * dx, j * dy))
+        L.append("%d, %.8f, %.8f, 0.0" % (n(i, j), i * dx, YL[j]))
 L.append("*ELEMENT, TYPE=S4, ELSET=EALL")
 for j in range(NEY):
     for i in range(NEX):
@@ -100,10 +110,14 @@ for s in range(0, len(tri), 8):
     L.append(", ".join("%.6e" % v for v in tri[s:s + 8]))
 L.append("*TRANSVERSE SHEAR STIFFNESS")
 L.append("%.6e, %.6e, %.6e" % (G2[0, 0], G2[1, 1], G2[0, 1]))
-L.append("** SS-1 + drilling")
+L.append("** HARD simple support (the Navier / Reismann-Lee BC): w = 0")
+L.append("** plus the TANGENTIAL rotation zero on every edge -- at x-edges")
+L.append("** phi_y = UR1 (dof 4), at y-edges phi_x = UR2 (dof 5).  Soft SS")
+L.append("** (rotations free) runs several % more flexible at h/b = 0.2.")
 L.append("*BOUNDARY")
-for b in ("NX0, 2, 3", "NXA, 2, 3", "NY0, 1, 1", "NYB, 1, 1",
-          "NY0, 3, 3", "NYB, 3, 3", "NALL, 6, 6"):
+for b in ("NX0, 2, 4", "NXA, 2, 4", "NY0, 1, 1", "NYB, 1, 1",
+          "NY0, 3, 3", "NYB, 3, 3", "NY0, 5, 5", "NYB, 5, 5",
+          "NALL, 6, 6"):
     L.append(b)
 L.append("*AMPLITUDE, NAME=FT")
 L.append("0., 1., %g, 1." % TTOT)
@@ -114,7 +128,7 @@ L.append("*DLOAD, AMPLITUDE=FT")
 npatch = 0
 for j in range(NEY):
     for i in range(NEX):
-        xc, yc = (i + 0.5) * dx, (j + 0.5) * dy
+        xc, yc = (i + 0.5) * dx, 0.5 * (YL[j] + YL[j + 1])
         if abs(xc - AX / 2) <= PATCH / 2 and abs(yc - BY / 2) <= PATCH / 2:
             L.append("%d, P, %.6e" % (e(i, j), QP))
             npatch += 1

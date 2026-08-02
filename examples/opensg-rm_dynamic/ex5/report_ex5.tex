@@ -215,6 +215,102 @@ the solid within $\sim$5\,\% at every 50 $\mu$s --- the solid affords that
 quantity only at its dump instants.  (iv)~Cost: 37--39 s vs.\ 323--324 s
 wallclock (8.7$\times$), 2646 vs.\ $\approx$22\,500 DOF.
 
+\section{All nine component histories: 3-D FEA vs.\ OpenSG-RM}
+\label{sec:curves9}
+
+The complete \emph{history} comparison --- every displacement and stress
+component at its natural station, benchmark and candidate only (the
+\code{curves/without\_FSDT} set; the display window is 0--8 ms, the
+\code{.dat} files keep the full 20 ms).  The stations are identical in
+both models:
+
+\begin{center}\begin{tabular}{lll}\toprule
+components & station & remark\\\midrule
+$U_1,U_2,U_3$ & center node $(a/2,b/2)$ & $U_1{=}U_2{=}0$ by symmetry
+(annotated\\ & & numerical zeros)\\
+$\sigma_{11},\sigma_{22},\sigma_{12}$ & center, top surface $z=h/2$ &
+both models read at the top-ply centroid\\
+ & & depth $h/2{-}t_{ply}/2$, the solid's outermost\\
+ & & Gauss point; $\sigma_{12}{=}0$ there by symmetry\\
+$\sigma_{13}$ & $(0,b/2)$, mid-core $z{=}0$ & the max-shear edge
+stations\\
+$\sigma_{23}$ & $(a/2,0)$, mid-core $z{=}0$ & \\
+$\sigma_{33}$ & center, mid-core $z{=}0$ & RM by the dynamic momentum
+integral;\\
+ & & \emph{both models at the same time locations}\\
+ & & (the solid dump instants)\\
+\bottomrule\end{tabular}\end{center}
+
+\newcommand{\crv}[2]{\includegraphics[width=.49\textwidth]{curves/without_FSDT/#1_#2.png}}
+
+\begin{figure}[h!]\centering
+\crv{U1}{step}\crv{U2}{step}\\
+\crv{U3}{step}
+\caption{Step pulse, displacement histories at the center node.  $U_1$
+and $U_2$ are the annotated numerical zeros demanded by symmetry; $U_3$
+is the deflection history of the peak table.}
+\end{figure}
+
+\begin{figure}[h!]\centering
+\crv{S11}{step}\crv{S22}{step}\\
+\crv{S12}{step}\crv{S33}{step}\\
+\crv{S13}{step}\crv{S23}{step}
+\caption{Step pulse, the six stress histories.  Top row: in-plane bending
+stresses at the center top surface.  Middle: the symmetry-zero
+$\sigma_{12}$ and the mid-core $\sigma_{33}$ at the common dump instants.
+Bottom: the interlaminar shear histories at mid-core.}
+\end{figure}
+
+\begin{figure}[h!]\centering
+\crv{U1}{blast}\crv{U2}{blast}\\
+\crv{U3}{blast}
+\caption{Blast pulse, displacement histories at the center node.}
+\end{figure}
+
+\begin{figure}[h!]\centering
+\crv{S11}{blast}\crv{S22}{blast}\\
+\crv{S12}{blast}\crv{S33}{blast}\\
+\crv{S13}{blast}\crv{S23}{blast}
+\caption{Blast pulse, the six stress histories, stations as above.}
+\end{figure}
+
+\paragraph{Peak values over the 0--8 ms window.}
+\begin{center}\begin{tabular}{lrrcrrc}\toprule
+ & \multicolumn{3}{c}{step} & \multicolumn{3}{c}{blast}\\
+component & RM & solid & $\Delta$ & RM & solid & $\Delta$\\\midrule
+$\sigma_{11}$ [GPa] & 31.41 & 25.61 & $+22.7\,\%$ & 21.40 & 17.95 &
+$+19.2\,\%$\\
+$\sigma_{22}$ [GPa] & 3.31 & 2.86 & $+15.8\,\%$ & 2.25 & 2.00 &
+$+12.2\,\%$\\
+$\sigma_{13}$ [MPa] & 234.7 & 228.9 & $+2.6\,\%$ & 159.4 & 155.6 &
+$+2.5\,\%$\\
+$\sigma_{23}$ [MPa] & 229.5 & 224.1 & $+2.4\,\%$ & 156.0 & 152.2 &
+$+2.5\,\%$\\
+$\sigma_{33}$ mean 0.5--8 ms [MPa] & 34.5 & 34.1 & $+1.1\,\%$ & 10.8 &
+16.1 & ---\\
+\bottomrule\end{tabular}\end{center}
+
+\paragraph{Reading the nine panels.}
+(i)~The global response ($U_3$) overlays as before ($+1.4/{+}1.1\,\%$).
+(ii)~The \emph{design-driving} interlaminar shears $\sigma_{13}$,
+$\sigma_{23}$ agree to $2.4$--$2.6\,\%$ at the peaks --- and the RM curve
+exists at every 50 $\mu$s while the solid affords only its dump instants.
+(iii)~The top-face in-plane stresses are the honest weak spot: RM runs
+$12$--$23\,\%$ high at the peaks with a slight period lag, consistent
+with the field-section observations (pointwise recovery vs.\ the solid's
+element-averaged Gauss values, and the solid's support-edge boundary
+layers that plate kinematics does not carry).  (iv)~$\sigma_{33}$
+mid-core: the RM momentum integral reproduces the \emph{quasi-static
+core-compression level} --- step means 34.5 vs.\ 34.1 MPa
+($q_0/2=34.5$ MPa at mid-depth) --- while the solid superposes the
+genuinely 3-D core-compression dynamics: the initial through-thickness
+wave spike (72.6 MPa at 0.25 ms) and a slow large-amplitude oscillation
+about that same mean; under the blast the load decays but that ringing
+persists, which is why the 0.5--8 ms means separate (10.8 vs.\
+16.1 MPa).  This is the thickness-stretch physics already flagged in the
+caveats, now visible as a history; the panel is plotted at the common
+dump instants for a like-for-like read.
+
 \section{Full-field comparison: OpenSG-RM vs.\ 3-D FEA, all nine
 components}
 \label{sec:field}
