@@ -19,6 +19,17 @@ mesh:
   n_per_layer: 1          # SG elements per physical ply
   elem_order: 4           # 4 = 5-noded quartic (exact for the warping ladder)
 
+# --- the plate, for abaqus_inp.py ------------------------------------------
+# Only what the deck needs: geometry, in-plane mesh, load and time.
+plate:
+  a: 1.524                # plate side in x [m]
+  b: 1.524                # plate side in y [m]
+  nx: 20                  # S4 elements along x
+  ny: 20                  # S4 elements along y
+  q0: 68.9476e6           # peak pressure [Pa], applied as q0 sin(pi x/a) sin(pi y/b)
+  dt: 5.0e-5              # fixed *DYNAMIC increment [s]
+  ttot: 0.02              # total time [s]
+
 # --- materials -------------------------------------------------------------
 # E  = [E1, E2, E3]      G  = [G12, G13, G23]      nu = [nu12, nu13, nu23]
 # rho is the mass density [kg/m^3]; the section mass rho*h is summed from it.
