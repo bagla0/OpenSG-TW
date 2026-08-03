@@ -1,8 +1,9 @@
-"""abaqus_inp.py -- layup_db.yaml + layup_db_plate_homo.out  ->  layup_db.inp
+"""abaqus_inp.py -- layup_db.yaml + 1dsg.yaml  ->  layup_db.inp
 
-The plate law is READ from the .out that 1d_sg.py already wrote, not
-recomputed -- so this script needs neither JAX nor opensg_jax, just the
-YAML for the plate and the .out for the section.
+The plate law is homogenized here from the SG that 1d_sg.py wrote, rather
+than parsed back out of its .out -- one rm_plate_msg call is cheaper than
+carrying a text parser and keeping it in step with the .out layout, and the
+deck gets full precision instead of the printed six figures.
 
 A plain Abaqus S4 plate whose ONLY constitutive input is the homogenized
 plate law: the 6x6 goes in as *SHELL GENERAL SECTION (DENSITY = rho h) and,
@@ -16,33 +17,19 @@ double-sine pressure q0 sin(pi x/a) sin(pi y/b) held over the step, implicit
 Run:  python abaqus_inp.py [layup_db.yaml]
 """
 import os
+import sys
 
 import numpy as np
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = HERE
+while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
+    ROOT = os.path.dirname(ROOT)
+sys.path.insert(0, ROOT)
 
-
-def read_homo(path):
-    """The plate law and section mass out of the .out that 1d_sg.py wrote.
-
-    The matrix is the block between the "rows/cols:" header and the blank
-    line after it; the mass is on the "section mass" line.
-    """
-    M, mass, on = [], None, False
-    for ln in open(path):
-        if ln.startswith("rows/cols:"):
-            on = True
-        elif ln.startswith("section mass"):
-            mass, on = float(ln.split("=")[1].split()[0]), False
-        elif on:
-            tok = ln.split()
-            if tok:
-                M.append([float(v) for v in tok])
-            else:
-                on = False
-    return np.array(M), mass
-
+from opensg_jax.fe_jax.segment_plate import read_plate_sg_yaml
+from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
 
 # ---- input -----------------------------------------------------------------
 DB = os.path.join(HERE, "layup_db.yaml")
@@ -55,16 +42,22 @@ A, B = float(p["a"]), float(p["b"])
 NX, NY = int(p["nx"]), int(p["ny"])
 Q0, DT, TTOT = float(p["q0"]), float(p["dt"]), float(p["ttot"])
 
-# the section law, already computed by 1d_sg.py -- read it, do not redo it
-M, rho_h = read_homo(os.path.splitext(DB)[0] + "_plate_homo.out")
-AB = M[:6, :6]
-G2 = M[6:8, 6:8] if model == 1 else None
+# the section law: homogenize the SG that 1d_sg.py wrote.  n_per_layer and
+# elem_order come back from the mesh file itself, so the section can never
+# disagree with the mesh it was built on.
+inp = read_plate_sg_yaml(os.path.join(HERE, "1dsg.yaml"))
+r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
+                 inp["material_db"], n_per_layer=inp["n_per_layer"],
+                 elem_order=inp["elem_order"], fraction=fraction)
+AB = np.asarray(r["A6"])
+G2 = np.asarray(r["ABDG"])[6:8, 6:8] if model == 1 else None
+rho_h = sum(inp["material_db"][m]["rho"] * t
+            for m, t in zip(inp["mat_names"], inp["thick"]))
 print("model %d: %s -- the deck %s the *TRANSVERSE SHEAR STIFFNESS card"
       % (model, "shear-refined" if model == 1 else "classical",
          "carries" if model == 1 else "omits"))
-print("section from %s, reference fraction %g, rho*h = %.4f kg/m^2"
-      % (os.path.basename(os.path.splitext(DB)[0] + "_plate_homo.out"),
-         fraction, rho_h))
+print("section from 1dsg.yaml, reference fraction %g, rho*h = %.4f kg/m^2"
+      % (fraction, rho_h))
 
 # ---- mesh helpers ----------------------------------------------------------
 dx, dy = A / NX, B / NY
