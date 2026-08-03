@@ -208,12 +208,14 @@ def layup_label(angles, mat_names):
     Plies of the majority (face) material are named by their fibre angle, anything else
     by its material -- the sandwich convention that writes the core as a token rather
     than a meaningless 0 degrees.  A palindromic stack collapses onto its symmetric half
-    with the ``s`` subscript, and an odd stack puts the classical overbar on the
-    mid-plane ply::
+    with the ``s`` subscript; an odd stack keeps its mid-plane ply as the last token
+    (Nayak's own form for this sandwich).  The classical overbar that would mark that
+    ply is deliberately NOT drawn -- the figure shows the reference plane as a dotted
+    line straight through the mesh, which says the same thing where you can see it::
 
-        [0/90/0]                 -> $[0/\\overline{90}]_s$
-        [0/90/0/90/core]s        -> $[0/90/0/90/\\overline{core}]_s$
-        [0/45/-45/90] (no symm.) -> $[0/45/-45/90]$
+        [0/90/0]                 -> $[0/90]_s$
+        [0/90/0/90/core]s        -> $[0/90/0/90/\\mathrm{core}]_s$
+        [0/45/-45/90] (no symm.) -> $[0/45/{-}45/90]$
     """
     face = max(set(mat_names), key=mat_names.count)
     # "{-}45", not "-45": braces make the minus an ordinary symbol, so mathtext
@@ -222,8 +224,7 @@ def layup_label(angles, mat_names):
            for a, m in zip(angles, mat_names)]
     n = len(tok)
     if n > 1 and tok == tok[::-1]:
-        half = tok[:n // 2] + ([("\\overline{%s}" % tok[n // 2])] if n % 2 else [])
-        return "$[%s]_s$" % "/".join(half)
+        return "$[%s]_s$" % "/".join(tok[:(n + 1) // 2])
     return "$[%s]$" % "/".join(tok)
 
 
@@ -252,12 +253,15 @@ def _draw_plate_sg(png_path, node_x, elements, elem_sets, section_sets,
     fig, ax = plt.subplots(figsize=(2.1, 5.2))
     for e, el in enumerate(elements):                 # each element = one line segment
         ax.plot([0.0, 0.0], [z[el[0]], z[el[-1]]], "-",
-                color=colr[mat_names[ply_of[e]]], lw=13.0,
+                color=colr[mat_names[ply_of[e]]], lw=6.5,
                 solid_capstyle="butt", zorder=1)
     ax.plot(np.zeros_like(z), z, ".", ms=2.5, color="0.15", zorder=3)
     for m in mats:
         label = (material_db or {}).get(m, {}).get("full_name") or m
         ax.plot([], [], "-", color=colr[m], lw=8, label=label)
+    # x3 = 0 IS the reference plane by construction of the mesh -- draw it, rather
+    # than encoding it as an overbar in the stacking sequence
+    ax.axhline(0.0, ls=":", color="k", lw=1.3, zorder=4, label="reference plane")
 
     ax.set_xlim(-0.05, 0.05)
     ax.set_xticks([])
