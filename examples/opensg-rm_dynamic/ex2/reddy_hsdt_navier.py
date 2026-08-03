@@ -46,8 +46,10 @@ from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
 H = 0.1524              # plate thickness h [m] (Ex.2 value, Ex.5 inherits it)
 A = 10.0 * H            # side a = b (Ex.5: a/h = 10) [m]
 B = A                   # square plate
-TPLY = 0.0125 * H       # one GE ply: per-face laminate 2hf/h = 0.05, 4 plies
-TCORE = 0.9 * H         # HEREX C70.130 PVC foam core thickness [m]
+FACE_FRAC = 0.05        # paper Ex.5: 2 h_f / h, i.e. BOTH face sheets together
+N_PLY = 8               # eight GE plies, four per face
+TPLY = FACE_FRAC * H / N_PLY    # = 0.00625 h, one GE ply [m]
+TCORE = (1.0 - FACE_FRAC) * H   # = 0.95 h, HEREX C70.130 PVC foam core [m]
 EL, ET = 128.0e9, 11.0e9        # face: fibre / transverse moduli [Pa]
 GLT, G13F, G23F = 4.48e9, 4.48e9, 1.53e9   # face shear moduli [Pa]
 NULT = 0.25             # face major Poisson ratio

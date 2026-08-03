@@ -41,10 +41,14 @@ NX, NZT = 20, 16
 A, H = 1.524, 0.1524
 DX = A / NX
 G = 0.5 / np.sqrt(3.0)          # Gauss offset in HALF-element units
-# the solid mesh is PLY-RESOLVED, not uniform: 4 x 1.905 mm plies, 8 core
-# sub-layers of 17.145 mm, 4 x 1.905 mm plies (bottom -> top)
-TPLY, TCORE = 0.0125 * H, 0.9 * H
-TLAY = [TPLY] * 4 + [TCORE / 8.0] * 8 + [TPLY] * 4
+# the solid mesh is PLY-RESOLVED, not uniform: 4 plies, 8 core sub-layers,
+# 4 plies (bottom -> top).  Same algebra as make_1dsg.py: the paper's
+# 2 h_f / h = 0.05 is BOTH faces, so a ply is FACE_FRAC*h/8 and the core
+# is the remaining (1 - FACE_FRAC)*h.
+FACE_FRAC, N_PLY, NZC = 0.05, 8, 8
+TPLY, TCORE = FACE_FRAC * H / N_PLY, (1.0 - FACE_FRAC) * H
+TLAY = [TPLY] * 4 + [TCORE / NZC] * NZC + [TPLY] * 4
+assert abs(sum(TLAY) - H) < 1e-12 and len(TLAY) == NZT
 ZK = np.concatenate([[0.0], np.cumsum(TLAY)])   # the 17 node planes
 # bottom->top layer angles of the (0/90/0/90/core/90/0/90/0) stack
 ANGS = [0.0, 90.0, 0.0, 90.0] + [0.0] * 8 + [90.0, 0.0, 90.0, 0.0]
