@@ -91,3 +91,77 @@ sgmesh.msh
 /tests/research/mh104_9cells/
 
 examples/TW-paper/xsec_paper/vtk/
+
+# ---------------------------------------------------------------------------
+# Generated run output (regenerable).  These directories were carrying ~5,000
+# untracked files, which made the VS Code Source Control view unusable and its
+# file decorations go stale.  The rules below ignore the DATA and deliberately
+# keep the SCRIPTS that produce it -- several of these trees hold .py/.sh next
+# to their output, so a blanket directory ignore would have hidden real source.
+# ---------------------------------------------------------------------------
+
+# per-station dehomogenization / shell output of the IEA dataset
+examples/data/iea_all_stations/dehom51/**
+examples/data/iea_all_stations/shell51/**
+examples/data/iea_all_stations/dehom_iea/**
+!examples/data/iea_all_stations/dehom51/**/
+!examples/data/iea_all_stations/shell51/**/
+!examples/data/iea_all_stations/dehom_iea/**/
+!examples/data/iea_all_stations/**/*.py
+!examples/data/iea_all_stations/**/*.sh
+!examples/data/iea_all_stations/**/*.md
+
+# pure output directories (verified: no source files inside)
+/mitc_rm_segment/out/
+/docs/tutorials/_rmout/
+/examples/RM_taper/_out/
+/tests/data/abd/
+
+# Remaining generated data (~2 GB of .yaml/.dat/.glb/.sg/.png/.K/.inp run
+# artifacts).  Same idiom: ignore the data, keep the scripts -- every one of
+# these trees has .py/.sh/.md sitting next to its output.
+examples/data/iea_all_stations/**
+examples/data/2d_yaml/**
+examples/data/dehom_st15/**
+examples/TW-paper/**
+examples/buckling/bar_urc_fsm/**
+examples/garg/**
+examples/yu2003/abaqus+plateglobal/**
+examples/yu2003/dynamic/**
+examples/RM_taper/**
+examples/taper_jax/out_iea_taper/**
+third_party/OpenSG_io/scripts/**
+mitc_rm_segment/**
+!examples/data/iea_all_stations/**/
+!examples/data/2d_yaml/**/
+!examples/data/dehom_st15/**/
+!examples/TW-paper/**/
+!examples/buckling/bar_urc_fsm/**/
+!examples/garg/**/
+!examples/yu2003/abaqus+plateglobal/**/
+!examples/yu2003/dynamic/**/
+!examples/RM_taper/**/
+!examples/taper_jax/out_iea_taper/**/
+!third_party/OpenSG_io/scripts/**/
+!mitc_rm_segment/**/
+!examples/data/iea_all_stations/**/*.py
+!examples/data/2d_yaml/**/*.py
+!examples/data/dehom_st15/**/*.py
+!examples/TW-paper/**/*.py
+!examples/TW-paper/**/*.md
+!examples/TW-paper/**/*.sh
+!examples/buckling/bar_urc_fsm/**/*.py
+!examples/garg/**/*.py
+!examples/yu2003/abaqus+plateglobal/**/*.py
+!examples/yu2003/dynamic/**/*.py
+!examples/RM_taper/**/*.py
+!examples/taper_jax/out_iea_taper/**/*.py
+!third_party/OpenSG_io/scripts/**/*.py
+!mitc_rm_segment/**/*.py
+!mitc_rm_segment/**/*.md
+
+# LaTeX build artifacts and scratch
+/.commit_msg.txt
+docs/**/*.aux
+docs/**/*.toc
+docs/**/*.out
