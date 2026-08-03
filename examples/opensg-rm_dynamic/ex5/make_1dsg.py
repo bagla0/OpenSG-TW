@@ -64,10 +64,10 @@ layup = {"mat_names": ["ge"] * 4 + ["herex"] + ["ge"] * 4,
 # bottom -> top: (0/90/0/90/core/90/0/90/0) = (0/90/0/90/core)s
 
 yml = os.path.join(HERE, "sandwich_sg.yaml")
-plate_sg_yaml(yml, layup, MATERIAL_DB, fraction=0.5)
-inp = read_plate_sg_yaml(yml)               # the read also draws the mesh PNG
-print("wrote %s + %s" % (os.path.basename(yml), os.path.basename(inp["png"])))
+plate_sg_yaml(yml, layup, MATERIAL_DB, fraction=0.5)    # writes the yaml AND the png
+print("wrote %s + %s" % (os.path.basename(yml), "sandwich_sg.png"))
 
+inp = read_plate_sg_yaml(yml)
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                  inp["material_db"], fraction=inp["fraction"])
 ROWS = ("e11", "e22", "g12", "k11", "k22", "k12", "2g13", "2g23")

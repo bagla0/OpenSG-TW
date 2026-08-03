@@ -67,8 +67,8 @@ LAYUP = {"mat_names": ["ge25"] * 3, "thick": [H / 3.0] * 3,
          "angles": [0.0, 90.0, 0.0]}
 
 yml = os.path.join(HERE, "ex2_sg.yaml")
-plate_sg_yaml(yml, LAYUP, MATERIAL_DB, fraction=0.5)
-inp = read_plate_sg_yaml(yml)               # the read also draws the mesh PNG
+plate_sg_yaml(yml, LAYUP, MATERIAL_DB, fraction=0.5)    # writes the yaml AND the png
+inp = read_plate_sg_yaml(yml)
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                  inp["material_db"], fraction=inp["fraction"])
 ABDG = np.asarray(r["ABDG"])

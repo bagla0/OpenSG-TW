@@ -44,7 +44,7 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
 sys.path.insert(0, ROOT)
 
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
-from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, read_plate_sg_yaml
+from opensg_jax.fe_jax.segment_plate import plate_sg_yaml
 
 # ----------------------------------------------------------------------------
 # ALL CASE DATA (Nayak Ex.4 digits; shared with collect_freq.py)
@@ -151,8 +151,7 @@ def main():
         yml = os.path.join(HERE, "ex4_%s_sg.yaml" % slug)
         plate_sg_yaml(yml, {"mat_names": list(mats), "thick": list(thick),
                             "angles": list(map(float, angles))},
-                      MATERIAL_DB, fraction=0.5)
-        read_plate_sg_yaml(yml)             # the read also draws the mesh PNG
+                      MATERIAL_DB, fraction=0.5)    # writes the yaml AND the png
         path, rho_h = write_freq_inp(slug, angles, mats, thick)
         print("wrote %s (rho_h = %.4f kg/m^2)"
               % (os.path.basename(path), rho_h))

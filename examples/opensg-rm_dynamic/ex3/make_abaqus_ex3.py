@@ -79,7 +79,7 @@ def write_static(S):
              "angles": [0.0, 0.0, 0.0]}
     yml = os.path.join(HERE, "ex3_S%d_sg.yaml" % S)
     plate_sg_yaml(yml, layup, MATERIAL_DB, fraction=0.5)
-    inp = read_plate_sg_yaml(yml)           # the read also draws the mesh PNG
+    inp = read_plate_sg_yaml(yml)
     r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                      inp["material_db"], fraction=inp["fraction"])
     ABDG = np.asarray(r["ABDG"])

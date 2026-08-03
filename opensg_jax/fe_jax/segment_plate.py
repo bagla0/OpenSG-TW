@@ -7,9 +7,10 @@ result to ``msg_rm_plate.rm_plate_msg``:
 
     layup dict --plate_sg_yaml--> 1-D SG YAML --read_plate_sg_yaml--> rm_plate_msg(...)
 
-``read_plate_sg_yaml`` also draws the mesh PNG by default (``png=False`` to skip), from
-the document it has just parsed -- so one read gives you both the homogenizer's arguments
-and the picture.  ``plot_plate_sg`` remains as a thin shim over it.
+``plate_sg_yaml`` draws the mesh PNG as it generates the SG (``png=False`` to skip),
+from the document it has just built -- so the picture costs no file read, and
+``read_plate_sg_yaml`` stays a pure reader.  ``plot_plate_sg`` is for a YAML you did
+not just write.
 
 Distinguish this from the 1-D SHELL SG YAML (e.g. ``examples/data/1d_yaml/st15_shell.yaml``):
 that one is the CONTOUR of a cross-section -- line elements running around the airfoil, each
@@ -120,23 +121,33 @@ def plate_sg_dict(layup, material_db, n_per_layer=1, elem_order=4, fraction=0.5)
             "sections": sections}
 
 
-def plate_sg_yaml(path, layup, material_db, n_per_layer=1, elem_order=4, fraction=0.5):
-    """Write the through-thickness 1-D SG YAML for a layup.  Returns the written dict."""
+def plate_sg_yaml(path, layup, material_db, n_per_layer=1, elem_order=4, fraction=0.5,
+                  png=True, png_path=None):
+    """Write the through-thickness 1-D SG YAML for a layup.  Returns the written dict.
+
+    The mesh PNG is drawn here too (``png=False`` to skip), straight from the document
+    this call has just built -- so generating an SG costs ZERO reads: neither this
+    function nor the caller has to open the file again just to picture it.  Use
+    ``plot_plate_sg`` only for a YAML you did not just write.
+    """
     doc = plate_sg_dict(layup, material_db, n_per_layer, elem_order, fraction)
     d = os.path.dirname(os.path.abspath(path))
     if d and not os.path.isdir(d):
         os.makedirs(d)
     with open(path, "w") as f:
         yaml.safe_dump(doc, f, sort_keys=False, default_flow_style=None)
+    if png:
+        _draw_from_doc(doc, png_path or (os.path.splitext(path)[0] + ".png"),
+                       material_db)
     return doc
 
 
-def read_plate_sg_yaml(path, atol=1e-9, png=True, png_path=None):
-    """Read a plate 1-D SG YAML back into the arguments ``rm_plate_msg`` takes,
-    and (by default) draw the mesh PNG from that same parse.
+def read_plate_sg_yaml(path, atol=1e-9):
+    """Read a plate 1-D SG YAML back into the arguments ``rm_plate_msg`` takes.
 
     Returns a dict with keys thick / angles / mat_names / material_db / fraction /
-    n_per_layer / elem_order / node_x / png.
+    n_per_layer / elem_order / node_x.  A pure reader -- the mesh PNG is drawn by
+    ``plate_sg_yaml`` when the SG is generated, so nothing here re-runs to plot.
 
     Ply thicknesses and the reference fraction are taken from the stored fields and then
     CROSS-CHECKED against the mesh (summed element spans, node_x[0]) to ``atol`` relative.
@@ -144,12 +155,6 @@ def read_plate_sg_yaml(path, atol=1e-9, png=True, png_path=None):
     turns a 0.004 ply into 0.004000000000000002, which propagates to ~1e-14 in the 8x8 --
     while checking keeps the round trip bit-exact AND still catches a corrupt or
     hand-edited file, where mesh and header would genuinely disagree.
-
-    ``png=True`` (the default) writes the mesh picture next to the YAML and returns its
-    path under the ``"png"`` key; ``png=False`` skips the drawing entirely, and matplotlib
-    is only imported when it is actually needed.  The plot is produced HERE, from the
-    document this call already parsed, rather than by re-opening the file -- reading a
-    YAML twice to draw what the first read already knew was pure waste.
     """
     with open(path, "r") as f:
         doc = yaml.safe_load(f)
@@ -189,17 +194,9 @@ def read_plate_sg_yaml(path, atol=1e-9, png=True, png_path=None):
     if h > 0 and abs(-frac * h - node_x[0]) > atol * h:
         raise ValueError("%s: reference_fraction %g puts the bottom face at %g, "
                          "but the first node is at %g" % (path, frac, -frac * h, node_x[0]))
-    out = {"thick": thick, "angles": angles, "mat_names": mat_names,
-           "material_db": material_db, "n_per_layer": counts[0],
-           "elem_order": len(elements[0]) - 1, "fraction": frac, "node_x": node_x,
-           "png": None}
-    if png:
-        section_sets = [s["elementSet"] for s in doc["sections"]]
-        out["png"] = _draw_plate_sg(
-            png_path or (os.path.splitext(path)[0] + ".png"),
-            node_x, elements, elem_sets, section_sets,
-            mat_names, thick, angles, material_db)
-    return out
+    return {"thick": thick, "angles": angles, "mat_names": mat_names,
+            "material_db": material_db, "n_per_layer": counts[0],
+            "elem_order": len(elements[0]) - 1, "fraction": frac, "node_x": node_x}
 
 
 def layup_label(angles, mat_names):
@@ -228,8 +225,28 @@ def layup_label(angles, mat_names):
     return "$[%s]$" % "/".join(tok)
 
 
+def _draw_from_doc(doc, png_path, material_db=None):
+    """Draw the mesh straight out of an SG document (the dict that IS the YAML).
+
+    Used by ``plate_sg_yaml`` on the document it just built -- no file is reopened --
+    and by ``plot_plate_sg`` on one it has just loaded.
+    """
+    node_x = np.array([float(np.atleast_1d(nd)[0]) for nd in doc["nodes"]])
+    elements = [[int(v) - 1 for v in el] for el in doc["elements"]]
+    elem_sets = {s["name"]: [int(v) - 1 for v in s["labels"]]
+                 for s in doc["sets"]["element"]}
+    section_sets = [s["elementSet"] for s in doc["sections"]]
+    mat_names = [str(s["material"]) for s in doc["sections"]]
+    angles = [float(s["angle"]) for s in doc["sections"]]
+    if material_db is None:                       # names carried in the file itself
+        material_db = {m["name"]: {"full_name": m.get("full_name") or m["name"]}
+                       for m in doc["materials"]}
+    return _draw_plate_sg(png_path, node_x, elements, elem_sets, section_sets,
+                          mat_names, angles, material_db)
+
+
 def _draw_plate_sg(png_path, node_x, elements, elem_sets, section_sets,
-                   mat_names, thick, angles, material_db=None):
+                   mat_names, angles, material_db=None):
     """Draw the 1-D through-thickness mesh from ALREADY-PARSED arrays and save it.
 
     Deliberately plain: each element is the line segment between its own end nodes,
@@ -260,8 +277,9 @@ def _draw_plate_sg(png_path, node_x, elements, elem_sets, section_sets,
         label = (material_db or {}).get(m, {}).get("full_name") or m
         ax.plot([], [], "-", color=colr[m], lw=8, label=label)
     # x3 = 0 IS the reference plane by construction of the mesh -- draw it, rather
-    # than encoding it as an overbar in the stacking sequence
-    ax.axhline(0.0, ls=":", color="k", lw=1.3, zorder=4, label="reference plane")
+    # than encoding it as an overbar in the stacking sequence (no legend entry:
+    # a dotted line straight through the mid-plane needs no caption)
+    ax.axhline(0.0, ls=":", color="k", lw=1.3, zorder=4)
 
     ax.set_xlim(-0.05, 0.05)
     ax.set_xticks([])
@@ -276,12 +294,14 @@ def _draw_plate_sg(png_path, node_x, elements, elem_sets, section_sets,
 
 
 def plot_plate_sg(path, png_path=None):
-    """Backward-compatible shim: draw a plate SG YAML's mesh and return the PNG path.
+    """Draw the mesh of an EXISTING plate SG YAML.  Returns the PNG path.
 
-    The drawing now happens inside ``read_plate_sg_yaml``; call that directly (its
-    ``"png"`` key is this return value) rather than reading the file a second time
-    just to plot it.
+    Only needed for a file you did not just write -- ``plate_sg_yaml`` already draws
+    the PNG as it generates the SG, with no read at all.  One parse here, not the
+    three this used to cost.
     """
-    return read_plate_sg_yaml(path, png=True, png_path=png_path)["png"]
+    with open(path, "r") as f:
+        doc = yaml.safe_load(f)
+    return _draw_from_doc(doc, png_path or (os.path.splitext(path)[0] + ".png"))
 
 
