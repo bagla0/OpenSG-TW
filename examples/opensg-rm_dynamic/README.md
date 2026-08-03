@@ -1,5 +1,11 @@
 # opensg-rm_dynamic — the Nayak–Shenoi–Moy transient sandwich benchmark
 
+> **Want to run it, not read about it?** → **[HOWTO_RUN.md](HOWTO_RUN.md)** is
+> the start-to-finish operator's guide: SG mesh → Abaqus deck → remote run →
+> `.dat` extraction → post-processing, naming the script for every step and the
+> constants to change for a new plate. This file explains *what the benchmark
+> is*; [RESULTS.md](RESULTS.md) reports *what we measured*.
+
 **The benchmark case** (all digits quoted from the paper, PDF in
 `...\Reissner-mindlin-transverse_Shear_msg\opensg_rm dynamic\`):
 
@@ -79,9 +85,9 @@ results and the full narrative are in [RESULTS.md](RESULTS.md)**:
 | script | output |
 |---|---|
 | `ex5/recover_dyn.py` | individual three-way figures, each with its own legend: `w_history_*`, `profile_{s13,s23,s33,s11}_*`, `iface_s13_*` (+ `dyn_*.dat` numbers) |
-| `ex5/reddy_hsdt_navier.py` | the ANALYTICAL Reddy-TSDT (= Nayak's theory) + RM Navier responses, `reddy_wt_*/profiles_*/iface_*.dat`, `reddy_fig13.png`, and the Ex.2 Table-3 anchor check |
+| `ex2/reddy_hsdt_navier.py` (moved from `ex5/`) | the ANALYTICAL Reddy-TSDT (= Nayak's theory) + RM Navier responses and the Ex.2 Table-3 anchor check. Call `set_case('ex2')` first — the module's default state is the Ex.5 sandwich. `main()` prints; it writes nothing to disk |
 | `ex4/make_abaqus_freq.py` | the three SG yamls + the three `ex4_*_freq.inp` Abaqus `*FREQUENCY` decks (S4 + MSG ABDG general section, clamped cantilever) |
-| `ex4/collect_freq.py` | `ex4_freq_table.dat` + per-layup four-curve figures `ex4_freq_*.png` — Table-5 literature data (Crawley experiment/FEM, Nayak Reddy-HSDT FE) + the OpenSG-RM/Abaqus column |
+| `ex4/collect_freq.py` | `ex4_freq_table.dat` — Table-5 literature data (Crawley experiment/FEM, Nayak Reddy-HSDT FE) + the OpenSG-RM column and two %-error columns. Table only; it does not draw figures |
 
 ## Supporting literature (downloaded alongside the benchmark)
 

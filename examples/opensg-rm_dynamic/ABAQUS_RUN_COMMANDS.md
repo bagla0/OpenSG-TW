@@ -1,5 +1,11 @@
 # Abaqus remote run — exact commands used (for future reruns)
 
+> **Note.** Every `for %j in (...)` loop below is the form you type at an
+> **interactive** Command Prompt. Inside a `.bat` file the loop variable must be
+> **doubled** — `for %%j in (...) do call abaqus job=%%j ...` — or the loop
+> expands to nothing and runs zero jobs. See
+> [HOWTO_RUN.md §4](HOWTO_RUN.md) for the batch-file template actually used.
+
 Machine: RDP to **10.165.18.74** (Windows, Abaqus 2024, license server
 `iacmi-vlm.ecn.purdue.edu`). All commands below were typed in a plain
 **Command Prompt** on that machine. Working directory: `C:\Temp\opensg_dyn`.
@@ -93,12 +99,44 @@ copy /Y sandwich_*.dat "C:\Users\bagla0\OneDrive - purdue.edu\202603_PlateRM\070
   the cmd **title bar** first, then retype; the trailing Enter of a paste is
   sometimes swallowed — press Enter again if the command sits unexecuted.
 
+## 2d. The Ex.1 job (Fig-5 patch-load plate, ~20 s)
+
+```bat
+copy /Y "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex1\ex1_RM_fig5.inp" .
+call abaqus job=ex1_RM_fig5 cpus=4 interactive ask_delete=OFF
+copy /Y ex1_RM_fig5.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex1\Abaqus_results\"
+```
+
+## 2e. The Ex.3 jobs (static Pagano sandwich, ~30 s each)
+
+```bat
+copy /Y "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex3\ex3_RM_*.inp" .
+for %%j in (ex3_RM_S10 ex3_RM_S100) do call abaqus job=%%j interactive ask_delete=OFF
+copy /Y ex3_RM_*.dat "\\roger.ecn.purdue.edu\bagla0\OpenSG-TW-claude\examples\opensg-rm_dynamic\ex3\Abaqus_results\"
+```
+
 ## 4. Post-process (local/compute side)
 
-With the four `.dat` files in `Abaqus_results/`:
+Use the environment python explicitly — even the pure-text post-processors
+import JAX transitively:
 
 ```bash
-python examples/opensg-rm_dynamic/ex5/reddy_hsdt_navier.py   # Reddy curves first
-python examples/opensg-rm_dynamic/ex5/recover_dyn.py         # both pulses
-python examples/opensg-rm_dynamic/ex5/recover_dyn.py --kind step
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex5/recover_dyn.py
 ```
+
+With the `.dat` files in `Abaqus_results/`, per case:
+
+```bash
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex5/recover_dyn.py
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex5/make_curves.py
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex5/make_curves9.py
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex2/compare_ex2.py
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex4/collect_freq.py
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex1/plot_fig5.py
+```
+
+`recover_dyn.py` also takes `--kind step|blast` to do one pulse only.
+
+The Reddy-TSDT analytical anchor moved to `ex2/reddy_hsdt_navier.py`
+(it is **not** in `ex5/` any more) and needs `set_case('ex2')` — its module
+default state is the Ex.5 sandwich.
