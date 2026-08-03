@@ -37,7 +37,7 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
 sys.path.insert(0, ROOT)
 
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
-from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, plot_plate_sg, \
+from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, \
     read_plate_sg_yaml
 
 # ----------------------------------------------------------------------------
@@ -50,13 +50,13 @@ PATCH = 0.4 * AX            # square patch side, centered
 NEX, NEY = 20, 20
 DT, TTOT = 0.045, 9.0
 MATERIAL_DB = {"iso": {"E": [EMOD] * 3, "G": [EMOD / (2 * (1 + NU))] * 3,
-                       "nu": [NU] * 3, "rho": RHO}}
+                       "nu": [NU] * 3, "rho": RHO,
+                       "full_name": "isotropic ($E=1$, $\\nu=0.3$)"}}
 
 yml = os.path.join(HERE, "ex1_sg.yaml")
 plate_sg_yaml(yml, {"mat_names": ["iso"], "thick": [H], "angles": [0.0]},
               MATERIAL_DB, fraction=0.5)
-plot_plate_sg(yml)
-inp = read_plate_sg_yaml(yml)
+inp = read_plate_sg_yaml(yml)               # the read also draws the mesh PNG
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                  inp["material_db"], fraction=inp["fraction"])
 ABDG = np.asarray(r["ABDG"])

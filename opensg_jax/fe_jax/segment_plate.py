@@ -7,6 +7,10 @@ result to ``msg_rm_plate.rm_plate_msg``:
 
     layup dict --plate_sg_yaml--> 1-D SG YAML --read_plate_sg_yaml--> rm_plate_msg(...)
 
+``read_plate_sg_yaml`` also draws the mesh PNG by default (``png=False`` to skip), from
+the document it has just parsed -- so one read gives you both the homogenizer's arguments
+and the picture.  ``plot_plate_sg`` remains as a thin shim over it.
+
 Distinguish this from the 1-D SHELL SG YAML (e.g. ``examples/data/1d_yaml/st15_shell.yaml``):
 that one is the CONTOUR of a cross-section -- line elements running around the airfoil, each
 carrying a layup.  The file written here is the wall itself, discretised THROUGH the
@@ -93,11 +97,18 @@ def plate_sg_dict(layup, material_db, n_per_layer=1, elem_order=4, fraction=0.5)
                          "angle": angles[k], "thickness": thick[k]})
 
     used = [m for m in dict.fromkeys(mats)]
-    materials = [{"name": m, "density": float(material_db[m].get("rho", 0.0)),
-                  "elastic": {"E": [float(v) for v in material_db[m]["E"]],
-                              "G": [float(v) for v in material_db[m]["G"]],
-                              "nu": [float(v) for v in material_db[m]["nu"]]}}
-                 for m in used]
+    materials = []
+    for m in used:
+        md = material_db[m]
+        entry = {"name": m, "density": float(md.get("rho", 0.0)),
+                 "elastic": {"E": [float(v) for v in md["E"]],
+                             "G": [float(v) for v in md["G"]],
+                             "nu": [float(v) for v in md["nu"]]}}
+        # optional human-readable name: the key is a terse handle ("ge25"), this
+        # is what a reader of the figure actually needs ("graphite/epoxy, E1/E2 = 25")
+        if md.get("full_name"):
+            entry["full_name"] = str(md["full_name"])
+        materials.append(entry)
 
     return {"sg": {"type": "plate_1d", "elem_order": int(elem_order),
                    "n_per_layer": n_per_layer, "reference_fraction": float(fraction),
@@ -120,11 +131,12 @@ def plate_sg_yaml(path, layup, material_db, n_per_layer=1, elem_order=4, fractio
     return doc
 
 
-def read_plate_sg_yaml(path, atol=1e-9):
-    """Read a plate 1-D SG YAML back into the arguments ``rm_plate_msg`` takes.
+def read_plate_sg_yaml(path, atol=1e-9, png=True, png_path=None):
+    """Read a plate 1-D SG YAML back into the arguments ``rm_plate_msg`` takes,
+    and (by default) draw the mesh PNG from that same parse.
 
     Returns a dict with keys thick / angles / mat_names / material_db / fraction /
-    n_per_layer / elem_order / node_x.
+    n_per_layer / elem_order / node_x / png.
 
     Ply thicknesses and the reference fraction are taken from the stored fields and then
     CROSS-CHECKED against the mesh (summed element spans, node_x[0]) to ``atol`` relative.
@@ -132,6 +144,12 @@ def read_plate_sg_yaml(path, atol=1e-9):
     turns a 0.004 ply into 0.004000000000000002, which propagates to ~1e-14 in the 8x8 --
     while checking keeps the round trip bit-exact AND still catches a corrupt or
     hand-edited file, where mesh and header would genuinely disagree.
+
+    ``png=True`` (the default) writes the mesh picture next to the YAML and returns its
+    path under the ``"png"`` key; ``png=False`` skips the drawing entirely, and matplotlib
+    is only imported when it is actually needed.  The plot is produced HERE, from the
+    document this call already parsed, rather than by re-opening the file -- reading a
+    YAML twice to draw what the first read already knew was pure waste.
     """
     with open(path, "r") as f:
         doc = yaml.safe_load(f)
@@ -145,7 +163,8 @@ def read_plate_sg_yaml(path, atol=1e-9):
     material_db = {m["name"]: {"E": [float(v) for v in m["elastic"]["E"]],
                                "G": [float(v) for v in m["elastic"]["G"]],
                                "nu": [float(v) for v in m["elastic"]["nu"]],
-                               "rho": float(m.get("density", 0.0))}
+                               "rho": float(m.get("density", 0.0)),
+                               "full_name": m.get("full_name") or m["name"]}
                    for m in doc["materials"]}
     elem_sets = {s["name"]: [int(v) - 1 for v in s["labels"]] for s in doc["sets"]["element"]}
 
@@ -170,58 +189,95 @@ def read_plate_sg_yaml(path, atol=1e-9):
     if h > 0 and abs(-frac * h - node_x[0]) > atol * h:
         raise ValueError("%s: reference_fraction %g puts the bottom face at %g, "
                          "but the first node is at %g" % (path, frac, -frac * h, node_x[0]))
-    return {"thick": thick, "angles": angles, "mat_names": mat_names,
-            "material_db": material_db, "n_per_layer": counts[0],
-            "elem_order": len(elements[0]) - 1, "fraction": frac, "node_x": node_x}
+    out = {"thick": thick, "angles": angles, "mat_names": mat_names,
+           "material_db": material_db, "n_per_layer": counts[0],
+           "elem_order": len(elements[0]) - 1, "fraction": frac, "node_x": node_x,
+           "png": None}
+    if png:
+        section_sets = [s["elementSet"] for s in doc["sections"]]
+        out["png"] = _draw_plate_sg(
+            png_path or (os.path.splitext(path)[0] + ".png"),
+            node_x, elements, elem_sets, section_sets,
+            mat_names, thick, angles, material_db)
+    return out
 
 
-def plot_plate_sg(path, png_path=None):
-    """Plot the 1-D line-element mesh of a plate SG YAML, one colour per subdomain (ply).
+def layup_label(angles, mat_names):
+    """The stacking sequence in conventional laminate notation, as a mathtext string.
 
-    The real mesh: node coordinates and element connectivity are read from the file, and
-    each element is drawn as the line segment between its own end nodes, with all
-    (elem_order + 1) nodes marked.  Legend is vertical, outside the axes, one entry per
-    subdomain.  Returns the PNG path (default: the YAML path with a .png suffix).
+    Plies of the majority (face) material are named by their fibre angle, anything else
+    by its material -- the sandwich convention that writes the core as a token rather
+    than a meaningless 0 degrees.  A palindromic stack collapses onto its symmetric half
+    with the ``s`` subscript, and an odd stack puts the classical overbar on the
+    mid-plane ply::
+
+        [0/90/0]                 -> $[0/\\overline{90}]_s$
+        [0/90/0/90/core]s        -> $[0/90/0/90/\\overline{core}]_s$
+        [0/45/-45/90] (no symm.) -> $[0/45/-45/90]$
+    """
+    face = max(set(mat_names), key=mat_names.count)
+    # "{-}45", not "-45": braces make the minus an ordinary symbol, so mathtext
+    # stops spacing it as the binary operator it would otherwise read after "/".
+    tok = [("%g" % a).replace("-", "{-}") if m == face else ("\\mathrm{%s}" % m)
+           for a, m in zip(angles, mat_names)]
+    n = len(tok)
+    if n > 1 and tok == tok[::-1]:
+        half = tok[:n // 2] + ([("\\overline{%s}" % tok[n // 2])] if n % 2 else [])
+        return "$[%s]_s$" % "/".join(half)
+    return "$[%s]$" % "/".join(tok)
+
+
+def _draw_plate_sg(png_path, node_x, elements, elem_sets, section_sets,
+                   mat_names, thick, angles, material_db=None):
+    """Draw the 1-D through-thickness mesh from ALREADY-PARSED arrays and save it.
+
+    Deliberately plain: each element is the line segment between its own end nodes,
+    coloured BY MATERIAL, with the stacking sequence above a legend that names the
+    materials against their colours.  No axes -- the picture is the layup, not a
+    measurement -- and no legend entry for the nodes, which the small dots on the mesh
+    speak for themselves.  Legend text is the material's ``full_name`` when the database
+    carries one, since the dictionary key is a handle ("ge25") and not information.
+    Returns the PNG path.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    with open(path, "r") as f:
-        doc = yaml.safe_load(f)
-    sg = read_plate_sg_yaml(path)
-    node_x = sg["node_x"]
-    elements = [[int(v) - 1 for v in el] for el in doc["elements"]]
-    elem_sets = {s["name"]: [int(v) - 1 for v in s["labels"]] for s in doc["sets"]["element"]}
-    set_of_elem = {e: nm for nm, eids in elem_sets.items() for e in eids}
-    png_path = png_path or (os.path.splitext(path)[0] + ".png")
-
-    names = [s["elementSet"] for s in doc["sections"]]
+    ply_of = {e: k for k, nm in enumerate(section_sets) for e in elem_sets[nm]}
+    mats = list(dict.fromkeys(mat_names))             # unique, in stacking order
     cmap = plt.get_cmap("tab10")
-    colr = {nm: cmap(i % 10) for i, nm in enumerate(names)}
+    colr = {m: cmap(i % 10) for i, m in enumerate(mats)}
+    z = 1e3 * np.asarray(node_x)                      # mm
 
-    fig, ax = plt.subplots(figsize=(1.6, 6.0))
+    fig, ax = plt.subplots(figsize=(2.1, 5.2))
     for e, el in enumerate(elements):                 # each element = one line segment
-        nm = set_of_elem[e]
-        ax.plot([0.0, 0.0], [node_x[el[0]], node_x[el[-1]]], "-",
-                color=colr[nm], lw=7, solid_capstyle="butt", zorder=1)
-    ax.plot(np.zeros_like(node_x), node_x, "o", ms=4.5, mfc="w", mec="k", mew=1.0,
-            zorder=3, label="nodes")
-    for nm, k in zip(names, range(len(names))):
-        ax.plot([], [], "-", color=colr[nm], lw=7,
-                label="%s: %s, %.1f mm, %g$^\\circ$"
-                      % (nm, sg["mat_names"][k], 1e3 * sg["thick"][k], sg["angles"][k]))
+        ax.plot([0.0, 0.0], [z[el[0]], z[el[-1]]], "-",
+                color=colr[mat_names[ply_of[e]]], lw=13.0,
+                solid_capstyle="butt", zorder=1)
+    ax.plot(np.zeros_like(z), z, ".", ms=2.5, color="0.15", zorder=3)
+    for m in mats:
+        label = (material_db or {}).get(m, {}).get("full_name") or m
+        ax.plot([], [], "-", color=colr[m], lw=8, label=label)
 
-    ax.set_xlim(-0.02, 0.02)
+    ax.set_xlim(-0.05, 0.05)
     ax.set_xticks([])
-
-    ax.spines[["top", "right", "bottom"]].set_visible(False)
-    handles, labels = ax.get_legend_handles_labels()
-    order = list(range(1, len(labels))) + [0]         # subdomains first, nodes last
-    ax.legend([handles[i] for i in order], [labels[i] for i in order],
-              loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, fontsize=9)
+    ax.set_yticks([])
+    ax.spines[:].set_visible(False)
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False,
+              fontsize=9, title=layup_label(angles, mat_names),
+              title_fontsize=11)
     fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return png_path
+
+
+def plot_plate_sg(path, png_path=None):
+    """Backward-compatible shim: draw a plate SG YAML's mesh and return the PNG path.
+
+    The drawing now happens inside ``read_plate_sg_yaml``; call that directly (its
+    ``"png"`` key is this return value) rather than reading the file a second time
+    just to plot it.
+    """
+    return read_plate_sg_yaml(path, png=True, png_path=png_path)["png"]
 
 

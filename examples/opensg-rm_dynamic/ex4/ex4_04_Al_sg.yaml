@@ -55,12 +55,14 @@ materials:
     E: [128000000000.0, 11000000000.0, 11000000000.0]
     G: [4480000000.0, 4480000000.0, 1530000000.0]
     nu: [0.25, 0.25, 0.25]
+  full_name: graphite/epoxy face ply
 - name: al
   density: 2770.0
   elastic:
     E: [68900000000.0, 68900000000.0, 68900000000.0]
     G: [26500000000.0, 26500000000.0, 26500000000.0]
     nu: [0.3, 0.3, 0.3]
+  full_name: 2024-T3 aluminium core sheet
 sets:
   element:
   - name: ply_1

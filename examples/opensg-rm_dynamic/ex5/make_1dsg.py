@@ -31,16 +31,17 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
     ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, ROOT)
 
-from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, read_plate_sg_yaml, \
-    plot_plate_sg
+from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, read_plate_sg_yaml
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
 
 MATERIAL_DB = {
     "ge": {"E": [128.0e9, 11.0e9, 11.0e9],
            "G": [4.48e9, 4.48e9, 1.53e9],
-           "nu": [0.25, 0.25, 0.25], "rho": 1500.0},
+           "nu": [0.25, 0.25, 0.25], "rho": 1500.0,
+           "full_name": "graphite/epoxy face ply"},
     "herex": {"E": [103.63e6] * 3, "G": [50.0e6] * 3,
-              "nu": [0.32, 0.32, 0.32], "rho": 130.0},
+              "nu": [0.32, 0.32, 0.32], "rho": 130.0,
+              "full_name": "HEREX C70.130 PVC foam core"},
 }
 # --- the paper's Example-5 geometry, as ALGEBRA on its two stated ratios ---
 # "For this example, [h/a] is 0.10 and 2 h_f / h = 0.05 where 2 h_f is overall
@@ -64,10 +65,9 @@ layup = {"mat_names": ["ge"] * 4 + ["herex"] + ["ge"] * 4,
 
 yml = os.path.join(HERE, "sandwich_sg.yaml")
 plate_sg_yaml(yml, layup, MATERIAL_DB, fraction=0.5)
-png = plot_plate_sg(yml)
-print("wrote %s + %s" % (os.path.basename(yml), os.path.basename(png)))
+inp = read_plate_sg_yaml(yml)               # the read also draws the mesh PNG
+print("wrote %s + %s" % (os.path.basename(yml), os.path.basename(inp["png"])))
 
-inp = read_plate_sg_yaml(yml)
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                  inp["material_db"], fraction=inp["fraction"])
 ROWS = ("e11", "e22", "g12", "k11", "k22", "k12", "2g13", "2g23")

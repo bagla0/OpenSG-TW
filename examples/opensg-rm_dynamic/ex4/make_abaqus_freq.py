@@ -44,7 +44,7 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
 sys.path.insert(0, ROOT)
 
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
-from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, plot_plate_sg
+from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, read_plate_sg_yaml
 
 # ----------------------------------------------------------------------------
 # ALL CASE DATA (Nayak Ex.4 digits; shared with collect_freq.py)
@@ -58,9 +58,11 @@ NMODES = 5              # frequencies reported (8 extracted)
 MATERIAL_DB = {
     "ge": {"E": [128.0e9, 11.0e9, 11.0e9],
            "G": [4.48e9, 4.48e9, 1.53e9],
-           "nu": [0.25, 0.25, 0.25], "rho": 1500.0},
+           "nu": [0.25, 0.25, 0.25], "rho": 1500.0,
+           "full_name": "graphite/epoxy face ply"},
     "al": {"E": [68.9e9] * 3, "G": [68.9e9 / 2.6] * 3,
-           "nu": [0.30, 0.30, 0.30], "rho": 2770.0},
+           "nu": [0.30, 0.30, 0.30], "rho": 2770.0,
+           "full_name": "2024-T3 aluminium core sheet"},
 }
 LAYUPS = {
     "(0_4/Al)s": ([0, 0, 0, 0, 0, 0, 0, 0, 0.0],
@@ -150,7 +152,7 @@ def main():
         plate_sg_yaml(yml, {"mat_names": list(mats), "thick": list(thick),
                             "angles": list(map(float, angles))},
                       MATERIAL_DB, fraction=0.5)
-        plot_plate_sg(yml)
+        read_plate_sg_yaml(yml)             # the read also draws the mesh PNG
         path, rho_h = write_freq_inp(slug, angles, mats, thick)
         print("wrote %s (rho_h = %.4f kg/m^2)"
               % (os.path.basename(path), rho_h))

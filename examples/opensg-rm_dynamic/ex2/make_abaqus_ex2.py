@@ -44,7 +44,7 @@ while not os.path.isdir(os.path.join(ROOT, "opensg_jax")):
 sys.path.insert(0, ROOT)
 
 from opensg_jax.fe_jax.msg_rm_plate import rm_plate_msg
-from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, plot_plate_sg, \
+from opensg_jax.fe_jax.segment_plate import plate_sg_yaml, \
     read_plate_sg_yaml
 
 # ----------------------------------------------------------------------------
@@ -60,15 +60,15 @@ DT, TTOT = 5.0e-5, 0.02  # 50 us fixed increments, 20 ms window
 MATERIAL_DB = {
     "ge25": {"E": [172.369e9, 6.895e9, 6.895e9],
              "G": [3.448e9, 3.448e9, 1.379e9],
-             "nu": [0.25, 0.25, 0.25], "rho": 1603.03},
+             "nu": [0.25, 0.25, 0.25], "rho": 1603.03,
+             "full_name": "graphite/epoxy, $E_1/E_2 = 25$"},
 }
 LAYUP = {"mat_names": ["ge25"] * 3, "thick": [H / 3.0] * 3,
          "angles": [0.0, 90.0, 0.0]}
 
 yml = os.path.join(HERE, "ex2_sg.yaml")
 plate_sg_yaml(yml, LAYUP, MATERIAL_DB, fraction=0.5)
-plot_plate_sg(yml)
-inp = read_plate_sg_yaml(yml)
+inp = read_plate_sg_yaml(yml)               # the read also draws the mesh PNG
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                  inp["material_db"], fraction=inp["fraction"])
 ABDG = np.asarray(r["ABDG"])
