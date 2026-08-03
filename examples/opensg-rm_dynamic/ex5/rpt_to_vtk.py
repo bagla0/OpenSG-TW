@@ -42,7 +42,7 @@ A, H = 1.524, 0.1524
 DX = A / NX
 G = 0.5 / np.sqrt(3.0)          # Gauss offset in HALF-element units
 # the solid mesh is PLY-RESOLVED, not uniform: 4 plies, 8 core sub-layers,
-# 4 plies (bottom -> top).  Same algebra as make_1dsg.py: the paper's
+# 4 plies (bottom -> top).  Same algebra as 1d_sg.py: the paper's
 # 2 h_f / h = 0.05 is BOTH faces, so a ply is FACE_FRAC*h/8 and the core
 # is the remaining (1 - FACE_FRAC)*h.
 FACE_FRAC, N_PLY, NZC = 0.05, 8, 8

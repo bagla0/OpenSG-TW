@@ -38,7 +38,9 @@ A simply supported (SS-1) \emph{square} sandwich plate:
 plate & $a=b=1.524$ m, $h=152.4$ mm ($a/h=10$)\\
 layup (bottom$\to$top) & $(0/90/0/90/\mathrm{core})_s$: 4 GE plies /
 foam core / 4 GE plies\\
- & each GE ply $0.0125h=1.905$ mm; core $0.9h=137.16$ mm\\
+ & $2h_f/h=0.05$ is BOTH face sheets, so each of the eight GE\\
+ & plies is $(0.05/8)h=0.00625h=0.9525$ mm and the core is\\
+ & the remaining $0.95h=144.78$ mm\\
 faces & graphite/epoxy: $E_L=128$, $E_T=11.0$, $G_{LT}=G_{13}=4.48$,
 $G_{23}=1.53$ GPa\\
  & $\nu=0.25$, $\rho=1500$ kg/m$^3$\\
@@ -86,11 +88,11 @@ no correction factor.  The Abaqus model is then a plain S4 mesh
 ($20\times20$, 2646 DOF, 37--39 s per pulse) wearing that section:
 
 \begin{lstlisting}[style=deck]
-*SHELL GENERAL SECTION, ELSET=EALL, DENSITY=40.6908
+*SHELL GENERAL SECTION, ELSET=EALL, DENSITY=30.2514
                                        @\color{blue!60!black}\itshape the MSG 6x6 (21 upper-tri terms);@
 ...                                    @\color{blue!60!black}\itshape DENSITY = rho*h of the section@
-*TRANSVERSE SHEAR STIFFNESS            @\color{blue!60!black}\itshape the MSG shear block: K11=K22=@
-7.808600e+06, 7.808600e+06, 0.0        @\color{blue!60!black}\itshape 7.81e6 N/m -- the whole ballgame@
+*TRANSVERSE SHEAR STIFFNESS            @\color{blue!60!black}\itshape the MSG shear block: K11, K22 =@
+7.700977e+06, 7.542371e+06, -5.38e-08  @\color{blue!60!black}\itshape 7.70e6, 7.54e6 N/m -- the ballgame@
 *BOUNDARY                              @\color{blue!60!black}\itshape SS-1: v=w=0 on x-edges,@
 NX0, 2, 3                              @\color{blue!60!black}\itshape u=0 and w=0 on y-edges,@
 ...                                    @\color{blue!60!black}\itshape drilling dof 6 fixed everywhere@

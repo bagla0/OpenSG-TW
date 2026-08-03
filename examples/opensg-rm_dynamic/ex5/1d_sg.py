@@ -1,4 +1,4 @@
-"""make_1dsg.py -- the through-thickness 1-D SG of the Nayak-Shenoi-Moy
+"""1d_sg.py -- the through-thickness 1-D SG of the Nayak-Shenoi-Moy
 transient sandwich benchmark (Example 5 of Composite Structures 64 (2004)
 249-267; see README.md).
 
@@ -58,18 +58,24 @@ N_PLY = 8                               # eight GE plies, four per face
 TPLY = FACE_FRAC * H / N_PLY
 TCORE = (1.0 - FACE_FRAC) * H
 assert abs(N_PLY * TPLY + TCORE - H) < 1e-12
+FRACTION = 0.5          # reference surface: 0 = bottom/OML face, 0.5 = mid-surface,
+                        # 1 = top.  The S4 mesh sits on the mid-plane, so 0.5.
 layup = {"mat_names": ["ge"] * 4 + ["herex"] + ["ge"] * 4,
          "thick":     [TPLY] * 4 + [TCORE] + [TPLY] * 4,
          "angles":    [0.0, 90.0, 0.0, 90.0, 0.0, 90.0, 0.0, 90.0, 0.0]}
 # bottom -> top: (0/90/0/90/core/90/0/90/0) = (0/90/0/90/core)s
 
 yml = os.path.join(HERE, "sandwich_sg.yaml")
-plate_sg_yaml(yml, layup, MATERIAL_DB, fraction=0.5)    # writes the yaml AND the png
+plate_sg_yaml(yml, layup, MATERIAL_DB, fraction=FRACTION)   # writes the yaml AND the png
 print("wrote %s + %s" % (os.path.basename(yml), "sandwich_sg.png"))
 
+# FRACTION is the same value on both calls by construction -- it is what was just
+# written into the file.  Reading it back would add nothing: read_plate_sg_yaml
+# already verifies the stored reference_fraction against the mesh node coordinates
+# and raises if they disagree, so the round-trip check happens either way.
 inp = read_plate_sg_yaml(yml)
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
-                 inp["material_db"], fraction=inp["fraction"])
+                 inp["material_db"], fraction=FRACTION)
 ROWS = ("e11", "e22", "g12", "k11", "k22", "k12", "2g13", "2g23")
 print("\nOpenSG-RM 8x8 ABDG (rows/cols: %s):" % ", ".join(ROWS))
 for name, row in zip(ROWS, np.asarray(r["ABDG"])):

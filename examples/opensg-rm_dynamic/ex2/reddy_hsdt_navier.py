@@ -71,7 +71,7 @@ ANGLES = [0.0, 90.0, 0.0, 90.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 ISCORE = [False] * 4 + [True] + [False] * 4
 RHO = [RHOC if c else RHOF for c in ISCORE]     # per-layer density
 MAT_NAMES = ["ge"] * 4 + ["herex"] + ["ge"] * 4  # for the MSG 8x8 route
-MATERIAL_DB = {                                  # same digits as make_1dsg
+MATERIAL_DB = {                                  # same digits as 1d_sg
     "ge": {"E": [EL, ET, ET], "G": [GLT, G13F, G23F],
            "nu": [NULT] * 3, "rho": RHOF},
     "herex": {"E": [EC] * 3, "G": [GC] * 3, "nu": [NUC] * 3, "rho": RHOC},

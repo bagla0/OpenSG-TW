@@ -33,7 +33,9 @@ def _row(item):
 
 def read_solid_yaml(path):
     """Parse a 2D-solid SG YAML into the JAX-homogenizer input structures. Returns a dict."""
-    d = yaml.safe_load(open(path))
+    _CL = getattr(yaml, "CSafeLoader", yaml.SafeLoader)   # libyaml C parser: ~15-30x faster on 25k-node meshes
+    with open(path) as _f:
+        d = yaml.load(_f, Loader=_CL)
 
     # --- nodes -> points (cross-section y,z) ; x (third coord) is the beam axis ---
     nodes = np.array([[float(v) for v in _row(n)] for n in d["nodes"]], dtype=np.float64)  # (V, 3) = [y z x]

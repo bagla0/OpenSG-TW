@@ -1,6 +1,6 @@
 """make_abaqus_dyn.py -- deck generator for the Nayak-Shenoi-Moy Example-5
 transient sandwich benchmark (README.md).  Reads sandwich_sg.yaml
-(make_1dsg.py) and writes FOUR decks -- {RM shell, 3-D solid} x {step, blast}:
+(1d_sg.py) and writes FOUR decks -- {RM shell, 3-D solid} x {step, blast}:
 
     sandwich_RM_step.inp / sandwich_RM_blast.inp
         20 x 20 S4 plate carrying the OpenSG-RM 8x8 as a *SHELL GENERAL

@@ -63,7 +63,7 @@ That gap is exactly what OpenSG-RM fills, so this benchmark lets us prove
 | item | value |
 |---|---|
 | plate | square, simply supported (SS-1), a/h = 10, h = 0.1524 m → a = b = 1.524 m |
-| layup (bottom→top) | (0/90/0/90/core)s: 4 GE plies + PVC foam core + 4 GE plies; ply = 0.0125h = 1.905 mm, core = 0.9h = 137.16 mm |
+| layup (bottom→top) | (0/90/0/90/core)s: 4 GE plies + PVC foam core + 4 GE plies; 2h_f/h = 0.05 is BOTH faces, so ply = (0.05/8)h = 0.00625h = 0.9525 mm, core = 0.95h = 144.78 mm |
 | face material | graphite/epoxy: E_L = 128, E_T = 11.0, G_LT = G_13 = 4.48, G_23 = 1.53 GPa, nu = 0.25, rho = 1500 kg/m3 |
 | core material | HEREX C70.130 PVC foam: E_c = 103.63 MPa, G_c = 50 MPa, nu = 0.32, rho = 130 kg/m3 |
 | load | q(x,y,t) = q0 F(t) sin(pi x/a) sin(pi y/b), q0 = 68.9476 MPa; F(t): **step** (=1) and **blast** e^(-330t); their sine/triangular have t1 = 6 ms cut-offs |
@@ -95,7 +95,7 @@ in matching element columns (`COLC/COLX/COLY`) every 10th increment.
 
 ## 3. The OpenSG-RM chain (each step and why)
 
-1. **[ex5/make_1dsg.py](ex5/make_1dsg.py)** — the entire 3-D layup enters as
+1. **[ex5/1d_sg.py](ex5/1d_sg.py)** — the entire 3-D layup enters as
    a 9-layer through-thickness 1-D SG ([ex5/sandwich_sg.yaml](ex5/sandwich_sg.yaml),
    5-noded quartic elements). MSG/VAM homogenization (`rm_plate_msg`) returns
    the RM plate 8x8: the classical 6x6 (= CLT for this layup) **plus the
@@ -229,7 +229,7 @@ sides with OpenSG-RM.
 
 ```bash
 python examples/opensg-rm_dynamic/ex2/make_abaqus_ex2.py    # Ex.2 SG + 6 decks (RM/FSDT/SOLID x step/blast)
-python examples/opensg-rm_dynamic/ex5/make_1dsg.py          # Ex.5 SG + 8x8 (prints G11)
+python examples/opensg-rm_dynamic/ex5/1d_sg.py          # Ex.5 SG + 8x8 (prints G11)
 python examples/opensg-rm_dynamic/ex5/make_abaqus_dyn.py    # the four Ex.5 decks
 python examples/opensg-rm_dynamic/ex4/make_abaqus_freq.py   # Ex.4 SG yamls + the 3 *FREQUENCY decks
 # run all jobs on the Abaqus machine (ABAQUS_RUN_COMMANDS.md), copy the

@@ -15,7 +15,7 @@ sandwich plates"*, **Composite Structures 64 (2004) 249–267 — Example 5**:
 | item | value (paper) |
 |---|---|
 | plate | square, simply supported, a/h = 10, h = 0.1524 m → a = b = 1.524 m (h from their Example 2, which Example 5 inherits loads/geometry conventions from) |
-| layup | **(0/90/0/90/core)s** — eight graphite/epoxy plies symmetric about a PVC foam core; per-face laminate 2h_f/h = 0.05 → each ply 0.0125 h = 1.905 mm; core 0.9 h = 137.16 mm |
+| layup | **(0/90/0/90/core)s** — eight graphite/epoxy plies symmetric about a PVC foam core; 2h_f/h = 0.05 is BOTH face sheets, so each of the eight plies is (0.05/8) h = 0.00625 h = 0.9525 mm and the core is the remaining 0.95 h = 144.78 mm |
 | faces | E_L = 128 GPa, E_T = 11.0 GPa, G_LT = G_13 = 4.48 GPa, G_23 = 1.53 GPa, ν = 0.25, ρ = 1500 kg/m³ (Crawley graphite/epoxy) |
 | core | **HEREX C70.130 PVC foam**: E_c = 103.63 MPa, G_c = 50 MPa, ν = 0.32, ρ = 130 kg/m³ |
 | load | q(x,y,t) = q₀ F(t) sin(πx/a) sin(πy/b), q₀ = 68.9476 MPa; F(t) = **step** and **explosive blast e^(−330 t)** (their sine/triangular variants trivially added) |
@@ -63,7 +63,7 @@ for the free-vibration Ex.4 in `ex4/`.
 
 | file | content |
 |---|---|
-| `ex5/make_1dsg.py` → `ex5/sandwich_sg.yaml/.png` | the 9-layer 1-D SG (5-noded elements, one per layer incl. the core); prints the 8×8 (D₁₁ = 5.7340e6, G₁₁ = 7.8086e6) and section mass 40.6908 kg/m² |
+| `ex5/1d_sg.py` → `ex5/sandwich_sg.yaml/.png` | the 9-layer 1-D SG (5-noded elements, one per layer incl. the core); prints the 8×8 (D₁₁ = 3.0005e6, G₁₁ = 7.7010e6) and section mass 30.2514 kg/m² |
 | `ex5/make_abaqus_dyn.py` | writes the four decks below from the SG |
 | `ex5/sandwich_RM_step.inp`, `ex5/sandwich_RM_blast.inp` | OpenSG-RM S4 plate (20×20), SS-1, double-sine load, per-increment center-U + patch SF/SM/COORD prints |
 | `ex5/sandwich_SOLID_step.inp`, `ex5/sandwich_SOLID_blast.inp` | 3-D benchmark: 20×20×16 C3D8I (one element per face ply, 8 through the core), same everything; center U(t) + column stresses at 0.5 ms cadence |

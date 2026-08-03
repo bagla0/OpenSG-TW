@@ -42,7 +42,7 @@ and its post-processor has never been run — see §9.
 pure-text post-processors import JAX transitively:
 
 ```bash
-~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex5/make_1dsg.py
+~/miniconda3/envs/opensg_2_0/bin/python examples/opensg-rm_dynamic/ex5/1d_sg.py
 ```
 
 NumPy ≥ 2.0 is required (`np.trapezoid`); the env has 2.3.5.
@@ -79,7 +79,7 @@ element per ply) and homogenized into an 8×8 Reissner–Mindlin plate law.
 | ex1 | `ex1/make_fig5_rm.py` | `ex1_sg.yaml`, `ex1_sg.png` (then the deck too — §3) |
 | ex2 | `ex2/make_abaqus_ex2.py` | `ex2_sg.yaml`, `ex2_sg.png` (then all six decks) |
 | ex4 | `ex4/make_abaqus_freq.py` | `ex4_<slug>_sg.yaml/.png` ×3 (then the RM decks) |
-| ex5 | `ex5/make_1dsg.py` | `sandwich_sg.yaml`, `sandwich_sg.png` |
+| ex5 | `ex5/1d_sg.py` | `sandwich_sg.yaml`, `sandwich_sg.png` |
 
 **ex5 is the only one with a separate SG step** — the others fold stages 1 and 2
 into one script.
@@ -124,9 +124,12 @@ when the least-squares-fitted shear compliance is not positive definite, and
 nothing raises.
 
 **Sanity check the shear term before going further.** For the ex5 sandwich the
-script prints `G11 = 7.8086e6 N/m`. A naive parallel integral ∫G(z)dz would give
-6.85e7 — nine times stiffer. If your number looks like the parallel integral,
-the homogenization did not do what you think it did.
+script prints `G11 = 7.7010e6 N/m`. A naive parallel integral ∫G(z)dz would give
+4.1377e7 — **5.4× stiffer**. If your number looks like the parallel integral,
+the homogenization did not do what you think it did. (Handy cross-check on this
+laminate: because G12 = G13 for the faces and the core is isotropic, that
+parallel integral equals A66, which the printed 8×8 shows at `g12` — so you can
+read both numbers off the same table.)
 
 Section mass is *not* computed by the library. Each example does it inline:
 
@@ -443,7 +446,7 @@ not the colours.
 Case constants are deliberately repeated across scripts rather than imported.
 Change one and the others go stale **silently**. Walk this list:
 
-**ex5** — `H`, `TPLY`, `TCORE`, `MATERIAL_DB`, `layup` in `make_1dsg.py`;
+**ex5** — `H`, `TPLY`, `TCORE`, `MATERIAL_DB`, `layup` in `1d_sg.py`;
 then `A`, `NX`, `Q0`, `DT`, `TTOT`, `CBLAST`, `NZC` in `make_abaqus_dyn.py`;
 then the *same* `A`, `NX`, `Q0`, `CBLAST`, `NZC`, `P = π/A` again in
 `recover_dyn.py`; `A`/`NX`/`Q0`/`DT` again in `rm_field_vtk.py` (where `DT` is
