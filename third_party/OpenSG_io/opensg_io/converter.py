@@ -368,6 +368,9 @@ def emit_opensg_yaml(cs, out_path, web_mesh=None, fraction=0.5):
 
     seg = {"nodes": [], "elements": [], "sets": {"element": []}, "sections": [],
            "elementOrientations": [], "materials": []}
+    # single source of truth for the reference surface: downstream RM homogenization/dehom
+    # (dehom_rm.build_rm_bundle) reads this field so it automatically matches how the yaml was built.
+    seg["reference"] = "oml" if abs(fraction) < 1e-9 else "center"
     for (X, Y) in nodes:
         seg["nodes"].append(_Flow(["%.8f %.8f %.8f" % (X, Y, 0.0)]))
     for (n1, n2) in elems:
@@ -415,7 +418,7 @@ def _mat_xml(blade, name):
             % (name, rho, E[0], E[1], E[2], G[0], G[1], G[2], nu[0], nu[1], nu[2]))
 
 
-def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
+def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005, lam_reg=None):
     """Write {name}.dat (normalised airfoil), materials.xml (materials + laminae), and {name}.xml
     (PreVABS: general/baselines/dividing points/webs/layups/components) for prevabs.exe -i {name}.xml."""
     blade = cs["blade"]; chord = cs["chord"]
@@ -436,7 +439,8 @@ def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
     # (e.g. 70 mm foam) divided into 1 mm "plies" makes 70 high-aspect solid layers that crash the PreVABS
     # mesher; cap at MAX_PLIES and set lamina thickness = t/n so the layer thickness stays exact.
     MAX_PLIES = 8
-    lam_reg = {}                                            # (mat, round(t,8)) -> (lamina_name, n_plies, lam_thk)
+    lam_reg = lam_reg if lam_reg is not None else {}        # (mat, round(t,8)) -> (lamina, n_plies, lam_thk)
+    #   shared across stations by the caller so ONE materials.xml (with a global lamina index) serves every layup
     for k in range(len(inv)):
         for (mat, t, a) in inv[k]:
             key = (mat, round(t, 8))
@@ -451,8 +455,9 @@ def emit_prevabs(cs, outdir, name="xsec", mesh_size=0.005):
         for X, Y in xyn:
             f.write("% .8f % .8f\n" % (X, Y))
 
-    # 2. materials.xml (material cards + one lamina per distinct layer thickness)
-    mx = "<materials>\n" + "".join(_mat_xml(blade, m) for m in used)
+    # 2. materials.xml -- ALL windIO materials + every lamina in the (shared) registry, so a single
+    #    file serves every station's layup (lam_reg is accumulated across stations by the caller).
+    mx = "<materials>\n" + "".join(_mat_xml(blade, m) for m in blade.mats)
     for (mat, _tr), (lname, _n, lthk) in lam_reg.items():
         mx += ('  <lamina name="%s">\n    <material>%s</material>\n    <thickness>%g</thickness>\n  </lamina>\n'
                % (lname, mat, lthk))

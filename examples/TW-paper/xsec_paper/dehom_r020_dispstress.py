@@ -20,7 +20,7 @@ U = np.loadtxt(os.path.join(D2, "iea_r020.sg.U"))            # id y2 y3 u1 u2 u3
 d = np.loadtxt(os.path.join(D2, "iea_r020.sg.SM"), skiprows=2)
 sm_xy, sm_s = d[:, :2], d[:, 2:8][:, [0, 3, 5, 4, 2, 1]]     # [S11,S22,S33,S23,S13,S12]
 utree = cKDTree(U[:, 1:3]); stree = cKDTree(sm_xy)
-cap = np.loadtxt(os.path.join(D2, "solid.lp_sparcap_center_thickness_r020.coords"))[:, :2]
+cap = np.loadtxt(os.path.join(D2, "solid.lp_sparcap_left_thickness_r020.coords"))[:, :2]
 circ = np.loadtxt(os.path.join(D2, "solid.circumferential_r020.coords"))[:, :2]
 B = dehom_rm.build_rm_bundle(SHELL, ref="oml")
 
@@ -28,7 +28,7 @@ B = dehom_rm.build_rm_bundle(SHELL, ref="oml")
 def arclen(p): return np.r_[0.0, np.cumsum(np.hypot(np.diff(p[:, 0]), np.diff(p[:, 1])))]
 fig, ax = plt.subplots(2, 3, figsize=(13, 7))
 for r, (P, name, xl) in enumerate([(circ, "circumferential (LP, LE$\\to$TE)", "arc length (m)"),
-                                    (cap, "spar-cap through-thickness", "OML$\\to$IML (mm)")]):
+                                    (cap, "left spar-cap through-thickness", "OML$\\to$IML (mm)")]):
     Uv = U[utree.query(P)[1], 3:6] * 1e3                     # VABS .U (mm)
     Ur = np.asarray(dehom_rm.disp_at_points(B, P, beam_force_vabs=FF)) * 1e3   # RM warping (mm)
     x = arclen(P) * (1.0 if r == 0 else 1e3)

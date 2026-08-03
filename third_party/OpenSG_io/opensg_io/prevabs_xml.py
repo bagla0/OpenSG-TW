@@ -113,12 +113,14 @@ def to_shell(xml_path, out_yaml, web_mesh=None):
     return emit_opensg_yaml(cs, out_yaml, web_mesh=web_mesh)
 
 
-def to_solid(xml_path, out_yaml, prevabs, convert_py=None, py=None):
-    """PreVABS XML -> 2D-solid SG YAML by running PreVABS (.sg) then convert_sg_to_yaml.py."""
+def to_solid(xml_path, out_yaml, prevabs, convert_py=None, py=None, timeout=None):
+    """PreVABS XML -> 2D-solid SG YAML by running PreVABS (.sg) then convert_sg_to_yaml.py.
+    timeout (s) fail-fasts a degenerate section (e.g. the sub-metre tip) instead of hanging gmsh."""
     import sys
     xdir = os.path.dirname(os.path.abspath(xml_path))
     name = os.path.splitext(os.path.basename(xml_path))[0]
-    subprocess.run([prevabs, "-i", os.path.basename(xml_path), "--vabs", "--hm"], cwd=xdir, check=True)
+    subprocess.run([prevabs, "-i", os.path.basename(xml_path), "--vabs", "--hm"], cwd=xdir,
+                   check=True, timeout=timeout)
     sg = os.path.join(xdir, name + ".sg")
     convert_py = convert_py or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                             "scripts", "convert_sg_to_yaml.py")

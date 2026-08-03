@@ -76,7 +76,7 @@ def main():
         t0 = time.time()
         try:
             C6 = np.asarray(compute_timo_from_yaml(f, verbose=False))
-            np.savetxt(os.path.join(a.out, "C6_jax_%s.txt" % nm), C6)
+            np.savetxt(os.path.join(a.out, "OpenSG_JAX_%s.txt" % nm), C6)
             d = "  ".join("%s=%.4g" % (LBL[i], C6[i, i]) for i in range(6))
             print("[%-10s] %s  [%.1fs]" % (nm, d, time.time() - t0), flush=True)
         except Exception as e:

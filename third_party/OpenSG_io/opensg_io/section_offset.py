@@ -138,26 +138,30 @@ def _fold_nodes(outer, inner, far=4):
     f = s2 <= 0.0
     local |= f
     local |= np.roll(f, 1)
-    # (b) inner-ring self-intersection: proper crossing of non-adjacent segments
+    # (b) inner-ring self-intersection: proper crossing of non-adjacent segments.
+    #     VECTORIZED all-pairs (i,k) test -- replaces the O(N) python `for i` loop that
+    #     dominated the near-circular-root build (5.8 s / 372 calls at N~300). Identical
+    #     result: a segment involved in a proper crossing marks BOTH its endpoints, split
+    #     near (corner bowtie -> local) vs far (two walls through each other -> crossing).
     A, B = inner, inner[j]
     D = B - A
-    for i in range(N):
-        d1 = D[i]
-        c1 = d1[0] * (A[:, 1] - A[i, 1]) - d1[1] * (A[:, 0] - A[i, 0])
-        c2 = d1[0] * (B[:, 1] - A[i, 1]) - d1[1] * (B[:, 0] - A[i, 0])
-        u1 = D[:, 0] * (A[i, 1] - A[:, 1]) - D[:, 1] * (A[i, 0] - A[:, 0])
-        u2 = D[:, 0] * (B[i, 1] - A[:, 1]) - D[:, 1] * (B[i, 0] - A[:, 0])
-        kadj = (np.arange(N) - i) % N
-        hit = (c1 * c2 < 0) & (u1 * u2 < 0) & (kadj > 1) & (kadj < N - 1)
-        if not hit.any():
-            continue
-        near = hit & ((kadj <= far) | (kadj >= N - far))
-        farh = hit & ~near
-        for h, mask in ((near, local), (farh, crossing)):
-            if h.any():
-                mask[i] = mask[j[i]] = True
-                mask |= h
-                mask |= np.roll(h, 1)
+    Ax, Ay, Bx, By = A[:, 0], A[:, 1], B[:, 0], B[:, 1]
+    Dx, Dy = D[:, 0], D[:, 1]
+    # c1[i,k]=cross(D[i], A[k]-A[i]); c2[i,k]=cross(D[i], B[k]-A[i])
+    c1 = Dx[:, None] * (Ay[None, :] - Ay[:, None]) - Dy[:, None] * (Ax[None, :] - Ax[:, None])
+    c2 = Dx[:, None] * (By[None, :] - Ay[:, None]) - Dy[:, None] * (Bx[None, :] - Ax[:, None])
+    # u1[i,k]=cross(D[k], A[i]-A[k]); u2[i,k]=cross(D[k], B[i]-A[k])
+    u1 = Dx[None, :] * (Ay[:, None] - Ay[None, :]) - Dy[None, :] * (Ax[:, None] - Ax[None, :])
+    u2 = Dx[None, :] * (By[:, None] - Ay[None, :]) - Dy[None, :] * (Bx[:, None] - Ax[None, :])
+    ii = np.arange(N)
+    kadj = (ii[None, :] - ii[:, None]) % N
+    hit = (c1 * c2 < 0) & (u1 * u2 < 0) & (kadj > 1) & (kadj < N - 1)
+    near = hit & ((kadj <= far) | (kadj >= N - far))
+    farh = hit & ~near
+    seg_near = near.any(axis=0) | near.any(axis=1)   # segment s in a near crossing (source or target)
+    seg_far = farh.any(axis=0) | farh.any(axis=1)
+    local |= seg_near | np.roll(seg_near, 1)         # each involved segment marks nodes s and s+1
+    crossing |= seg_far | np.roll(seg_far, 1)
     return local, crossing
 
 

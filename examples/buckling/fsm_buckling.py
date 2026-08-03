@@ -13,6 +13,8 @@ Local DOF per node [u, v, w, theta=dw/dy]; 8 per strip.  (Single-harmonic -> the
 terms integrate out; use multiharmonic for full anisotropy -- see module note.)
 
 Validation target: axially-compressed isotropic cylinder, classical N_cr = E t^2 / (R sqrt(3(1-nu^2)))."""
+import os
+
 import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import eigsh
@@ -29,6 +31,11 @@ def _hermite(y, b):
     ddH = np.array([(-6 + 12 * xi) / b**2, (-4 + 6 * xi) / b,
                     (6 - 12 * xi) / b**2, (-2 + 6 * xi) / b])
     return H, dH, ddH
+
+
+# Include the Nxy term in the membrane geometric stiffness (solve_fsm_multi / solve_fsm_connected).
+# Set FSM_NO_NXY=1 to reproduce the previous diag(Nx,Ny) behaviour for A/B comparison.
+INCLUDE_NXY = not bool(int(os.environ.get("FSM_NO_NXY", "0")))
 
 
 def strip_ke_kg(b, a, ABD, N, full_geom=False):
@@ -112,7 +119,7 @@ def solve_fsm_multi(nodes2d, strips, ABD_s, N_s, L, M, n_modes=4, return_vecs=Fa
         Tn = np.array([[1, 0, 0, 0], [0, cy, cz, 0], [0, -cz, cy, 0], [0, 0, 0, 1.0]])
         T = np.zeros((8, 8)); T[:4, :4] = Tn; T[4:, 4:] = Tn
         ABD = ABD_s[e]; Ass = ABD[np.ix_(ss, ss)]; Acc = ABD[np.ix_(cc, cc)]; Asc = ABD[np.ix_(ss, cc)]
-        Nx, Ny, _ = N_s[e]; Nm = np.array([[Nx, 0.0], [0.0, Ny]])
+        Nx, Ny, Nxy = N_s[e]; Nm = np.array([[Nx, 0.0], [0.0, Ny]])
         Bk = {m: _strip_B(b, m * np.pi / L) for m in range(1, M + 1)}
         for m in range(1, M + 1):
             Ke = np.zeros((8, 8)); Kge = np.zeros((8, 8))
@@ -131,6 +138,21 @@ def solve_fsm_multi(nodes2d, strips, ABD_s, N_s, L, M, n_modes=4, return_vecs=Fa
                     Kc += cmm(mp, m) * Jw * (Bc_m.T @ Asc.T @ Bs_mp)
                 KcG = T.T @ Kc @ T
                 add(rk, ck, kv, m - 1, mp - 1, i, j, KcG); add(rk, ck, kv, mp - 1, m - 1, i, j, KcG.T)
+                # FULL membrane geometric stiffness: w' [[Nx,Nxy],[Nxy,Ny]] w'.  The Nxy cross term pairs
+                # w,x (cos-type) with w,y (sin-type), so it carries the SAME sin-cos integral cmm that
+                # justifies the Asc elastic coupling above.  Keeping Asc while dropping Nxy is inconsistent:
+                # for an off-axis laminate A16 != 0, so an axial load generates Nxy and the anisotropy's
+                # contribution to the GEOMETRIC stiffness would otherwise be lost even though it is present
+                # in the elastic one.  Vanishes identically for m == m' and whenever Nxy == 0 (isotropic
+                # under axial load), so this is a no-op on every previously verified isotropic result.
+                if INCLUDE_NXY and Nxy != 0.0:
+                    KgC = np.zeros((8, 8))
+                    for (_, _, Gw_m, Jw), (_, _, Gw_mp, _) in zip(Bk[m], Bk[mp]):
+                        KgC += Jw * Nxy * (cmm(mp, m) * np.outer(Gw_m[0], Gw_mp[1])
+                                           + cmm(m, mp) * np.outer(Gw_m[1], Gw_mp[0]))
+                    KgCg = T.T @ KgC @ T
+                    add(rg, cg, kgv, m - 1, mp - 1, i, j, KgCg)
+                    add(rg, cg, kgv, mp - 1, m - 1, i, j, KgCg.T)
     K = sp.coo_matrix((kv, (rk, ck)), (ndof, ndof)).tocsc()
     Kg = sp.coo_matrix((kgv, (rg, cg)), (ndof, ndof)).tocsc()
     w, V = eigsh(-Kg, k=n_modes, M=K, which="LA")
@@ -140,6 +162,123 @@ def solve_fsm_multi(nodes2d, strips, ABD_s, N_s, L, M, n_modes=4, return_vecs=Fa
     order = np.argsort(1.0 / w); lam = (1.0 / w)[order]; V = V[:, order]
     if return_vecs:
         return lam, V.reshape(M, nn, 4, -1)               # (M harmonics, nn nodes, [u,Dy,Dz,th], modes)
+    return lam
+
+
+def solve_fsm_connected(sections, L, M, n_modes=6, ngauss=48, return_vecs=False, strips=None):
+    """CONNECTED multi-section FSM: all supplied cross-sections contribute to ONE eigenproblem.
+
+    The per-station method solves each cross-section as an isolated PRISMATIC member and takes the minimum.
+    That is structurally wrong whenever the buckle SPANS the taper: measured on the tapered square, the
+    3-D solid's mode peaks at x~0.5-0.7 and is spread over x~0.2-1.4, so no single prismatic section
+    represents it and the min-over-stations rule picks the (weakest, but unreachable) root -> ~22% low.
+
+    Formulation.  Keep the harmonic series over the WHOLE member,
+        u = sum_m U_m(xi) cos(k_m x),   v,w = sum_m {V_m,W_m}(xi) sin(k_m x),   k_m = m pi / L,
+    with the contour parametrized by normalized arc length xi so node j corresponds across sections, but
+    let the GEOMETRY, ABD and pre-stress N vary with x (interpolated between the supplied sections) and do
+    the longitudinal integral NUMERICALLY.  For a prismatic member the trig products integrate to L/2 * delta_mm'
+    and this reduces exactly to solve_fsm_multi; when the section varies, that orthogonality BREAKS, the
+    harmonics couple, and a superposition can localize the buckle anywhere along the span -- which is what
+    lets the model feel the wall narrowing inside one buckle.
+
+    Row trig types (needed for the numeric x-integration):
+        Bsin rows [eps_x, eps_y, kap_x, kap_y] ~ sin(k_m x)     Bcos rows [gam_xy, kap_xy] ~ cos(k_m x)
+        Gw row0 = w,x ~ cos(k_m x)                              Gw row1 = w,y ~ sin(k_m x)
+
+    sections : list of (x_k, nodes2d_k (nn,2), ABD_k (list per strip), N_k (list per strip)), x ascending.
+               Sections must share the same nn and the same node ordering (arc-length correspondence).
+    strips   : optional (ns,2) int connectivity, 0-based, SHARED by every section (node correspondence is
+               already mandatory, so one topology serves all x).  Default None = a single closed ring
+               [(i, i+1 mod nn)], which is what a plain tube needs.  Pass the station's own connectivity to
+               connect a BRANCHED contour -- a blade cross-section is multi-cell with shear webs, and the
+               default ring cannot represent it (the webs would simply be dropped).  A web that vanishes
+               across the span degrades gracefully: its strip length goes to zero and the `b <= 0` guard
+               below skips it.
+    Returns lam (ascending |.|), or (lam, V) with V shaped (M, nn, 4, n_modes) if return_vecs.
+    """
+    xs_k = np.array([s[0] for s in sections], float)
+    P_k = np.array([np.asarray(s[1], float) for s in sections])          # (K, nn, 2)
+    A_k = np.array([np.asarray(s[2], float) for s in sections])          # (K, ns, 6, 6)
+    N_k = np.array([np.asarray(s[3], float) for s in sections])          # (K, ns, 3)
+    nn = P_k.shape[1]
+    if strips is None:
+        strips = np.array([[i, (i + 1) % nn] for i in range(nn)])     # single closed ring: no webs
+    else:
+        strips = np.asarray(strips, int)
+        if strips.ndim != 2 or strips.shape[1] != 2:
+            raise ValueError("strips must be (ns,2) node-index pairs, got shape %s" % (strips.shape,))
+        if strips.min() < 0 or strips.max() >= nn:
+            raise ValueError("strips index outside [0,%d): min=%d max=%d — 0-based indices required"
+                             % (nn, strips.min(), strips.max()))
+    ns = len(strips)
+    if A_k.shape[1] != ns or N_k.shape[1] != ns:
+        raise ValueError("ABD/N must carry one entry per strip: ns=%d but ABD has %d and N has %d"
+                         % (ns, A_k.shape[1], N_k.shape[1]))
+    nd = 4 * nn; ndof = M * nd
+    ss = [0, 1, 3, 4]; cc = [2, 5]
+
+    def interp(x):
+        """linear interpolation of section geometry / ABD / N at position x (this is the 'connection')."""
+        j = int(np.clip(np.searchsorted(xs_k, x) - 1, 0, len(xs_k) - 2))
+        w = (x - xs_k[j]) / (xs_k[j + 1] - xs_k[j]); w = min(max(w, 0.0), 1.0)
+        return ((1 - w) * P_k[j] + w * P_k[j + 1],
+                (1 - w) * A_k[j] + w * A_k[j + 1],
+                (1 - w) * N_k[j] + w * N_k[j + 1])
+
+    gx, gw = np.polynomial.legendre.leggauss(ngauss)
+    gx = 0.5 * L * (gx + 1.0); gw = 0.5 * L * gw
+    K = np.zeros((ndof, ndof)); KG = np.zeros((ndof, ndof))
+    kms = np.array([m * np.pi / L for m in range(1, M + 1)])
+
+    for xg, wg in zip(gx, gw):
+        P, Aall, Nall = interp(xg)
+        sm = np.sin(kms * xg); cm = np.cos(kms * xg)
+        for e in range(ns):
+            i, j = strips[e]
+            d = P[j] - P[i]; b = float(np.linalg.norm(d))
+            if b <= 0:
+                continue
+            cy, cz = d / b
+            Tn = np.array([[1, 0, 0, 0], [0, cy, cz, 0], [0, -cz, cy, 0], [0, 0, 0, 1.0]])
+            T = np.zeros((8, 8)); T[:4, :4] = Tn; T[4:, 4:] = Tn
+            ABD = Aall[e]
+            Ass = ABD[np.ix_(ss, ss)]; Acc = ABD[np.ix_(cc, cc)]; Asc = ABD[np.ix_(ss, cc)]
+            Nx, Ny, Nxy = Nall[e]
+            Bk = [_strip_B(b, km) for km in kms]
+            gd = np.r_[4 * i:4 * i + 4, 4 * j:4 * j + 4]
+            for mi in range(M):
+                for mj in range(M):
+                    Ke = np.zeros((8, 8)); Kge = np.zeros((8, 8))
+                    for (Bs_i, Bc_i, Gw_i, Jw), (Bs_j, Bc_j, Gw_j, _) in zip(Bk[mi], Bk[mj]):
+                        Ke += Jw * (Bs_i.T @ Ass @ Bs_j * sm[mi] * sm[mj]
+                                    + Bs_i.T @ Asc @ Bc_j * sm[mi] * cm[mj]
+                                    + Bc_i.T @ Asc.T @ Bs_j * cm[mi] * sm[mj]
+                                    + Bc_i.T @ Acc @ Bc_j * cm[mi] * cm[mj])
+                        Kge += Jw * (Nx * np.outer(Gw_i[0], Gw_j[0]) * cm[mi] * cm[mj]
+                                     + Ny * np.outer(Gw_i[1], Gw_j[1]) * sm[mi] * sm[mj])
+                        # FULL membrane geometric stiffness: the Nxy cross term pairs w,x (cos) with w,y
+                        # (sin).  Here the x-integral is NUMERICAL over a varying section, so the cos-sin
+                        # product does NOT vanish -- exactly as for the four elastic trig products retained
+                        # just above.  Dropping it while keeping the elastic sin-cos coupling is
+                        # inconsistent.  Identically zero when Nxy == 0, so isotropic axial results are
+                        # unchanged.
+                        if INCLUDE_NXY and Nxy != 0.0:
+                            Kge += Jw * Nxy * (np.outer(Gw_i[0], Gw_j[1]) * cm[mi] * sm[mj]
+                                               + np.outer(Gw_i[1], Gw_j[0]) * sm[mi] * cm[mj])
+                    KeG = T.T @ Ke @ T * wg; KgG = T.T @ Kge @ T * wg
+                    gi = mi * nd + gd; gj_ = mj * nd + gd
+                    K[np.ix_(gi, gj_)] += KeG; KG[np.ix_(gi, gj_)] += KgG
+
+    K = 0.5 * (K + K.T); KG = 0.5 * (KG + KG.T)
+    Ks = sp.csc_matrix(K); KGs = sp.csc_matrix(KG)
+    w, V = eigsh(-KGs, k=min(n_modes, ndof - 2), M=Ks, which="LA")
+    keep = w > 1e-12; w = w[keep]; V = V[:, keep]
+    if len(w) == 0:
+        return (np.array([np.inf]), None) if return_vecs else np.array([np.inf])
+    order = np.argsort(1.0 / w); lam = (1.0 / w)[order]; V = V[:, order]
+    if return_vecs:
+        return lam, V.reshape(M, nn, 4, -1)
     return lam
 
 

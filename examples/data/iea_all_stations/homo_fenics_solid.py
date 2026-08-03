@@ -62,6 +62,7 @@ if PKG not in sys.path:
 import opensg  # noqa: E402  (side-effect: registers subpackages)
 from opensg.mesh.segment import SolidBounMesh  # noqa: E402
 from opensg.core.solid import compute_timo_boun  # noqa: E402
+from opensg.utils.solid import get_mass_solid  # noqa: E402  (6x6 sectional mass matrix, VABS convention)
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
 
@@ -78,12 +79,13 @@ def _reset_gmsh():
 
 
 def compute_c6(yaml_path):
-    """SolidBounMesh -> compute_timo_boun -> VABS-sorted Timoshenko 6x6 (numpy)."""
+    """SolidBounMesh -> Timoshenko 6x6 stiffness AND 6x6 mass matrix (both VABS convention)."""
     segment_mesh = SolidBounMesh(yaml_path)
     material_parameters, density = segment_mesh.material_database
     meshdata = segment_mesh.meshdata
     C6 = np.asarray(compute_timo_boun(material_parameters, meshdata)[0])
-    return C6
+    M6 = np.asarray(get_mass_solid(meshdata, density))          # VABS-convention 6x6 mass matrix
+    return C6, M6
 
 
 def main():
@@ -119,11 +121,12 @@ def main():
         try:
             _reset_gmsh()
             os.chdir(work)
-            C6 = compute_c6(f)
+            C6, M6 = compute_c6(f)
             os.chdir(cwd0)
-            np.savetxt(os.path.join(a.out, "C6_fenics_%s.txt" % nm), C6)
+            np.savetxt(os.path.join(a.out, "OpenSG_FEniCSx_%s.txt" % nm), C6)
+            np.savetxt(os.path.join(a.out, "OpenSG_Mass_%s.txt" % nm), M6)      # 6x6 mass matrix, VABS convention
             d = "  ".join("%s=%.4g" % (LBL[i], C6[i, i]) for i in range(6))
-            print("[%-10s] %s  [%.1fs]" % (nm, d, time.time() - t0), flush=True)
+            print("[%-10s] %s  mu=%.1f  [%.1fs]" % (nm, d, M6[0, 0], time.time() - t0), flush=True)
         except Exception as e:
             os.chdir(cwd0)
             print("[%-10s] FAIL %s" % (nm, repr(e)[:170]), flush=True)

@@ -59,7 +59,7 @@ def process(f, out):
     t0 = time.time()
     try:
         C6 = np.asarray(ring_6dof(load_ring(f)))
-        np.savetxt(os.path.join(out, "C6_rm_%s.txt" % nm), C6)
+        np.savetxt(os.path.join(out, "OpenSG_RM_%s.txt" % nm), C6)
         d = "  ".join("%s=%.4g" % (LBL[i], C6[i, i]) for i in range(6))
         print("[%-10s] %s  [%.1fs]" % (nm, d, time.time() - t0), flush=True)
     except Exception as e:
@@ -83,7 +83,8 @@ def main():
           flush=True)
     if a.jobs > 1 and len(files) > 1:
         import multiprocessing as mp
-        with mp.get_context("fork").Pool(min(a.jobs, len(files))) as pool:
+        # MUST be "spawn": JAX is multithreaded and fork() deadlocks a multithreaded child.
+        with mp.get_context("spawn").Pool(min(a.jobs, len(files))) as pool:
             pool.starmap(process, [(f, a.out) for f in files])
     else:
         for f in files:

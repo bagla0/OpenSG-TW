@@ -118,16 +118,20 @@ np.savez(os.path.join(OUT, "ex31_full_blade.npz"),
 
 MARK = ["o", "s", "^", "D", "v", "P"]
 COL = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#d62728", "#8c564b"]
-fig, ax = plt.subplots(1, 2, figsize=(11, 4.3), sharex=True)
+fig, ax = plt.subplots(1, 2, figsize=(11.6, 4.3), sharex=True)
 groups = [([1, 2, 3], "transverse shear & torsion"), ([0, 4, 5], "extension & bending")]
+handles, labels = [], []
 for a, (idx, title) in zip(ax, groups):
     a.axhline(0, color="0.6", lw=0.8)
     for k in idx:
-        a.plot(R, E[:, k], color=COL[k], marker=MARK[k], lw=1.6, ms=5, label="$%s$" %
-               ["EA", "GA_2", "GA_3", "GJ", "EI_2", "EI_3"][k])
+        ln, = a.plot(R, E[:, k], color=COL[k], marker=MARK[k], lw=1.6, ms=5, label="$%s$" %
+                     ["EA", "GA_2", "GA_3", "GJ", "EI_2", "EI_3"][k])
+        handles.append(ln); labels.append(ln.get_label())
     a.set_xlabel("span station  $r$"); a.set_title(title); a.grid(alpha=0.3)
-    a.legend(fontsize=9, frameon=False)
 ax[0].set_ylabel("diagonal % error vs 2-D solid")
-fig.tight_layout(); p = os.path.join(FIG, "full_blade_rm_span.png")
+order = [3, 0, 1, 2, 4, 5]                     # EA first, then shears/torsion, bendings
+fig.legend([handles[i] for i in order], [labels[i] for i in order], fontsize=9,
+           frameon=False, ncol=1, loc="center left", bbox_to_anchor=(0.91, 0.5))
+fig.tight_layout(rect=(0, 0, 0.90, 1)); p = os.path.join(FIG, "full_blade_rm_span.png")
 fig.savefig(p, dpi=200, bbox_inches="tight"); plt.close(fig)
 print("\nwrote ex31_full_blade.npz +", p)
