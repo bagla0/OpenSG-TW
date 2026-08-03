@@ -1,4 +1,4 @@
-"""abaqus_inp.py -- layup_db.yaml + 1dsg.yaml  ->  layup_db.inp
+"""abaqus_inp.py -- layup_db.yaml + 1dsg.yaml  ->  layup_db_abaqus.inp
 
 The plate law is homogenized here from the SG that 1d_sg.py wrote, rather
 than parsed back out of its .out -- one rm_plate_msg call is cheaper than
@@ -14,7 +14,7 @@ Simply supported (SS-1) on all four edges, drilling dof fixed (flat plate),
 double-sine pressure q0 sin(pi x/a) sin(pi y/b) held over the step, implicit
 *DYNAMIC at a fixed increment, centre deflection printed every increment.
 
-Run:  python abaqus_inp.py [layup_db.yaml]
+Run:  python abaqus_inp.py
 """
 import os
 import sys
@@ -116,7 +116,7 @@ L.append("U")
 L.append("*END STEP")
 
 # ---- output ----------------------------------------------------------------
-out = os.path.splitext(DB)[0] + ".inp"
+out = os.path.splitext(DB)[0] + "_abaqus.inp"
 open(out, "w").write("\n".join(L) + "\n")
 print("%s -> %s  (%d S4, rho_h = %.4f kg/m^2, %s)"
       % (os.path.basename(DB), os.path.basename(out), NX * NY, rho_h,
