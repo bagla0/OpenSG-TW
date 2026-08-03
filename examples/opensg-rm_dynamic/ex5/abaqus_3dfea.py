@@ -1,0 +1,196 @@
+"""abaqus_3dfea.py -- layup_db.yaml  ->  layup_db_3dfea.inp
+
+The 3-D FEA BENCHMARK for the same plate abaqus_inp.py builds as a shell.
+Here nothing is homogenized: every ply is meshed as its own layer of C3D8I
+bricks carrying its real 3-D material properties and its own *ORIENTATION.
+That is the point -- it is the reference the OpenSG-RM shell is judged
+against, so it must share the geometry, the load and the time integration
+and differ ONLY in how the wall is represented.
+
+    abaqus_inp.py   -> 400 S4      + one homogenized 8x8 section
+    abaqus_3dfea.py -> 6400 C3D8I  + 9 real materials, ply by ply
+
+Every keyword this script writes, and why, is in abaqus_3dfea_README.md.
+
+Run:  python abaqus_3dfea.py
+"""
+import os
+
+import numpy as np
+import yaml
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# ----------------------------------------------------------------------------
+# ALL VARIABLES USED IN THIS SCRIPT
+# ----------------------------------------------------------------------------
+# paths and input
+#   HERE        folder holding this script; every path is built from it
+#   DB          path to layup_db.yaml, the same single input abaqus_inp.py uses
+#   db          that YAML parsed into a dict
+#   p           shorthand for db["plate"], the plate/analysis block
+#   out         path of the deck written out, <DB stem>_3dfea.inp
+#
+# case data, all read from layup_db.yaml
+#   A, B        plate side lengths in x and y [m]
+#   NX, NY      C3D8I elements along x and along y (matched to the shell mesh)
+#   Q0          peak pressure q0 [Pa] of the double-sine load
+#   DT          fixed time increment of the *DYNAMIC step [s]
+#   TTOT        total simulated time [s]
+#   mats        per-ply material key, bottom ply first
+#   thick       per-ply thickness [m], bottom first
+#   angles      per-ply fibre angle [deg], bottom first
+#   divs        per-ply number of solid elements through its thickness
+#               (the layup's optional `divisions`, default 1)
+#   mdb         material database: E[3], G[3], nu[3], rho per material, every
+#               entry coerced to float (see the note where it is built)
+#
+# derived mesh
+#   tlay        thickness of every SOLID layer after subdividing plies by
+#               divs -- length NZT, and sum(tlay) = the laminate thickness
+#   play        which PLY each solid layer came from, so it can be given that
+#               ply's material and orientation
+#   NZT         total solid layers through the thickness = sum(divs)
+#   zk          the NZT+1 node planes, z = 0 at the BOTTOM face
+#   dx, dy      in-plane element size, A/NX and B/NY [m]
+#   npl         nodes per z-layer, (NX+1)*(NY+1)
+#   n3(i,j,k)   node id    = 1 + i + (NX+1)*j + npl*k
+#   e3(i,j,k)   element id = 1 + i + NX*j + NX*NY*k
+#   i, j, k     in-plane and through-thickness indices
+#   ids, s      node list being written and the chunk start index
+#   L           the deck itself: a list of text lines
+#   kk, m, t, v throwaway loop/comprehension variables
+# ----------------------------------------------------------------------------
+
+# ---- input -----------------------------------------------------------------
+DB = os.path.join(HERE, "layup_db.yaml")
+db = yaml.safe_load(open(DB))
+p = db["plate"]
+A, B = float(p["a"]), float(p["b"])
+NX, NY = int(p["nx"]), int(p["ny"])
+if NX % 2 or NY % 2:
+    raise ValueError("nx and ny must be EVEN (got %d, %d): the deflection "
+                     "probe is the node at the plate centre, which only "
+                     "exists when both are even" % (NX, NY))
+Q0, DT, TTOT = float(p["q0"]), float(p["dt"]), float(p["ttot"])
+# float() every number: PyYAML's float resolver demands an explicit exponent
+# SIGN, so "128.0e9" in the YAML comes back as a str while "128.0e+9" would be
+# a float.  Coercing here means the database can be written either way.
+mdb = {k: {"E": [float(v) for v in m["E"]],
+           "G": [float(v) for v in m["G"]],
+           "nu": [float(v) for v in m["nu"]],
+           "rho": float(m["rho"])}
+       for k, m in db["materials"].items()}
+mats = [str(q["material"]) for q in db["layup"]]
+thick = [float(q["thickness"]) for q in db["layup"]]
+angles = [float(q.get("angle", 0.0)) for q in db["layup"]]
+divs = [int(q.get("divisions", 1)) for q in db["layup"]]
+
+# ---- through-thickness mesh: subdivide each ply by its `divisions` ---------
+tlay, play = [], []
+for kk, (t, d) in enumerate(zip(thick, divs)):
+    tlay += [t / d] * d
+    play += [kk] * d
+NZT = len(tlay)
+zk = np.concatenate([[0.0], np.cumsum(tlay)])   # z = 0 at the BOTTOM face
+dx, dy = A / NX, B / NY
+npl = (NX + 1) * (NY + 1)
+n3 = lambda i, j, k: 1 + i + (NX + 1) * j + npl * k
+e3 = lambda i, j, k: 1 + i + NX * j + NX * NY * k
+
+print("3-D benchmark: %d x %d x %d = %d C3D8I, %d nodes"
+      % (NX, NY, NZT, NX * NY * NZT, npl * (NZT + 1)))
+print("through-thickness layers: %s"
+      % ", ".join("%.4g mm" % (1e3 * t) for t in tlay))
+
+# ---- nodes and elements ----------------------------------------------------
+L = ["*HEADING",
+     "3-D FEA benchmark from %s -- ply-by-ply C3D8I" % os.path.basename(DB),
+     "*NODE"]
+for k in range(NZT + 1):
+    for j in range(NY + 1):
+        for i in range(NX + 1):
+            L.append("%d, %.8f, %.8f, %.8f"
+                     % (n3(i, j, k), i * dx, j * dy, zk[k]))
+L.append("*ELEMENT, TYPE=C3D8I, ELSET=EALL")
+for k in range(NZT):
+    for j in range(NY):
+        for i in range(NX):
+            L.append("%d, %d, %d, %d, %d, %d, %d, %d, %d"
+                     % (e3(i, j, k),
+                        n3(i, j, k), n3(i + 1, j, k),
+                        n3(i + 1, j + 1, k), n3(i, j + 1, k),
+                        n3(i, j, k + 1), n3(i + 1, j, k + 1),
+                        n3(i + 1, j + 1, k + 1), n3(i, j + 1, k + 1)))
+
+# one ELSET per solid layer, so each gets its ply's material and orientation
+for k in range(NZT):
+    L.append("*ELSET, ELSET=LAY%d, GENERATE" % (k + 1))
+    L.append("%d, %d, 1" % (e3(0, 0, k), e3(NX - 1, NY - 1, k)))
+
+# ---- the side faces (SS-1) and the centre probe ----------------------------
+for nm, ids in (("FX0", [n3(0, j, k) for k in range(NZT + 1)
+                         for j in range(NY + 1)]),
+                ("FXA", [n3(NX, j, k) for k in range(NZT + 1)
+                         for j in range(NY + 1)]),
+                ("FY0", [n3(i, 0, k) for k in range(NZT + 1)
+                         for i in range(NX + 1)]),
+                ("FYB", [n3(i, NY, k) for k in range(NZT + 1)
+                         for i in range(NX + 1)])):
+    L.append("*NSET, NSET=%s" % nm)
+    for s in range(0, len(ids), 12):
+        L.append(", ".join(str(v) for v in ids[s:s + 12]))
+L.append("*NSET, NSET=NCEN3D")                  # centre node on the MID-plane
+L.append("%d" % n3(NX // 2, NY // 2, NZT // 2))
+
+# ---- materials, orientations, sections -------------------------------------
+for m in dict.fromkeys(mats):
+    md = mdb[m]
+    L.append("*MATERIAL, NAME=%s" % m.upper())
+    L.append("*ELASTIC, TYPE=ENGINEERING CONSTANTS")
+    L.append("%.6e, %.6e, %.6e, %.4g, %.4g, %.4g, %.6e, %.6e,"
+             % (md["E"][0], md["E"][1], md["E"][2],
+                md["nu"][0], md["nu"][1], md["nu"][2],
+                md["G"][0], md["G"][1]))
+    L.append("%.6e" % md["G"][2])
+    L.append("*DENSITY")
+    L.append("%g," % md["rho"])
+for k in range(NZT):
+    L.append("*ORIENTATION, NAME=OR%d, SYSTEM=RECTANGULAR" % (k + 1))
+    L.append("1.0, 0.0, 0.0, 0.0, 1.0, 0.0")
+    L.append("3, %g" % angles[play[k]])
+    L.append("*SOLID SECTION, ELSET=LAY%d, MATERIAL=%s, ORIENTATION=OR%d"
+             % (k + 1, mats[play[k]].upper(), k + 1))
+    L.append(",")
+
+# ---- boundary conditions ---------------------------------------------------
+L.append("** SS-1 on the side FACES; solids have no rotational dof, so there")
+L.append("** is no drilling constraint and no edge-rotation choice to make")
+L.append("*BOUNDARY")
+for card in ("FX0, 2, 3", "FXA, 2, 3", "FY0, 1, 1", "FYB, 1, 1",
+             "FY0, 3, 3", "FYB, 3, 3"):
+    L.append(card)
+
+# ---- step ------------------------------------------------------------------
+L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
+# DIRECT is ESSENTIAL here, not cosmetic: with the 4-parameter *DYNAMIC form
+# Abaqus ran this solid on automatic incrementation -- 437 increments over 40
+# distinct dt, down to 1.6e-7 ms at the start -- while the shell happened to
+# hold a uniform 50 us.  The two histories then cannot be compared point for
+# point.  DIRECT pins dt for both.
+L.append("*DYNAMIC, DIRECT")
+L.append("%g, %g" % (DT, TTOT))
+L.append("*DLOAD")                  # P2 = top face of the top layer, acts -z
+for j in range(NY):
+    for i in range(NX):
+        q = Q0 * np.sin(np.pi * (i + 0.5) * dx / A) \
+               * np.sin(np.pi * (j + 0.5) * dy / B)
+        L.append("%d, P2, %.6e" % (e3(i, j, NZT - 1), q))
+L.append("*NODE PRINT, NSET=NCEN3D, FREQUENCY=1")
+L.append("U")
+L.append("*END STEP")
+
+# ---- output ----------------------------------------------------------------
+out = os.path.splitext(DB)[0] + "_3dfea.inp"
+open(out, "w").write("\n".join(L) + "\n")
+print("%s -> %s" % (os.path.basename(DB), os.path.basename(out)))

@@ -167,8 +167,12 @@ for card in ("NX0, 2, 3", "NXA, 2, 3", "NY0, 1, 1", "NYB, 1, 1",
     L.append(card)
 
 L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
-L.append("*DYNAMIC")
-L.append("%g, %g, %g, %g" % (DT, TTOT, DT * 1e-4, DT))
+# DIRECT = no automatic incrementation.  The 4-parameter form only CAPS dt;
+# Abaqus still cuts back to control the half-increment residual, and then the
+# two models no longer share increments (the solid did exactly this: 437
+# increments over 40 distinct dt).  DIRECT takes just dt and the period.
+L.append("*DYNAMIC, DIRECT")
+L.append("%g, %g" % (DT, TTOT))
 L.append("*DLOAD")                  # "P" = Abaqus's shell pressure load type
 for j in range(NY):                 # q0 sin sin, sampled at the element centre
     for i in range(NX):

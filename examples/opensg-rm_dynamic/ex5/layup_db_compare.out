@@ -1,0 +1,11 @@
+OpenSG-RM shell vs 3-D FEA benchmark -- centre deflection
+  shell : 400 S4, one homogenized 8x8 plate law
+  solid : 6400 C3D8I, 9 materials ply by ply (history negated: P2 acts -z)
+
+                                  OpenSG-RM        3-D FEA       diff
+peak deflection [m]                3.266141       3.210521      1.73%
+  at t [ms]                         13.4000         7.9500
+mean (static) level [m]            1.704439       1.672316
+
+RMS difference / peak             5.36%
+increments compared                     400

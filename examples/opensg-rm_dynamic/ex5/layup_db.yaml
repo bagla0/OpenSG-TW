@@ -53,12 +53,18 @@ materials:
 #   -> each of the eight GE plies = (0.05/8) h = 0.00625 h = 0.9525 mm
 #   -> core = the remaining 0.95 h                          = 144.78 mm
 # with h = 0.1524 m (6 in), the absolute thickness their Example 2 sets.
+#
+# `divisions` is read ONLY by abaqus_3dfea.py: how many solid elements to put
+# through that ply's thickness (default 1).  The thin face plies get one
+# element each; the 144.78 mm core is split 8 ways so the 3-D benchmark can
+# resolve the shear through it.  1d_sg.py ignores the key -- the SG's own
+# through-thickness discretisation is `mesh:` above.
 layup:
   - {material: ge,    thickness: 0.0009525, angle:  0.0}
   - {material: ge,    thickness: 0.0009525, angle: 90.0}
   - {material: ge,    thickness: 0.0009525, angle:  0.0}
   - {material: ge,    thickness: 0.0009525, angle: 90.0}
-  - {material: herex, thickness: 0.1447800, angle:  0.0}
+  - {material: herex, thickness: 0.1447800, angle:  0.0, divisions: 8}
   - {material: ge,    thickness: 0.0009525, angle: 90.0}
   - {material: ge,    thickness: 0.0009525, angle:  0.0}
   - {material: ge,    thickness: 0.0009525, angle: 90.0}
