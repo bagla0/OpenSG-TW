@@ -59,7 +59,7 @@ downstream patch-fit recovery that assumes 4 points per element.
 
 ### `*NSET`
 Five sets: `NX0`, `NXA` (the x = 0 and x = a edges), `NY0`, `NYB` (y = 0 and
-y = b), `NALL` (everything, via `GENERATE`), and `NCEN` (the single centre node,
+y = b), `NALL` (everything, via `GENERATE`), and `NCEN_REF` (the single centre node,
 the deflection probe). Edge sets are written 12 ids per line — Abaqus's limit
 is 16.
 
@@ -226,10 +226,35 @@ How the magnitudes are built:
    it with `*DLOAD, AMPLITUDE=<name>`. (A static step would default to RAMP,
    not STEP — the default differs by procedure.)
 
-### `*NODE PRINT, NSET=NCEN, FREQUENCY=1` / `U`
+### `*NODE PRINT, NSET=NCEN_REF, FREQUENCY=1` / `U`
 The centre deflection at **every** increment, into the `.dat`. `FREQUENCY=1` is
 what lets a post-processor assume one row per increment; anything else and the
 time axis has to be rebuilt from the printed step times.
+
+This is the deflection of the **reference surface** — a shell node has only one
+`w`, because RM kinematics set ε₃₃ = 0. There is no separate top-surface value
+to read here; see below.
+
+### `*EL PRINT, ELSET=PATCHC` — `SF, SM` then `COORD`
+A 2×2 element patch straddling the centre, printed every increment.
+
+This is what lets the RM route say anything about a **specific depth**. The
+3-D recovery needs the six plate strains *and their in-plane gradients*, and a
+gradient cannot be had from one element — hence a patch, whose 4 elements × 4
+integration points are least-squares fitted to give the value and both first
+derivatives at the centre.
+
+The immediate reason it is here: Nayak reports at the **centre of the top
+surface**, and that is now the *only* station the 3-D benchmark prints
+(`NTOP3D`). Comparing the shell's *node* against the solid's *top face* would
+charge the shell for the through-thickness compression it never claimed to
+model. With this patch the shell is dehomogenized to z = +h/2 and the two are
+compared like for like — which makes the comparison a test of the **3-D
+recovery**, not merely of the homogenization.
+
+> `SF, SM` and `COORD` must be **two separate `*EL PRINT` blocks**. The `.dat`
+> parser keys them as two distinct tables; merged into one request the reshape
+> breaks.
 
 ### `*END STEP`
 

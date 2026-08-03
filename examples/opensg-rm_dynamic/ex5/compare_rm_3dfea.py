@@ -12,6 +12,13 @@ solid is loaded with P2 on its top face, which acts -z.  The solid history is
 therefore negated here before anything is compared.  See
 abaqus_3dfea_README.md.
 
+THE STATION: the solid now reports NTOP3D, the centre of the TOP surface
+(Nayak's station).  The shell's NCEN_REF is its REFERENCE surface.  Those are
+not the same plane, and the difference is exactly the thickness stretch an RM
+shell sets to zero -- so the shell has to be recovered to z = +h/2 from the
+PATCHC resultants before the comparison means anything.  That recovery is NOT
+wired in yet; this script warns and reports the mismatched pair meanwhile.
+
 Run:  python compare_rm_3dfea.py
 """
 import os
@@ -62,9 +69,19 @@ def history(dat, nset, comp=2):
     return t[len(t) - len(w):], w
 
 
-t_rm, w_rm = history(os.path.join(RES, "layup_db_abaqus.dat"), "NCEN")
-t_so, w_so = history(os.path.join(RES, "layup_db_3dfea.dat"), "NCEN3D")
+t_rm, w_rm = history(os.path.join(RES, "layup_db_abaqus.dat"), "NCEN_REF")
+t_so, w_so = history(os.path.join(RES, "layup_db_3dfea.dat"), "NTOP3D")
 w_so = -w_so                       # P2 acts -z; bring the solid into +z
+
+# !! STATIONS DO NOT MATCH YET !!  NCEN_REF is the shell's REFERENCE surface,
+# NTOP3D is the solid's TOP surface.  The difference between them contains the
+# through-thickness compression, which an RM shell cannot represent (eps33 = 0).
+# To compare like for like the shell must be dehomogenized to z = +h/2 from the
+# PATCHC resultants; until that is wired in, read the numbers below as
+# shell-reference vs solid-top, NOT as an OpenSG-RM error.
+print("WARNING: comparing the shell's REFERENCE surface against the solid's "
+      "TOP surface.\n         The gap includes thickness stretch. Recover the "
+      "shell to z = +h/2 first.\n")
 
 n = min(len(w_rm), len(w_so))
 assert np.allclose(t_rm[:n], t_so[:n]), "the two decks did not share increments"

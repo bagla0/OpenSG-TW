@@ -12,7 +12,10 @@ no orientations, no shear correction factor anywhere in the deck.
 
 Simply supported (SS-1) on all four edges, drilling dof fixed (flat plate),
 double-sine pressure q0 sin(pi x/a) sin(pi y/b) held over the step, implicit
-*DYNAMIC at a fixed increment, centre deflection printed every increment.
+*DYNAMIC at a fixed increment.  Printed every increment: the centre-node
+deflection, and SF/SM + COORD on a 2x2 patch at the centre so the RM 3-D
+recovery can reach any depth -- in particular the TOP SURFACE, which is where
+Nayak reports and which a shell node cannot give directly.
 
 Every keyword this script writes, and why each data line looks the way it
 does, is documented in abaqus_inp_README.md -- read that rather than
@@ -66,6 +69,9 @@ import yaml
 #   dx, dy      element size, A/NX and B/NY [m]
 #   n(i, j)     node id   = 1 + i + (NX+1)*j   (x fastest)
 #   e(i, j)     element id = 1 + i + NX*j
+#   c           NX//2, the centre index; the PATCHC elset straddles it
+#   xc, yc      coordinates of the centre node, written into the deck as a
+#               comment so NCEN_REF says which point it is
 #   i, j        in-plane element/node indices
 #   nm, ids     name and node list of each edge *NSET being written
 #   s           start index when chunking a long list across data lines
@@ -148,8 +154,24 @@ for nm, ids in (("NX0", [n(0, j) for j in range(NY + 1)]),
         L.append(", ".join(str(v) for v in ids[s:s + 12]))
 L.append("*NSET, NSET=NALL, GENERATE")
 L.append("1, %d, 1" % n(NX, NY))
-L.append("*NSET, NSET=NCEN")
+xc, yc = (NX // 2) * dx, (NY // 2) * dy
+L.append("** NCEN_REF -- the deflection probe:")
+L.append("**   centre node, x = %.6f  y = %.6f, ON THE REFERENCE SURFACE"
+         % (xc, yc))
+L.append("**   (fraction = %g of the thickness from the bottom face)." % fraction)
+L.append("**   An RM shell has ONE w per point (eps33 = 0), so this is NOT a")
+L.append("**   top- or bottom-surface value.  For the top surface, dehomogenize")
+L.append("**   using the PATCHC resultants below.")
+L.append("*NSET, NSET=NCEN_REF")
 L.append("%d" % n(NX // 2, NY // 2))
+# A 2x2 element patch straddling the centre.  A shell node gives ONE w, on the
+# reference surface; to say anything about the TOP surface the RM route has to
+# dehomogenize, and that needs the section resultants plus their in-plane
+# gradients -- which is what a patch (rather than a single element) provides,
+# by least-squares fitting SF/SM over its integration points.
+c = NX // 2
+L.append("*ELSET, ELSET=PATCHC")
+L.append(", ".join(str(e(i, j)) for j in (c - 1, c) for i in (c - 1, c)))
 
 # ---- the section: the 21 upper-triangle terms, COLUMN by column ------------
 L.append("*SHELL GENERAL SECTION, ELSET=EALL, DENSITY=%.6g" % rho_h)
@@ -179,8 +201,14 @@ for j in range(NY):                 # q0 sin sin, sampled at the element centre
         q = Q0 * np.sin(np.pi * (i + 0.5) * dx / A) \
                * np.sin(np.pi * (j + 0.5) * dy / B)
         L.append("%d, P, %.6e" % (e(i, j), q))
-L.append("*NODE PRINT, NSET=NCEN, FREQUENCY=1")
+L.append("*NODE PRINT, NSET=NCEN_REF, FREQUENCY=1")
 L.append("U")
+# SF/SM and COORD must be TWO separate *EL PRINT blocks: the .dat parser keys
+# them as two tables, and merging them into one request breaks the reshape.
+L.append("*EL PRINT, ELSET=PATCHC, FREQUENCY=1")
+L.append("SF, SM")
+L.append("*EL PRINT, ELSET=PATCHC, FREQUENCY=1")
+L.append("COORD")
 L.append("*END STEP")
 
 # ---- output ----------------------------------------------------------------

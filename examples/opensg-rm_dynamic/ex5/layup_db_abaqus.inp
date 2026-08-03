@@ -857,8 +857,16 @@ OpenSG-RM plate from layup_db.yaml (model 1)
 433, 434, 435, 436, 437, 438, 439, 440, 441
 *NSET, NSET=NALL, GENERATE
 1, 441, 1
-*NSET, NSET=NCEN
+** NCEN_REF -- the deflection probe:
+**   centre node, x = 0.762000  y = 0.762000, ON THE REFERENCE SURFACE
+**   (fraction = 0.5 of the thickness from the bottom face).
+**   An RM shell has ONE w per point (eps33 = 0), so this is NOT a
+**   top- or bottom-surface value.  For the top surface, dehomogenize
+**   using the PATCHC resultants below.
+*NSET, NSET=NCEN_REF
 221
+*ELSET, ELSET=PATCHC
+190, 191, 210, 211
 *SHELL GENERAL SECTION, ELSET=EALL, DENSITY=30.2514
 5.491650e+08, 2.641702e+07, 5.491650e+08, 1.552461e-10, 2.728769e-08, 4.137660e+07, 3.618296e-06, 3.581560e-06
 3.750560e-25, 3.000546e+06, 3.612293e-06, 3.590136e-06, 4.025233e-25, 1.256596e+05, 2.937114e+06, 1.024401e-24
@@ -1278,6 +1286,10 @@ NALL, 6, 6
 398, P, 2.070151e+06
 399, P, 1.262838e+06
 400, P, 4.244297e+05
-*NODE PRINT, NSET=NCEN, FREQUENCY=1
+*NODE PRINT, NSET=NCEN_REF, FREQUENCY=1
 U
+*EL PRINT, ELSET=PATCHC, FREQUENCY=1
+SF, SM
+*EL PRINT, ELSET=PATCHC, FREQUENCY=1
+COORD
 *END STEP

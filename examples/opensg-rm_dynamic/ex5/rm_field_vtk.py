@@ -225,7 +225,7 @@ def main():
     D = np.concatenate([E6, dE1, dE2, dE11, dE12a, dE22, qt6],
                        axis=-1).reshape(-1, 42)
     # ---- through-thickness operators AT THE SOLID GAUSS DEPTHS ---------
-    # the solid layers are PLY-RESOLVED (1.905 mm plies, 17.1 mm core
+    # the solid layers are PLY-RESOLVED (0.9525 mm plies, 18.1 mm core
     # sub-layers), so the Gauss depths follow the true layer thicknesses
     tlay = list(thick[:4]) + [thick[4] / 8.0] * 8 + list(thick[5:])
     zkl = np.concatenate([[0.0], np.cumsum(tlay)])

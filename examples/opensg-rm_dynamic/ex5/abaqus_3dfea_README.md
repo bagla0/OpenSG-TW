@@ -16,6 +16,7 @@ real 3-D material properties and its own fibre orientation. Where
 | nodes | 441 | 7497 |
 | constitutive input | one homogenized 6×6 (+2×2) | 9 materials, ply by ply |
 | plies in the model | none | all of them, resolved |
+| reported deflection | recovered at z = +h/2 | node at z = +h/2 |
 | runtime | ~40 s | ~5½ min |
 
 Both read the **same `layup_db.yaml`** and share geometry, load, boundary
@@ -78,11 +79,29 @@ Brick connectivity is the **bottom face counter-clockwise, then the top face
 counter-clockwise** — the order Abaqus expects, and the order that fixes which
 face is `P1`…`P6`.
 
-**z = 0 is the bottom face here**, not the mid-surface. The shell deck lies in
-the plane z = 0 because that is its reference surface; the solid spans
-z ∈ [0, h]. So the two models are offset by h/2 in absolute z. That is
-harmless for deflection and stress, but it matters the moment you overlay
-fields or compare coordinates.
+**The solid spans z ∈ [−h/2, +h/2]** — centred on its own mid-plane, which is
+the plate centroid.
+
+Two separate things get conflated here, so it is worth stating them apart.
+
+*Where the origin sits changes no result.* A displacement field is invariant
+under a rigid translation of the axes — same mesh, same BCs, same load, same
+answer. Building this deck with z = 0 at the bottom face and then re-centring it
+changed **14 994 lines of the deck, every one of them a node coordinate, and not
+a single other line**. The origin is bookkeeping; centring it just makes the
+coordinates say something.
+
+*Which plane you PROBE does matter.* Through a **soft-core sandwich w is not
+constant through the thickness** — the core compresses, so the top-face,
+mid-plane and bottom-face deflections genuinely differ. This deck probes the
+**top face**, and the shell must be recovered to that same plane (see `*NSET`
+below).
+
+> **The solid does not read `fraction`.** It is centred on its own geometry and
+> probes its own top face, so the shell's reference-surface choice never enters
+> the benchmark. That is deliberate: a reference plane is a modelling decision
+> belonging to the *candidate*, and the model it is being judged against should
+> not be perturbed by it.
 
 ### `*ELSET, ELSET=LAY<k>, GENERATE`
 One set per solid layer. Because element ids are contiguous within a layer,
@@ -91,9 +110,21 @@ each set is a single `first, last, 1` range.
 ### `*NSET`
 `FX0`, `FXA`, `FY0`, `FYB` are the four side **faces** — every node on that
 face through the whole thickness, not just an edge line as in the shell deck.
-`NCEN3D` is the single node at the plate centre **on the mid-plane**
-(`n3(NX//2, NY//2, NZT//2)`), which is the like-for-like counterpart of the
-shell's `NCEN`.
+
+Then **one probe**: `NTOP3D`, the node at the centre of the **top surface**,
+z = +h/2. This is Nayak's station — the loaded face — and it is the only
+deflection this deck reports.
+
+> **The shell cannot match it by reading a node.** An RM shell has one `w` per
+> point (ε₃₃ = 0 by construction) and that `w` belongs to the **reference
+> surface**. Setting it against the solid's top face would charge the shell for
+> the through-thickness compression it never claimed to model, and the gap would
+> look like an OpenSG-RM error when it is a statement about plate kinematics.
+>
+> Reaching z = +h/2 on the RM side means **dehomogenizing**, which is exactly
+> why the shell deck prints `SF`/`SM` on a 2×2 centre patch. That makes the
+> comparison a test of the 3-D recovery, not just of the homogenization — the
+> more interesting of the two questions, and the one OpenSG-RM exists to answer.
 
 `nx` and `ny` must be even, for the same reason as the shell deck: with an odd
 count there is no node at the centre and the probe would silently land half an
@@ -176,24 +207,26 @@ element, so a positive `P2` on the top face pushes **downward, along −z**.
 Only the top layer is loaded (400 lines, one per top-layer element), not all
 6400.
 
-### `*NODE PRINT, NSET=NCEN3D, FREQUENCY=1` / `U`
-Mid-plane centre deflection every increment, matching the shell's print so the
-two `.dat` files line up row for row.
+### `*NODE PRINT, NSET=NTOP3D, FREQUENCY=1` / `U`
+Centre-of-top-surface deflection, every increment. The shell prints on the same
+cadence, so the two `.dat` files line up row for row with no interpolation.
 
 ---
 
 ## What to compare, and the traps in doing it
 
 1. **Flip the sign** of the solid deflection (see `*DLOAD` above).
-2. Both models print at every increment with the same fixed Δt, so no
-   interpolation is needed — but only because both decks pin max Δt. If either
-   falls back to automatic incrementation the times diverge and you have to
-   parse `STEP TIME COMPLETED` rather than assume t = k·Δt.
-3. The solid probe is on the **mid-plane** (`NZT//2`), the shell node is the
-   reference surface. With `fraction: 0.5` those are the same physical plane;
-   with any other `fraction` they are not, and the comparison needs care.
-4. The solid is offset by h/2 in absolute z (it spans 0…h, the shell sits at
-   z = 0). Only matters for overlaying fields, not for scalar histories.
+2. **Match the station.** The solid reports z = +h/2, so the shell must be
+   *recovered* to z = +h/2 from its patch resultants, not read at its node.
+   Node-against-top-face is the easy mistake and it inflates the shell's error
+   by the whole thickness-stretch term.
+3. Both models print at every increment with the same fixed Δt, so no
+   interpolation is needed — but only because both decks use `*DYNAMIC, DIRECT`.
+   With the four-parameter form Abaqus put the solid on automatic incrementation
+   (437 increments, 40 distinct Δt) while the shell held a uniform 50 μs, and
+   the two could not be compared point for point.
+4. Both models now share coordinates — the solid is centred on z = 0 and, with
+   `fraction: 0.5`, so is the shell. Field overlays need no offset.
 
 ---
 

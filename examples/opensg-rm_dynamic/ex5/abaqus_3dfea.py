@@ -51,12 +51,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 #   play        which PLY each solid layer came from, so it can be given that
 #               ply's material and orientation
 #   NZT         total solid layers through the thickness = sum(divs)
-#   zk          the NZT+1 node planes, z = 0 at the BOTTOM face
+#   h           laminate thickness, sum(tlay)
+#   zk          the NZT+1 node planes, centred: z runs -h/2 .. +h/2
 #   dx, dy      in-plane element size, A/NX and B/NY [m]
 #   npl         nodes per z-layer, (NX+1)*(NY+1)
 #   n3(i,j,k)   node id    = 1 + i + (NX+1)*j + npl*k
 #   e3(i,j,k)   element id = 1 + i + NX*j + NX*NY*k
 #   i, j, k     in-plane and through-thickness indices
+#   xc, yc      coordinates of the centre line, written into the deck as a
+#               comment so NTOP3D says which point it is
 #   ids, s      node list being written and the chunk start index
 #   L           the deck itself: a list of text lines
 #   kk, m, t, v throwaway loop/comprehension variables
@@ -73,6 +76,10 @@ if NX % 2 or NY % 2:
                      "probe is the node at the plate centre, which only "
                      "exists when both are even" % (NX, NY))
 Q0, DT, TTOT = float(p["q0"]), float(p["dt"]), float(p["ttot"])
+# NOTE: `fraction` is deliberately NOT read here.  The solid is centred on its
+# own geometry and probes its own top face, so it has no need of the shell's
+# reference-surface choice.  Keeping that dependency out means the benchmark
+# cannot be perturbed by a modelling decision that belongs to the candidate.
 # float() every number: PyYAML's float resolver demands an explicit exponent
 # SIGN, so "128.0e9" in the YAML comes back as a str while "128.0e+9" would be
 # a float.  Coercing here means the database can be written either way.
@@ -92,7 +99,13 @@ for kk, (t, d) in enumerate(zip(thick, divs)):
     tlay += [t / d] * d
     play += [kk] * d
 NZT = len(tlay)
-zk = np.concatenate([[0.0], np.cumsum(tlay)])   # z = 0 at the BOTTOM face
+h = float(sum(tlay))
+# The solid is CENTRED ON ITS OWN GEOMETRY: z spans -h/2 .. +h/2, origin at the
+# plate mid-plane.  That is the solid's natural origin and it does not depend on
+# whatever reference surface the shell happens to use.  Where the origin sits
+# changes no result anyway -- a displacement field is invariant under a rigid
+# translation of the axes -- it just makes the coordinates say something.
+zk = np.concatenate([[0.0], np.cumsum(tlay)]) - 0.5 * h
 dx, dy = A / NX, B / NY
 npl = (NX + 1) * (NY + 1)
 n3 = lambda i, j, k: 1 + i + (NX + 1) * j + npl * k
@@ -140,8 +153,26 @@ for nm, ids in (("FX0", [n3(0, j, k) for k in range(NZT + 1)
     L.append("*NSET, NSET=%s" % nm)
     for s in range(0, len(ids), 12):
         L.append(", ".join(str(v) for v in ids[s:s + 12]))
-L.append("*NSET, NSET=NCEN3D")                  # centre node on the MID-plane
-L.append("%d" % n3(NX // 2, NY // 2, NZT // 2))
+# ONE probe: the centre of the TOP surface, z = +h/2, following Nayak.
+# It is the loaded face and the station he reports.
+#
+# The shell cannot match this by reading a node -- an RM shell has one w per
+# point (eps33 = 0 by construction), and that w belongs to the reference
+# surface.  Reaching z = +h/2 on the RM side means dehomogenizing, which is
+# why the shell deck prints SF/SM on a centre patch.  Comparing the shell's
+# NODE against this top face would charge it for the through-thickness
+# compression it never claimed to model.
+xc, yc = (NX // 2) * dx, (NY // 2) * dy
+L.append("** NTOP3D -- the ONE deflection probe of this deck:")
+L.append("**   centre of the TOP surface, x = %.6f  y = %.6f  z = %+.6f m"
+         % (xc, yc, zk[NZT]))
+L.append("**   (Nayak's station: the loaded face.  z is measured from the")
+L.append("**    plate mid-plane, so the top face is at +h/2 = %+.6f m.)"
+         % (0.5 * h))
+L.append("**   The shell's counterpart is NOT its node -- it must be")
+L.append("**   dehomogenized to this same z from its PATCHC resultants.")
+L.append("*NSET, NSET=NTOP3D")
+L.append("%d" % n3(NX // 2, NY // 2, NZT))
 
 # ---- materials, orientations, sections -------------------------------------
 for m in dict.fromkeys(mats):
@@ -186,7 +217,7 @@ for j in range(NY):
         q = Q0 * np.sin(np.pi * (i + 0.5) * dx / A) \
                * np.sin(np.pi * (j + 0.5) * dy / B)
         L.append("%d, P2, %.6e" % (e3(i, j, NZT - 1), q))
-L.append("*NODE PRINT, NSET=NCEN3D, FREQUENCY=1")
+L.append("*NODE PRINT, NSET=NTOP3D, FREQUENCY=1")
 L.append("U")
 L.append("*END STEP")
 
