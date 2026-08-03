@@ -1,0 +1,54 @@
+# layup_db.yaml -- THE USER INPUT for 1d_sg.py.
+#
+# Everything the through-thickness 1-D SG needs lives here: which reference
+# surface, which materials (including their density), and the stacking
+# sequence.  1d_sg.py reads only this file, writes the SG mesh YAML + PNG,
+# and homogenizes it -- so a new laminate means editing THIS file, not code.
+#
+#   model: 0  ->  CLASSICAL: print the 6x6 ABD only
+#   model: 1  ->  SHEAR-REFINED: print the full 8x8 ABDG (ABD + the 2x2
+#                 MSG transverse-shear block)
+
+name: 1d_sg               # basename of the generated <name>.yaml and <name>.png
+model: 1                  # 0 = ABD only, 1 = ABD + transverse shear (8x8)
+fraction: 0.5             # reference surface as a fraction of thickness:
+                          #   0 = bottom/OML face, 0.5 = mid-surface, 1 = top
+                          # The Abaqus S4 mesh sits on the mid-plane -> 0.5.
+
+mesh:
+  n_per_layer: 1          # SG elements per physical ply
+  elem_order: 4           # 4 = 5-noded quartic (exact for the warping ladder)
+
+# --- materials -------------------------------------------------------------
+# E  = [E1, E2, E3]      G  = [G12, G13, G23]      nu = [nu12, nu13, nu23]
+# rho is the mass density [kg/m^3]; the section mass rho*h is summed from it.
+materials:
+  ge:
+    full_name: graphite/epoxy face ply
+    E:  [128.0e9, 11.0e9, 11.0e9]
+    G:  [4.48e9, 4.48e9, 1.53e9]
+    nu: [0.25, 0.25, 0.25]
+    rho: 1500.0
+  herex:
+    full_name: HEREX C70.130 PVC foam core
+    E:  [103.63e6, 103.63e6, 103.63e6]
+    G:  [50.0e6, 50.0e6, 50.0e6]
+    nu: [0.32, 0.32, 0.32]
+    rho: 130.0
+
+# --- stacking sequence, BOTTOM PLY FIRST -----------------------------------
+# Nayak Ex.5, (0/90/0/90/core)s.  The paper gives only ratios:
+#     2 h_f / h = 0.05  with 2 h_f = BOTH face sheets
+#   -> each of the eight GE plies = (0.05/8) h = 0.00625 h = 0.9525 mm
+#   -> core = the remaining 0.95 h                          = 144.78 mm
+# with h = 0.1524 m (6 in), the absolute thickness their Example 2 sets.
+layup:
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: herex, thickness: 0.1447800, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
