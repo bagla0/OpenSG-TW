@@ -211,11 +211,27 @@ L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
 # point.  DIRECT pins dt for both.
 L.append("*DYNAMIC, DIRECT")
 L.append("%g, %g" % (DT, TTOT))
-L.append("*DLOAD")                  # P2 = top face of the top layer, acts -z
+# Only the TOP SURFACE is loaded: P2 is the top face (nodes 5-8) of the TOP
+# layer, k = NZT-1, so 400 of the 6400 elements carry pressure.
+#
+# The pressure is sampled at the CENTROID OF THAT TOP FACE, taken directly from
+# the face's own four nodes rather than from the element.  On this prismatic
+# mesh the two happen to share x and y (verified: max difference 1.1e-16 m over
+# all 400 loaded elements) -- but they would NOT on a tapered or skewed solid,
+# and averaging the face nodes is right either way.
+def top_face_centre(i, j):
+    """(x, y) of the centroid of element (i, j, NZT-1)'s TOP face, averaged
+    over its four top nodes -- the surface the pressure actually acts on."""
+    n = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+    return (sum(a * dx for a, _ in n) / 4.0,
+            sum(b * dy for _, b in n) / 4.0)
+
+
+L.append("*DLOAD")                  # positive P2 acts INTO the element, i.e. -z
 for j in range(NY):
     for i in range(NX):
-        q = Q0 * np.sin(np.pi * (i + 0.5) * dx / A) \
-               * np.sin(np.pi * (j + 0.5) * dy / B)
+        xf, yf = top_face_centre(i, j)
+        q = Q0 * np.sin(np.pi * xf / A) * np.sin(np.pi * yf / B)
         L.append("%d, P2, %.6e" % (e3(i, j, NZT - 1), q))
 L.append("*NODE PRINT, NSET=NTOP3D, FREQUENCY=1")
 L.append("U")

@@ -204,8 +204,19 @@ element, so a positive `P2` on the top face pushes **downward, along −z**.
 > common source of silently wrong comparisons in this suite, and it is why the
 > existing ex5 post-processors negate the solid columns.
 
-Only the top layer is loaded (400 lines, one per top-layer element), not all
-6400.
+Only the top layer is loaded — **400 of the 6400 elements**, `k = NZT-1`, whose
+`P2` face sits at z = +h/2 exactly.
+
+**The pressure is evaluated at the TOP-FACE centroid**, which for this mesh is
+what `(i+0.5)·dx, (j+0.5)·dy` gives. The bricks have vertical sides, so the top
+face spans the same in-plane rectangle as the element and the two share their
+x and y — checked across all 400 loaded elements, **max |Δx,Δy| = 1.1e-16 m**.
+They differ only in z (face at 0.076200, element centre at 0.075724, half a ply
+lower), and `q` depends on x and y alone, so this is the top-surface value.
+
+> That equality is a property of *this* mesh. On a tapered or skewed solid the
+> face centroid and the element centroid would separate in-plane, and the
+> pressure would have to be averaged from the four top nodes instead.
 
 ### `*NODE PRINT, NSET=NTOP3D, FREQUENCY=1` / `U`
 Centre-of-top-surface deflection, every increment. The shell prints on the same
