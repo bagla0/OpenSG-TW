@@ -202,8 +202,8 @@ def navier_KM(theory):
         # the OpenSG-RM constitutive law IS the MSG-homogenized 8x8: the
         # 6x6 in-plane/bending block equals CLT, but the 2x2 shear block is
         # the LS-identified section shear (core-dominated SERIES compliance,
-        # G11 = 7.81e6 N/m here) -- NOT the parallel integral of G(z) dz
-        # (6.85e7 N/m, 9x stiffer), and with NO shear correction factor
+        # G11 = 7.70e6 N/m here) -- NOT the parallel integral of G(z) dz
+        # (4.14e7 N/m, 5.4x stiffer), and with NO shear correction factor
         r = rm_plate_msg(THICK, ANGLES, MAT_NAMES, MATERIAL_DB, fraction=0.5)
         ABDG = np.asarray(r["ABDG"])
         B06 = np.vstack([B0, B1])               # E6 rows vs d
