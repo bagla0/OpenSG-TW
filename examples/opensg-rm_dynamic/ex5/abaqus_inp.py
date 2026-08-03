@@ -14,6 +14,10 @@ Simply supported (SS-1) on all four edges, drilling dof fixed (flat plate),
 double-sine pressure q0 sin(pi x/a) sin(pi y/b) held over the step, implicit
 *DYNAMIC at a fixed increment, centre deflection printed every increment.
 
+Every keyword this script writes, and why each data line looks the way it
+does, is documented in abaqus_inp_README.md -- read that rather than
+expecting the explanations in here.
+
 Run:  python abaqus_inp.py
 """
 import os
@@ -21,6 +25,59 @@ import sys
 
 import numpy as np
 import yaml
+
+# ----------------------------------------------------------------------------
+# ALL VARIABLES USED IN THIS SCRIPT
+# ----------------------------------------------------------------------------
+# paths and input
+#   HERE        folder holding this script; every path is built from it
+#   ROOT        repo root, found by walking up until opensg_jax/ appears
+#   DB          path to layup_db.yaml, the single user input file
+#   db          that YAML parsed into a dict
+#   p           shorthand for db["plate"], the plate/analysis block
+#   out         path of the deck written out, <DB stem>_abaqus.inp
+#
+# case data, all read from layup_db.yaml (nothing is defaulted in code)
+#   model       0 = classical, write the ABD only
+#               1 = shear-refined, also write *TRANSVERSE SHEAR STIFFNESS
+#   fraction    reference-surface location as a fraction of thickness:
+#               0 = bottom/OML face, 0.5 = mid-surface, 1 = top.  It fixes
+#               where the shell's z = 0 plane sits in the laminate.
+#   A, B        plate side lengths in x and y [m]
+#   NX, NY      number of S4 elements along x and along y (so NX*NY elements
+#               and (NX+1)*(NY+1) nodes)
+#   Q0          peak pressure q0 [Pa] of the double-sine load
+#   DT          fixed time increment of the *DYNAMIC step [s]
+#   TTOT        total simulated time [s]
+#
+# the homogenized section
+#   inp         1dsg.yaml parsed back: thick / angles / mat_names /
+#               material_db / n_per_layer / elem_order / node_x
+#   r           the rm_plate_msg result dict
+#   AB          6x6 classical ABD, r["A6"]; rows e11,e22,g12,k11,k22,k12
+#   G2          2x2 MSG transverse-shear block, ABDG[6:8, 6:8]; None if
+#               model = 0
+#   rho_h       section mass PER UNIT AREA, sum(rho_k * t_k) [kg/m^2] --
+#               this is what *SHELL GENERAL SECTION's DENSITY wants, not rho
+#   tri         the 21 upper-triangle terms of AB, column by column, in the
+#               order Abaqus requires
+#
+# mesh construction
+#   dx, dy      element size, A/NX and B/NY [m]
+#   n(i, j)     node id   = 1 + i + (NX+1)*j   (x fastest)
+#   e(i, j)     element id = 1 + i + NX*j
+#   i, j        in-plane element/node indices
+#   nm, ids     name and node list of each edge *NSET being written
+#   s           start index when chunking a long list across data lines
+#   card        one *BOUNDARY data line, "nset, first_dof, last_dof"
+#   q           the pressure on one element, q0 sin(pi x/a) sin(pi y/b) at
+#               that element's centre [Pa]
+#   L           the deck itself: a list of text lines, joined and written at
+#               the end
+#   m, t, v     throwaway comprehension variables: a material key, a ply
+#               thickness, and whichever id or stiffness term is being
+#               formatted onto the current data line
+# ----------------------------------------------------------------------------
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = HERE
@@ -40,6 +97,13 @@ fraction = float(db["fraction"])         # no code-side default: the YAML is
 p = db["plate"]
 A, B = float(p["a"]), float(p["b"])
 NX, NY = int(p["nx"]), int(p["ny"])
+if NX % 2 or NY % 2:                     # NCEN is node n(NX//2, NY//2), which
+    raise ValueError(                    # only lands ON the centre if both are
+        "nx and ny must be EVEN (got %d, %d): the deflection probe NCEN is "
+        "node n(nx//2, ny//2), and with an odd count there is no node at the "
+        "plate centre -- the floor silently puts the probe half an element "
+        "off (nx=21 would probe x = 0.7257 m instead of a/2 = 0.762 m)."
+        % (NX, NY))
 Q0, DT, TTOT = float(p["q0"]), float(p["dt"]), float(p["ttot"])
 
 # the section law: homogenize the SG that 1d_sg.py wrote.  n_per_layer and
@@ -105,8 +169,8 @@ for card in ("NX0, 2, 3", "NXA, 2, 3", "NY0, 1, 1", "NYB, 1, 1",
 L.append("*STEP, NAME=PULSE, INC=%d" % int(2 * TTOT / DT))
 L.append("*DYNAMIC")
 L.append("%g, %g, %g, %g" % (DT, TTOT, DT * 1e-4, DT))
-L.append("*DLOAD")
-for j in range(NY):                              # sine at the element centre
+L.append("*DLOAD")                  # "P" = Abaqus's shell pressure load type
+for j in range(NY):                 # q0 sin sin, sampled at the element centre
     for i in range(NX):
         q = Q0 * np.sin(np.pi * (i + 0.5) * dx / A) \
                * np.sin(np.pi * (j + 0.5) * dy / B)
