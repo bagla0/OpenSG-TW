@@ -29,8 +29,9 @@ ROWS = ("e11", "e22", "g12", "k11", "k22", "k12", "2g13", "2g23")
 # ---- input -----------------------------------------------------------------
 DB = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "layup_db.yaml")
 db = yaml.safe_load(open(DB))
-model = int(db.get("model", 1))          # 0 = ABD only, 1 = ABD + shear
-fraction = float(db.get("fraction", 0.5))
+model = int(db["model"])                 # 0 = ABD only, 1 = ABD + shear
+fraction = float(db["fraction"])         # no code-side default: the YAML is
+                                         # the ONLY place these are set
 mesh = db.get("mesh") or {}
 n_per_layer = int(mesh.get("n_per_layer", 1))
 elem_order = int(mesh.get("elem_order", 4))
@@ -61,7 +62,7 @@ rho_h = sum(inp["material_db"][m]["rho"] * t
             for m, t in zip(inp["mat_names"], inp["thick"]))
 
 # ---- output ----------------------------------------------------------------
-out = os.path.splitext(DB)[0] + ".out"
+out = os.path.splitext(DB)[0] + "_plate_homo.out"
 with open(out, "w") as f:
     f.write("OpenSG plate homogenization of %s\n"
             % os.path.basename(yml))
