@@ -78,6 +78,14 @@ tutorials/solid_taper_jax
 
 ```{toctree}
 :hidden:
+:caption: Equivalent 3-D solid properties
+
+tutorials/solid_props_shell_sg
+tutorials/solid_props_3d_sg
+```
+
+```{toctree}
+:hidden:
 :caption: Usage
 
 architecture

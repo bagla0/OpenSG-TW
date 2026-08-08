@@ -214,6 +214,33 @@ $6\times6$ vs the RM shell ring and shell segment, with wall times. Validated vs
 :::
 ::::
 
+## Equivalent 3-D solid properties
+
+The same structure genes homogenize to an equivalent 3-D **continuum** $6\times6$ instead of a
+beam $6\times6$ — cellular and lattice cross-sections tiled in the two transverse directions, or
+a fully 3-D SG tiled in all three. These two pages are reference write-ups (not executed
+notebooks); the runnable cases live in the companion **OpenSG-2.0** repository.
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item-card} Solid properties from a shell SG
+:link: solid_props_shell_sg
+:link-type: doc
+Cellular ($\pm15^\circ$), hierarchical-square and composite-square lattices validated against
+Deo & Yu (2023) and SwiftComp — the RM wall law cuts the published in-plane-shear error from
++3.1 / +8.4 % to +0.2 %.
+:::
+
+:::{grid-item-card} Solid properties from a 3-D SG (TPMS)
+:link: solid_props_3d_sg
+:link-type: doc
+TPMS unit cells: the solid route matches SwiftComp `.K` digit-for-digit on 192 k and 546 k tets,
+and the new 3-D **shell** SG solves the same Schwarz-P sheet within −3 / −6 % at a fifth of the
+DOF.
+:::
+::::
+
 ```{list-table} Cross-sections and benchmarks used
 :header-rows: 1
 :widths: 22 26 26 26
